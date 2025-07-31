@@ -1,0 +1,10 @@
+[input]
+mqtt.topics = [
+    "te/device/main/+/+/m/environment",
+    "te/device/main/+/+/m/location",
+]
+
+[[steps]]
+script = "dist/main.mjs"
+# config.topic: Use the template variable, '{{type}}' if you wish to include the sensor data type within the topic
+config.topic = "c8y-mqtt/proto/sensor_data"

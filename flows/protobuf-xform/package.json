@@ -1,0 +1,38 @@
+{
+  "name": "protobuf-xform",
+  "version": "0.0.1",
+  "description": "This flow translates sensor data being received as json messages, and transforms them as protobuf messages",
+  "source": "src/main.ts",
+  "module": "dist/main.mjs",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.ts --target=es2018 --bundle --outfile=dist/main.mjs --format=esm --drop-labels=DEV,TEST",
+    "build:test": "esbuild src/main.ts --target=es2018 --bundle --outfile=dist/main.test.mjs --format=esm",
+    "build:watch": "esbuild src/main.ts --watch --target=es2018 --bundle --outfile=dist/main.mjs --format=esm --drop-labels=DEV,TEST",
+    "start:wasm-quickjs": "wasmer run adamz/quickjs -e quickjs  --mapdir .:. dist/main.test.mjs test",
+    "start:quickjs": "qjs dist/main.test.mjs test",
+    "start:nodejs": "node dist/main.test.mjs test",
+    "start:deno": "deno dist/main.test.mjs test",
+    "start:tedge": "cat data/input.journald.jsonl | cargo +1.82 run -- flows test --flows-dir './' --final-on-interval",
+    "build:proto": "npx buf generate",
+    "test": "jest --coverageProvider=v8 --coverage"
+  },
+  "author": "thin-edge.io",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@bufbuild/buf": "^1.55.1",
+    "@bufbuild/protoc-gen-es": "^2.6.2",
+    "@faker-js/faker": "^9.9.0",
+    "@types/jest": "^30.0.0",
+    "esbuild": "^0.25.5",
+    "esbuild-register": "^3.6.0",
+    "jest": "^30.0.4",
+    "jest-esbuild": "^0.4.0",
+    "prettier": "3.6.2",
+    "protobufjs-cli": "^1.1.3",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.6.2"
+  }
+}

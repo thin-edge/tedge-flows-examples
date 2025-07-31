@@ -1,0 +1,27 @@
+edition = "2023";
+package sensorpackage;
+
+message SensorMessage {
+  oneof sensor {
+    EnvironmentSensor environment = 1;
+    LocationSensor location = 2;
+  }
+}
+
+message EnvironmentSensor {
+  double temperature = 1 [default = 0];
+  double humidity = 2 [default = 0];
+  string sensor_id = 3;
+  string sensor_serial = 4;
+  bool active = 5;
+  map<string, string> meta_info = 6;
+}
+
+message LocationSensor {
+  LatLng location = 1;
+}
+
+message LatLng {
+  double latitude = 1;
+  double longitude = 2;
+}
