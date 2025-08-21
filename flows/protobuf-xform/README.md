@@ -32,32 +32,8 @@ Topic: **te/device/main///m/location**
 }
 ```
 
-## Using it
-
-### Install dependencies
-
-```sh
-npm install
-```
-
 ### Generate code from protobuf definitions
 
 ```sh
 npm run build:proto
 ```
-
-### Run tests
-
-```sh
-npm run test
-```
-
-### Create package
-
-Build the package and pull in all the dependencies and transpile the JavaScript down to the targer version (e.g. `ES2018`)
-
-```sh
-npm run build
-```
-
-The output package (which is a standalone JavaScript file) is under `./dist/main.mjs`.
