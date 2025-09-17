@@ -1,3 +1,25 @@
 # tedge-flows-examples
 
 Experimental repository to exchange examples which use the upcoming tedge-flows feature.
+
+## Building locally
+
+You can build the flows locally with the following steps which requires nodejs >= 18.
+
+1. Install the dependencies (using `npm ci` instead of `npm install` to install the exact versions defined in the package-lock.json file)
+
+   ```sh
+   npm ci
+   ```
+
+2. Build all the flows
+
+   ```sh
+   npm run build-all
+   ```
+
+Each bundled flow is stored under the `dist/main.mjs` of its flows directory. For example, for the `uptime` flow, the bundled file can be found under:
+
+```sh
+ls -l flows/uptime/dist/main.mjs
+```
