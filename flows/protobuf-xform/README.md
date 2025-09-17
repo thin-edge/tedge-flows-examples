@@ -31,9 +31,3 @@ Topic: **te/device/main///m/location**
   "longitude": 153.02223634041275
 }
 ```
-
-### Generate code from protobuf definitions
-
-```sh
-npm run build:proto
-```

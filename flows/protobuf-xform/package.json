@@ -6,8 +6,8 @@
   "module": "dist/main.mjs",
   "type": "module",
   "scripts": {
+    "prebuild": "npx buf generate",
     "build": "esbuild src/main.ts --target=es2018 --bundle --outfile=dist/main.mjs --format=esm --drop-labels=DEV,TEST",
-    "build:proto": "npx buf generate",
     "test": "jest --coverageProvider=v8 --coverage"
   },
   "author": "thin-edge.io",
