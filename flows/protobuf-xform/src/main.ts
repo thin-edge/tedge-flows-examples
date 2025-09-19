@@ -3,8 +3,8 @@
 */
 // import * as proto from 'protobufjs';
 import { Message } from "../../common/tedge";
-import { create, toBinary } from "@bufbuild/protobuf";
-import { base64Encode } from "@bufbuild/protobuf/wire";
+import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
+import { base64Decode, base64Encode } from "@bufbuild/protobuf/wire";
 import {
   SensorMessageSchema,
   EnvironmentSensorSchema,
@@ -15,16 +15,36 @@ export interface Config {
   topic: string;
 }
 
+function onSetpoint(
+  message: Message,
+  { topic = "out/proto/actuator", base64 = false },
+): Message[] {
+  let binPayload;
+  if (base64) {
+    binPayload = base64Decode(message.payload);
+  } else {
+    binPayload = message.raw_payload
+  }
+
+  let setPoint = fromBinary(SensorMessageSchema, binPayload)
+  return [
+    {
+      timestamp: message.timestamp,
+      topic: topic,
+      payload: JSON.stringify(setPoint),
+    },
+  ];
+}
+
 export function onMessage(
   message: Message,
-  { topic = "out/proto/sensor" },
+  { topic = "out/proto/sensor", cmdtopic = "out/proto/actuator", base64 = false },
 ): Message[] {
-  const payload = JSON.parse(message.payload);
-
   const payloadType = message.topic.split("/").slice(-1)[0];
 
   let data;
   if (payloadType == "environment") {
+    const payload = JSON.parse(message.payload);
     data = {
       case: "environment",
       value: create(EnvironmentSensorSchema, {
@@ -34,6 +54,7 @@ export function onMessage(
       }),
     };
   } else if (payloadType == "location") {
+    const payload = JSON.parse(message.payload);
     data = {
       case: "location",
       value: create(LocationSensorSchema, {
@@ -43,7 +64,10 @@ export function onMessage(
         },
       }),
     };
+  } else if (payloadType == "setpoint") {
+    return onSetpoint(message, {topic: cmdtopic, base64: base64});
   }
+
   if (!data) {
     return [];
   }
@@ -54,11 +78,16 @@ export function onMessage(
 
   const outputTopic = topic.replaceAll("{{type}}", payloadType);
 
+  let binPayload = toBinary(SensorMessageSchema, sensor);
+  if (base64) {
+    binPayload = base64Encode(binPayload);
+  }
+
   return [
     {
       timestamp: message.timestamp,
       topic: outputTopic,
-      payload: base64Encode(toBinary(SensorMessageSchema, sensor)),
+      payload: binPayload,
     },
   ];
 }

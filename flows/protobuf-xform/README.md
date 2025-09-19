@@ -31,3 +31,22 @@ Topic: **te/device/main///m/location**
   "longitude": 153.02223634041275
 }
 ```
+
+### Decoding Protobuf messages
+
+The encoded measurements produced by the protobuf example flow ...
+
+```
+$ tedge flows test --base64-output te/device/main///m/environment '{ "temperature": 29, "humidity": 50 }'
+
+[c8y-mqtt/proto/sensor_data] ChIJAAAAAAAAPUARAAAAAAAASUA=
+```
+
+... can be decoded back by the same protobuf example flow:
+
+```
+$ tedge flows test --base64-input c8y-mqtt/proto/setpoint ChIJAAAAAAAAPUARAAAAAAAASUA=                                           
+
+[te/device/main///sig/setpoint] {"$typeName":"sensorpackage.SensorMessage","sensor":{"case":"environment","value":{"$typeName":"sensorpackage.EnvironmentSensor","metaInfo":{},"temperature":29,"humidity":50}}}
+
+```
