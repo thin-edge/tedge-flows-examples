@@ -1,0 +1,13 @@
+[Unit]
+Description=tedge-modem publishes modem manager information periodically to an mqtt topic
+After=syslog.target network-online.target
+
+[Service]
+User=root
+ExecStart=/usr/bin/tedge-modem.sh --output mqtt
+Restart=on-failure
+RestartPreventExitStatus=255
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

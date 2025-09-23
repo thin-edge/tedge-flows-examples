@@ -1,0 +1,23 @@
+{
+  "sim": {
+    "dbus-path": "/org/freedesktop/ModemManager1/SIM/0",
+    "properties": {
+      "active": "yes",
+      "eid": "--",
+      "emergency-numbers": [],
+      "esim-status": "--",
+      "gid1": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+      "gid2": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+      "iccid": "8949360000421790514",
+      "imsi": "262231017669630",
+      "operator-code": "26223",
+      "operator-name": "1&1",
+      "preferred-networks": [
+        "operator-code: 26223, access-technologies: lte",
+        "operator-code: 20801, access-technologies: gsm, umts, lte"
+      ],
+      "removability": "--",
+      "sim-type": "--"
+    }
+  }
+}
