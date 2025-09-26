@@ -23,10 +23,10 @@ function onSetpoint(
   if (base64) {
     binPayload = base64Decode(message.payload);
   } else {
-    binPayload = message.raw_payload
+    binPayload = message.raw_payload;
   }
 
-  let setPoint = fromBinary(SensorMessageSchema, binPayload)
+  let setPoint = fromBinary(SensorMessageSchema, binPayload);
   return [
     {
       timestamp: message.timestamp,
@@ -38,7 +38,11 @@ function onSetpoint(
 
 export function onMessage(
   message: Message,
-  { topic = "out/proto/sensor", cmdtopic = "out/proto/actuator", base64 = false },
+  {
+    topic = "out/proto/sensor",
+    cmdtopic = "out/proto/actuator",
+    base64 = false,
+  },
 ): Message[] {
   const payloadType = message.topic.split("/").slice(-1)[0];
 
@@ -65,7 +69,7 @@ export function onMessage(
       }),
     };
   } else if (payloadType == "setpoint") {
-    return onSetpoint(message, {topic: cmdtopic, base64: base64});
+    return onSetpoint(message, { topic: cmdtopic, base64: base64 });
   }
 
   if (!data) {

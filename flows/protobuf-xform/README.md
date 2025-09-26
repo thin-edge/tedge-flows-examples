@@ -45,7 +45,7 @@ $ tedge flows test --base64-output te/device/main///m/environment '{ "temperatur
 ... can be decoded back by the same protobuf example flow:
 
 ```
-$ tedge flows test --base64-input c8y-mqtt/proto/setpoint ChIJAAAAAAAAPUARAAAAAAAASUA=                                           
+$ tedge flows test --base64-input c8y-mqtt/proto/setpoint ChIJAAAAAAAAPUARAAAAAAAASUA=
 
 [te/device/main///sig/setpoint] {"$typeName":"sensorpackage.SensorMessage","sensor":{"case":"environment","value":{"$typeName":"sensorpackage.EnvironmentSensor","metaInfo":{},"temperature":29,"humidity":50}}}
 
