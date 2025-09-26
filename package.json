@@ -5,8 +5,8 @@
   "main": "index.js",
   "private": true,
   "scripts": {
-    "format": "npx prettier . --write --trailing-comma all",
-    "format:check": "npx prettier . --check --trailing-comma all",
+    "format": "npx prettier . --write --trailing-comma all --ignore-path .prettierignore",
+    "format:check": "npx prettier . --check --trailing-comma all --ignore-path .prettierignore",
     "test": "jest --coverageProvider=v8 --coverage",
     "build-all": "npm run build --workspaces",
     "publish": "node ./scripts/publish-images.js"

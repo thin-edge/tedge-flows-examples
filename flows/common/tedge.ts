@@ -12,7 +12,7 @@ export interface Flow {
 export interface Message {
   timestamp: Timestamp;
   topic: string;
-  payload: string;
+  payload: string | Uint8Array<ArrayBufferLike>;
   retain?: boolean;
 }
 
