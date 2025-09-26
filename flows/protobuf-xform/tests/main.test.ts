@@ -23,8 +23,10 @@ test("Converts payload to a environment sensor protobuf message", () => {
   );
 
   expect(output[0].topic).toBe("custom/output");
-  const rawPayloadBuf = base64Decode(output[0].payload);
-  const decodedMessage = fromBinary(SensorMessageSchema, rawPayloadBuf);
+  const decodedMessage = fromBinary(
+    SensorMessageSchema,
+    output[0].payload as Uint8Array<ArrayBufferLike>,
+  );
   if (decodedMessage.sensor.case == "environment") {
     expect(decodedMessage.sensor.value?.temperature).toBe(12.3);
     expect(decodedMessage.sensor.value?.humidity).toBe(40);
@@ -48,8 +50,10 @@ test("Converts payload to a location sensor protobuf message", () => {
   );
 
   expect(output[0].topic).toBe("custom/output");
-  const rawPayloadBuf = base64Decode(output[0].payload);
-  const decodedMessage = fromBinary(SensorMessageSchema, rawPayloadBuf);
+  const decodedMessage = fromBinary(
+    SensorMessageSchema,
+    output[0].payload as Uint8Array<ArrayBufferLike>,
+  );
   if (decodedMessage.sensor.case == "location") {
     expect(decodedMessage.sensor.value?.location?.latitude).toBe(12.345);
     expect(decodedMessage.sensor.value?.location?.longitude).toBe(-9.8765);
