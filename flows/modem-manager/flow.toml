@@ -1,0 +1,7 @@
+[input]
+mqtt.topics = [
+    "te/device/main///source/modemManager",
+]
+
+[[steps]]
+script = "dist/main.mjs"
