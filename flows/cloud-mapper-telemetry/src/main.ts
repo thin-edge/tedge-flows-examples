@@ -40,9 +40,8 @@ export function onMessage(message: Message, config: Config | null = {}) {
   const output = [];
   const cloudID = getCloudID(message.topic);
   if (!cloudID) {
-    throw Error("cloud id is empty", {
-      cause: `Could not parse the cloud id from the topic: '${message.topic}'`,
-    });
+    // ignore messages for the main device
+    return [];
   }
   output.push({
     topic: [cloud_topic_prefix, cloudID].join("/"),
