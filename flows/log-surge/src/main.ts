@@ -5,7 +5,6 @@
 import * as model from "../../common/model";
 import { Message, Timestamp, Run, mockGetTime } from "./../../common/tedge";
 import * as journald from "./journald";
-import * as testing from "../../common/testing";
 
 export interface Config {
   // Enable debug logging
@@ -163,27 +162,3 @@ export function onInterval(timestamp: Timestamp, config: Config | null) {
   state.ran = true;
   return output;
 }
-
-TEST: testing.run(1, "test", () => {
-  const messages: Message[] = journald.mockJournaldLogs(10).map((value) => ({
-    timestamp: mockGetTime(),
-    topic: "dummy",
-    payload: JSON.stringify(value),
-  }));
-  const config: Config = {
-    with_logs: true,
-    publish_statistics: true,
-    debug: false,
-    threshold: {
-      error: 1,
-    },
-  };
-  return Run(
-    {
-      onInterval,
-      onMessage,
-    },
-    messages,
-    config,
-  );
-});
