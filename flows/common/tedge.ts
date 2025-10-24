@@ -26,6 +26,11 @@ export function mockGetTime(time: number = Date.now()): Timestamp {
   };
 }
 
+// Convert the tedge timestamp to milliseconds since epoch
+export function fromTimestamp(t: Timestamp): number {
+  return t.seconds * 1000 + t.nanoseconds / 1e6;
+}
+
 export function Run(module: Flow, messages: Message[], config: any): Message[] {
   const outputMessages: Message[] = [];
   messages.forEach((message) => {
@@ -44,4 +49,9 @@ export function Run(module: Flow, messages: Message[], config: any): Message[] {
     console.log(JSON.stringify(output));
   }
   return outputMessages;
+}
+
+// Check if the topic references the main device
+export function isMainDevice(topic: string): boolean {
+  return !!topic.match(/^.+\/device\/main\/.*\/.*\//);
 }
