@@ -1,0 +1,9 @@
+[input]
+mqtt.topics = [
+    "te/+/+/+/+/m/+",
+]
+
+[[steps]]
+script = "dist/main.mjs"
+config.cloud_topic_prefix = "azeg/DDATA"
+config.pretty_print = false
