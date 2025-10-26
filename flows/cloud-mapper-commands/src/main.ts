@@ -38,6 +38,13 @@ function createCommand(
 ): Message[] {
   const messages: Message[] = [];
   const tedgeTopic = utils.getTedgeTopicID(message.topic);
+  if (!tedgeTopic) {
+    console.error("tedge topic is ill-formed", {
+      cloudTopic: message.topic,
+      localTopic: tedgeTopic,
+    });
+    return messages;
+  }
   const { cloud_prefix = "azeg" } = config || {};
 
   // map cloud payloads to local payload if required
