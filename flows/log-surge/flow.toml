@@ -5,21 +5,21 @@
 #
 # The output is piped to grep to filter out the "No entries" output from journalctl,
 # and then finally piped to cat to avoid exiting with a non-zero exit code.
-command = """sudo journalctl -o json -b --cursor-file=/tmp/log-surge-cursor --no-pager -n 100"""
+command = """sudo journalctl -o json -b --cursor-file=/tmp/log-surge-cursor --no-pager -n 1000"""
 interval = "300s"
 
 [[steps]]
 script = "dist/main.mjs"
 interval = "600s"
 
-config.with_logs = true
+config.with_logs = false
 config.debug = false
 config.publish_statistics = true
 config.stats_topic = "stats/logs"
-config.threshold.total = 0
-config.threshold.error = 1
-config.threshold.warning = 1
-config.threshold.info = 10
+config.threshold.total = 500
+config.threshold.error = 10
+config.threshold.warning = 50
+config.threshold.info = 0
 
 # Optional log message filter, which will only include log entries
 # where the message text matches the given regex
