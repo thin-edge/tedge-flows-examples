@@ -1,0 +1,31 @@
+[input.process]
+command = """sh -c \"tedge cert show | tr '\\n' '\\0'\""""
+interval = "600s"
+
+[[steps]]
+script = "dist/flow.mjs"
+
+# turn on additional debugging
+debug = false
+
+##############################
+# alerts / alarming
+##############################
+
+# disable alarming
+config.disable_alarms = false
+
+# threshold when to create a major alarm
+config.alarm = "30d"
+
+# threshold when to create a warning
+config.warning = "90d"
+
+##############################
+# certificate meta information
+##############################
+# don't publish digital twin data
+config.disable_twin = false
+
+# digital twin property where to publish the certificates meta information to
+config.twin_property = "tedge_Certificate"
