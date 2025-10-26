@@ -46,9 +46,6 @@ export function get_state(): FlowState {
 
 export function onMessage(message: Message, config: Config | null): Message[] {
   const { with_logs = false, debug = false, text_filter = [] } = config || {};
-  TEST: if (debug) {
-    console.log("Calling process");
-  }
   let payload = JSON.parse(message.payload);
   const output = journald.transform(payload);
 
@@ -57,8 +54,8 @@ export function onMessage(message: Message, config: Config | null): Message[] {
   model.assertNonEmptyValue(output, "text");
 
   // Optional message filtering
-  const contains = (text) => {
-    return (element, index, array) => {
+  const contains = (text: string) => {
+    return (element: RegExp, index: number, array: RegExp[]) => {
       return element.test(text);
     };
   };
@@ -112,7 +109,7 @@ export function onInterval(timestamp: Timestamp, config: Config | null) {
     });
   }
 
-  const isAbove = (v, limit = 0) => {
+  const isAbove = (v: number, limit: number = 0) => {
     return limit != 0 && Number.isInteger(v) && v >= limit;
   };
 

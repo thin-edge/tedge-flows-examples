@@ -1,9 +1,16 @@
-[input]
-mqtt.topics = ["te/device/main///logs/journald"]
+[input.process]
+# Each interval, get the next 5 log messages for a given service
+# Use a cursor-file (built-in journalctl functionality) to remember the last
+# log entry processed.
+#
+# The output is piped to grep to filter out the "No entries" output from journalctl,
+# and then finally piped to cat to avoid exiting with a non-zero exit code.
+command = """sudo journalctl -o json -b --cursor-file=/tmp/log-surge-cursor --no-pager -n 100"""
+interval = "300s"
 
 [[steps]]
 script = "dist/main.mjs"
-interval = "1s"
+interval = "600s"
 
 config.with_logs = true
 config.debug = false
