@@ -27,14 +27,16 @@ export function parseTimestamp(text: string): number | undefined {
   return parseInt(text, 10) / 1e6 || undefined;
 }
 
-export function transform(payload): LogEntry {
+export function transform(payload: any): LogEntry {
   const output: LogEntry = {
     time: parseTimestamp(
       payload._SOURCE_REALTIME_TIMESTAMP || payload.__REALTIME_TIMESTAMP,
     ),
     name: payload.SYSLOG_IDENTIFIER,
     systemdUnit: payload._SYSTEMD_UNIT,
-    level: priorities[payload.PRIORITY] || "unknown",
+    level:
+      priorities[String(payload.PRIORITY) as keyof typeof priorities] ||
+      "unknown",
     text: stripTimestampPrefix(payload.MESSAGE),
   };
 
