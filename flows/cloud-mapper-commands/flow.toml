@@ -1,0 +1,12 @@
+[input]
+mqtt.topics = [
+    "azeg/DCMD/+/#",
+    "te/+/+/+/+/cmd/+/+",
+]
+
+[[steps]]
+script = "dist/main.mjs"
+config.cloud_prefix = "azeg"
+
+# List of commands which should be mapped from the cloud to tedge topics
+config.commands = ["writeSetpoint"]
