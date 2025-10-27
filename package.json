@@ -9,7 +9,8 @@
     "format:check": "npx prettier . --check --trailing-comma all --ignore-path .prettierignore",
     "test": "jest --coverageProvider=v8 --coverage",
     "build-all": "npm run build --workspaces",
-    "publish": "node ./scripts/publish-images.js"
+    "publish": "node ./scripts/publish-images.js",
+    "generate-flow": "node ./scripts/create-flow.js"
   },
   "author": "",
   "license": "ISC",

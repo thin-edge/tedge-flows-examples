@@ -10,7 +10,7 @@ export interface Flow {
 }
 
 export interface Message {
-  timestamp: Timestamp;
+  timestamp?: Timestamp;
   topic: string;
   payload: string;
   raw_payload?: Uint8Array<ArrayBufferLike>;
@@ -28,7 +28,10 @@ export function mockGetTime(time: number = Date.now()): Timestamp {
 }
 
 // Convert the tedge timestamp to milliseconds since epoch
-export function fromTimestamp(t: Timestamp): number {
+export function fromTimestamp(t?: Timestamp): number {
+  if (!t) {
+    return Date.now();
+  }
   return t.seconds * 1000 + t.nanoseconds / 1e6;
 }
 
