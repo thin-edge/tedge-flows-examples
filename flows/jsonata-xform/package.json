@@ -1,6 +1,6 @@
 {
   "name": "jsonata-xform",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "This flow demonstrates to use jsonata for message transformation.",
   "source": "src/main.ts",
   "module": "dist/main.mjs",

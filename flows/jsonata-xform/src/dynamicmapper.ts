@@ -17,6 +17,8 @@ export interface DynamicMappingRule {
   mappingTopic?: string;
   direction?: string;
   mappingTopicSample?: string;
+  targetAPI?: string;
+  targetTopic?: string;
   substitutions: Substitution[];
 }
 
@@ -60,6 +62,19 @@ function applyModifier(value: object, output: any, path: PropertyMapping): any {
   return output;
 }
 
+export async function evaluate(
+  input_message: any,
+  expr: string,
+  topicSegments: string[],
+): Promise<any> {
+  const exprN = expr.replaceAll("_TOPIC_LEVEL_", "$_TOPIC_LEVEL_");
+  const expression = jsonata(exprN);
+  const value = await expression.evaluate(input_message, {
+    _TOPIC_LEVEL_: topicSegments,
+  });
+  return value;
+}
+
 export async function build(
   message: Message,
   rule: DynamicMappingRule,
@@ -69,15 +84,6 @@ export async function build(
   const postModifiers: PropertyMapping[] = [];
   const mods = await Promise.all(
     rule.substitutions.map(async (sub) => {
-      const pathSource = sub.pathSource.replaceAll(
-        "_TOPIC_LEVEL_",
-        "$_TOPIC_LEVEL_",
-      );
-      const expression = jsonata(pathSource);
-      const value = await expression.evaluate(input_message, {
-        _TOPIC_LEVEL_: topicSegments,
-      });
-
       postModifiers.push({
         source: sub.pathSource,
         destination: sub.pathTarget,
@@ -89,6 +95,11 @@ export async function build(
         return {};
       }
 
+      const value = await evaluate(
+        input_message,
+        sub.pathSource,
+        topicSegments,
+      );
       return applyModifier(
         value,
         {},
@@ -108,5 +119,10 @@ export async function build(
   mods.forEach((item) => {
     output = merge(output, item);
   });
-  return applyModifiers(output, {}, postModifiers);
+
+  const finalOutput = applyModifiers(output, {}, postModifiers);
+  // TODO: should the _TOPIC mapping be part of the rule modifiers?
+  // or treated independently
+  // evaluate(finalOutput, rule.mappingTopic, topicSegments);
+  return finalOutput;
 }
