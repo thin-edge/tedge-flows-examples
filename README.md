@@ -23,3 +23,11 @@ Each bundled flow is stored under the `dist/main.mjs` of its flows directory. Fo
 ```sh
 ls -l flows/uptime/dist/main.mjs
 ```
+
+## Adding a new flow to the workspace
+
+You can create a new flow (from a template) using the following command:
+
+```sh
+npm run generate-flow myflow1
+```
