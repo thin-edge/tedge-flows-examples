@@ -1,7 +1,6 @@
 export interface Flow {
   onMessage(message: Message, context: Context): Promise<Message[]>;
   onInterval?(time: Date, context: Context): Promise<Message[]>;
-  onConfigUpdate?(message: Message, context: Context): void;
 }
 
 export interface Message {
