@@ -1,4 +1,10 @@
-import { Message, fromTimestamp, isMainDevice } from "../../common/tedge";
+import {
+  Message,
+  Context,
+  isMainDevice,
+  decodeJSON,
+  encodeText,
+} from "../../common/tedge";
 
 export interface Config {
   cloud_topic_prefix?: string;
@@ -23,9 +29,9 @@ function convertToMetrics(payload: object, timestamp = "", prefix = ""): any {
   return metrics;
 }
 
-export function onMessage(message: Message, config: Config | null = {}) {
+export function onMessage(message: Message, context: Context) {
   const { cloud_topic_prefix = "azeg/DDATA", pretty_print = false } =
-    config || {};
+    context.config || {};
   if (isMainDevice(message.topic)) {
     console.debug("Skipping messages for the main device", {
       topic: message.topic,
@@ -33,8 +39,8 @@ export function onMessage(message: Message, config: Config | null = {}) {
     return [];
   }
 
-  const payload = JSON.parse(`${message.payload}`);
-  const receivedAt = new Date(fromTimestamp(message.timestamp)).toISOString();
+  const payload = decodeJSON(message.payload);
+  const receivedAt = message.time?.toISOString();
   const timestamp = payload.time || receivedAt;
 
   const output = [];
@@ -45,14 +51,16 @@ export function onMessage(message: Message, config: Config | null = {}) {
   }
   output.push({
     topic: [cloud_topic_prefix, cloudID].join("/"),
-    payload: JSON.stringify(
-      {
-        timestamp: receivedAt,
-        uuid: cloudID,
-        metrics: convertToMetrics(payload, timestamp),
-      },
-      null,
-      pretty_print ? "  " : "",
+    payload: encodeText(
+      JSON.stringify(
+        {
+          timestamp: receivedAt,
+          uuid: cloudID,
+          metrics: convertToMetrics(payload, timestamp),
+        },
+        null,
+        pretty_print ? "  " : "",
+      ),
     ),
   });
   return output;

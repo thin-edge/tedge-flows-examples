@@ -13,10 +13,12 @@ export class UptimeTracker {
     this.windowSizeMs = windowSizeMinutes * 60 * 1000;
   }
 
-  updateStatus(status: Status, timestamp: number) {
+  updateStatus(status: Status, timestamp?: number) {
     const last = this.history[this.history.length - 1];
     if (!last || last.status !== status) {
-      this.history.push({ status, timestamp });
+      if (timestamp) {
+        this.history.push({ status, timestamp });
+      }
     }
   }
 

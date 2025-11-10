@@ -8,22 +8,26 @@ beforeEach(() => {
   flow.get_state().ran = false;
 });
 
-test("Config with_logs returns the log entries", () => {
+test("Config with_logs returns the log entries", async () => {
   const message: tedge.Message = {
-    timestamp: tedge.mockGetTime(),
+    time: new Date(),
     topic: "dummy",
-    payload: JSON.stringify(<journald.JOURNALD_RAW_MESSAGE>{
+    payload: tedge.encodeJSON(<journald.JOURNALD_RAW_MESSAGE>{
       _SOURCE_REALTIME_TIMESTAMP: "1751468051367349",
       MESSAGE: "example",
     }),
   };
-  const output1 = flow.onMessage(message, <flow.Config>{
-    with_logs: true,
+  const output1 = await flow.onMessage(message, {
+    config: <flow.Config>{
+      with_logs: true,
+    },
   });
   expect(output1).toHaveLength(1);
 
-  const output2 = flow.onMessage(message, <flow.Config>{
-    with_logs: false,
+  const output2 = await flow.onMessage(message, {
+    config: <flow.Config>{
+      with_logs: false,
+    },
   });
   expect(output2).toHaveLength(0);
 });
@@ -35,35 +39,37 @@ describe.each([
 ])(
   "text_filter can be used to filter log messages",
   (text: string, text_filter: string[], expected: number) => {
-    test("matches the expected count", () => {
+    test("matches the expected count", async () => {
       const message: tedge.Message = {
-        timestamp: tedge.mockGetTime(),
+        time: new Date(),
         topic: "dummy",
-        payload: JSON.stringify(<journald.JOURNALD_RAW_MESSAGE>{
+        payload: tedge.encodeJSON(<journald.JOURNALD_RAW_MESSAGE>{
           _SOURCE_REALTIME_TIMESTAMP: "1751468051367349",
           MESSAGE: text,
         }),
       };
-      const output = flow.onMessage(message, <flow.Config>{
-        text_filter,
-        with_logs: true,
+      const output = await flow.onMessage(message, {
+        config: <flow.Config>{
+          text_filter,
+          with_logs: true,
+        },
       });
       expect(output).toHaveLength(expected);
     });
   },
 );
 
-test("Detect log entries with an unknown log level", () => {
-  const output = flow.onMessage(
+test("Detect log entries with an unknown log level", async () => {
+  const output = await flow.onMessage(
     {
-      timestamp: { seconds: 1, nanoseconds: 1234 },
+      time: new Date(),
       topic: "",
-      payload: JSON.stringify({
+      payload: tedge.encodeJSON({
         _SOURCE_REALTIME_TIMESTAMP: 123456,
         MESSAGE: "example",
       }),
     },
-    <flow.Config>{},
+    { config: {} },
   );
   expect(output).toHaveLength(0);
 
@@ -82,23 +88,25 @@ describe.each([
     "Client monit-1751024993 disconnected additional info.",
   ],
 ])("mosquitto log entry parsing", (logMessage: string, expected: string) => {
-  test("Strips leading timestamp from mosquitto log messages", () => {
-    const output = flow.onMessage(
+  test("Strips leading timestamp from mosquitto log messages", async () => {
+    const output = await flow.onMessage(
       {
-        timestamp: { seconds: 1, nanoseconds: 1234 },
+        time: new Date(),
         topic: "",
-        payload: JSON.stringify(<journald.JOURNALD_RAW_MESSAGE>{
+        payload: tedge.encodeJSON(<journald.JOURNALD_RAW_MESSAGE>{
           SYSLOG_IDENTIFIER: "mosquitto",
           _SOURCE_REALTIME_TIMESTAMP: "1751468051367349",
           MESSAGE: logMessage,
         }),
       },
-      <flow.Config>{
-        with_logs: true,
+      {
+        config: <flow.Config>{
+          with_logs: true,
+        },
       },
     );
     expect(output).toHaveLength(1);
-    const message = JSON.parse(output[0].payload);
+    const message = tedge.decodeJSON(output[0].payload);
     expect(message).toHaveProperty("text", expected);
     expect(message).toHaveProperty("time", 1751468051.367349);
   });
@@ -115,19 +123,19 @@ describe.each([
 ])(
   "Detect log %s level from message",
   (level: string, expected: journald.Statistics) => {
-    test(`Uppercase ${level.toUpperCase()}`, () => {
-      const output = flow.onMessage(
+    test(`Uppercase ${level.toUpperCase()}`, async () => {
+      const output = await flow.onMessage(
         {
-          timestamp: tedge.mockGetTime(),
+          time: new Date(),
           topic: "dummy",
-          payload: JSON.stringify(<journald.JOURNALD_RAW_MESSAGE>{
+          payload: tedge.encodeJSON(<journald.JOURNALD_RAW_MESSAGE>{
             _SOURCE_REALTIME_TIMESTAMP: "123456",
             SYSLOG_TIMESTAMP: "", // Simulate log entry which does not have formal priority set by the application
             PRIORITY: "6", // default priority assigned by journald
             MESSAGE: `2025/07/02 15:55:32 ${level.toUpperCase()} Dummy log entry`,
           }),
         },
-        <flow.Config>{},
+        { config: {} },
       );
       expect(output).toHaveLength(0);
 
@@ -135,19 +143,19 @@ describe.each([
       expect(currentState.stats).toEqual(expected);
     });
 
-    test(`Lowercase ${level.toLowerCase()}`, () => {
-      const output = flow.onMessage(
+    test(`Lowercase ${level.toLowerCase()}`, async () => {
+      const output = await flow.onMessage(
         {
-          timestamp: tedge.mockGetTime(),
+          time: new Date(),
           topic: "dummy",
-          payload: JSON.stringify(<journald.JOURNALD_RAW_MESSAGE>{
+          payload: tedge.encodeJSON(<journald.JOURNALD_RAW_MESSAGE>{
             _SOURCE_REALTIME_TIMESTAMP: "123456",
             SYSLOG_TIMESTAMP: "", // Simulate log entry which does not have formal priority set by the application
             PRIORITY: "6", // default priority assigned by journald
             MESSAGE: `2025/07/02 15:55:32 ${level.toLocaleLowerCase()} Dummy log entry`,
           }),
         },
-        {},
+        { config: {} },
       );
       expect(output).toHaveLength(0);
 
@@ -157,7 +165,7 @@ describe.each([
   },
 );
 
-test("Process mock data", () => {
+test("Process mock data", async () => {
   const config: flow.Config = {
     with_logs: false,
     debug: false,
@@ -174,11 +182,11 @@ test("Process mock data", () => {
   const messages: tedge.Message[] = journald
     .mockJournaldLogs(10)
     .map((value) => ({
-      timestamp: tedge.mockGetTime(),
+      time: new Date(),
       topic: "dummy",
-      payload: JSON.stringify(value),
+      payload: tedge.encodeJSON(value),
     }));
-  const output = tedge.Run(flow, messages, config);
+  const output = await tedge.Run(flow, messages, { config });
   expect(output.length).toBeGreaterThanOrEqual(1);
 });
 
@@ -271,11 +279,11 @@ describe.each([
     expected: string,
     expectedLength: number,
   ) => {
-    test(testCase, () => {
+    test(testCase, async () => {
       flow.get_state().stats = stats;
-      const output = flow.onInterval(tedge.mockGetTime(), config);
+      const output = await flow.onInterval(new Date(), { config });
       expect(output).toHaveLength(expectedLength);
-      const lastMessage = JSON.parse(output[output.length - 1].payload);
+      const lastMessage = tedge.decodeJSON(output[output.length - 1].payload);
       expect(lastMessage).toHaveProperty("text");
       expect(lastMessage).toHaveProperty("severity");
       expect(lastMessage).toHaveProperty("time");
@@ -285,7 +293,7 @@ describe.each([
 );
 
 describe("log statistics", () => {
-  test("publish log statistics", () => {
+  test("publish log statistics", async () => {
     const stats_topic = "stats/custom/output";
     const expectedTopic = `te/device/main///${stats_topic}`;
     const config: flow.Config = {
@@ -298,17 +306,17 @@ describe("log statistics", () => {
       err: 1,
       total: 13,
     });
-    const output = flow.onInterval(tedge.mockGetTime(), config);
+    const output = await flow.onInterval(new Date(), { config });
     expect(output.length).toBeGreaterThanOrEqual(1);
     expect(output[0].topic).toStrictEqual(expectedTopic);
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJSON(output[0].payload);
     expect(payload).toHaveProperty("total", 13);
     expect(payload).toHaveProperty("info", 10);
     expect(payload).toHaveProperty("warn", 2);
     expect(payload).toHaveProperty("err", 1);
   });
 
-  test("skip publishing log statistics", () => {
+  test("skip publishing log statistics", async () => {
     const stats_topic = "stats/custom/output";
     const config: flow.Config = {
       publish_statistics: false,
@@ -322,7 +330,7 @@ describe("log statistics", () => {
       err: 1,
       total: 13,
     });
-    const output1 = flow.onInterval(tedge.mockGetTime(), config);
+    const output1 = await flow.onInterval(new Date(), { config });
     expect(output1).toHaveLength(0);
 
     // second run
@@ -332,11 +340,11 @@ describe("log statistics", () => {
       err: 1,
       total: 13,
     });
-    const output2 = flow.onInterval(tedge.mockGetTime(), config);
+    const output2 = await flow.onInterval(new Date(), { config });
     expect(output2).toHaveLength(1);
-    expect(output2[0].payload).toBeFalsy();
+    expect(tedge.decodeJSON(output2[0].payload)).toBeFalsy();
     expect(output2[0].topic).toEqual(`te/device/main///a/log_surge`);
-    expect(output2[0].retain).toStrictEqual(true);
+    expect(output2[0].transportFields?.retain).toStrictEqual(true);
   });
 });
 

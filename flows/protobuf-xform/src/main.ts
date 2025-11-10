@@ -2,9 +2,8 @@
   Serialize json messages into protobuf
 */
 // import * as proto from 'protobufjs';
-import { Message } from "../../common/tedge";
+import { decodeJSON, encodeJSON, Message } from "../../common/tedge";
 import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
-import { base64Decode, base64Encode } from "@bufbuild/protobuf/wire";
 import {
   SensorMessageSchema,
   EnvironmentSensorSchema,
@@ -17,38 +16,27 @@ export interface Config {
 
 function onSetpoint(
   message: Message,
-  { topic = "out/proto/actuator", base64 = false },
+  { topic = "out/proto/actuator" },
 ): Message[] {
-  let binPayload;
-  if (base64) {
-    binPayload = base64Decode(message.payload);
-  } else {
-    binPayload = message.raw_payload;
-  }
-
-  let setPoint = fromBinary(SensorMessageSchema, binPayload);
+  const setPoint = fromBinary(SensorMessageSchema, message.payload);
   return [
     {
-      timestamp: message.timestamp,
+      time: message.time,
       topic: topic,
-      payload: JSON.stringify(setPoint),
+      payload: encodeJSON(setPoint),
     },
   ];
 }
 
 export function onMessage(
   message: Message,
-  {
-    topic = "out/proto/sensor",
-    cmdtopic = "out/proto/actuator",
-    base64 = false,
-  },
+  { topic = "out/proto/sensor", cmdtopic = "out/proto/actuator" },
 ): Message[] {
   const payloadType = message.topic.split("/").slice(-1)[0];
 
   let data;
   if (payloadType == "environment") {
-    const payload = JSON.parse(message.payload);
+    const payload = decodeJSON(message.payload);
     data = {
       case: "environment",
       value: create(EnvironmentSensorSchema, {
@@ -58,7 +46,7 @@ export function onMessage(
       }),
     };
   } else if (payloadType == "location") {
-    const payload = JSON.parse(message.payload);
+    const payload = decodeJSON(message.payload);
     data = {
       case: "location",
       value: create(LocationSensorSchema, {
@@ -69,7 +57,7 @@ export function onMessage(
       }),
     };
   } else if (payloadType == "setpoint") {
-    return onSetpoint(message, { topic: cmdtopic, base64: base64 });
+    return onSetpoint(message, { topic: cmdtopic });
   }
 
   if (!data) {
@@ -82,14 +70,11 @@ export function onMessage(
 
   const outputTopic = topic.replaceAll("{{type}}", payloadType);
 
-  let binPayload = toBinary(SensorMessageSchema, sensor);
-  if (base64) {
-    binPayload = base64Encode(binPayload);
-  }
+  const binPayload = toBinary(SensorMessageSchema, sensor);
 
   return [
     {
-      timestamp: message.timestamp,
+      time: message.time,
       topic: outputTopic,
       payload: binPayload,
     },

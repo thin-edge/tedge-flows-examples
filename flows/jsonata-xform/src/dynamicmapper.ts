@@ -1,4 +1,4 @@
-import { Message } from "../../common/tedge";
+import { decodeJSON, Message } from "../../common/tedge";
 import jsonata from "jsonata";
 import { set, get, merge, unset, has } from "es-toolkit/compat";
 // https://nearform.com/insights/the-jsonata-performance-dilemma/
@@ -79,7 +79,7 @@ export async function build(
   message: Message,
   rule: DynamicMappingRule,
 ): Promise<any> {
-  const input_message = JSON.parse(message.payload);
+  const input_message = decodeJSON(message.payload);
   const topicSegments = message.topic.split("/");
   const postModifiers: PropertyMapping[] = [];
   const mods = await Promise.all(

@@ -1,4 +1,10 @@
-import { Message, Timestamp, Run, mockGetTime } from "./../../common/tedge";
+import {
+  Message,
+  Context,
+  encodeJSON,
+  encodeText,
+  decodeText,
+} from "./../../common/tedge";
 
 interface Config {
   disable_twin?: boolean;
@@ -114,12 +120,14 @@ const checkThresholds = deduplicateCalls(function (
   const topicAlarm = `te/device/main///a/${alarm_type}_alarm`;
   const topicWarning = `te/device/main///a/${alarm_type}_warn`;
 
-  const messages = [];
+  const messages: Message[] = [];
   if (expiresIn <= alarm_threshold) {
     messages.push({
       topic: topicAlarm,
-      retain: true,
-      payload: JSON.stringify({
+      transportFields: {
+        retain: true,
+      },
+      payload: encodeJSON({
         text: `Certificate will expire within ${alarm}`,
         severity: "major",
         details,
@@ -127,14 +135,18 @@ const checkThresholds = deduplicateCalls(function (
     });
     messages.push({
       topic: topicWarning,
-      retain: true,
-      payload: "",
+      transportFields: {
+        retain: true,
+      },
+      payload: encodeText(""),
     });
   } else if (expiresIn <= warning_threshold) {
     messages.push({
       topic: topicWarning,
-      retain: true,
-      payload: JSON.stringify({
+      transportFields: {
+        retain: true,
+      },
+      payload: encodeJSON({
         text: `Certificate will expire within ${warning}`,
         severity: "warning",
         details,
@@ -142,20 +154,26 @@ const checkThresholds = deduplicateCalls(function (
     });
     messages.push({
       topic: topicAlarm,
-      retain: true,
-      payload: "",
+      transportFields: {
+        retain: true,
+      },
+      payload: encodeText(""),
     });
   } else {
     // Clear alarms
     messages.push({
       topic: topicAlarm,
-      retain: true,
-      payload: "",
+      transportFields: {
+        retain: true,
+      },
+      payload: encodeText(""),
     });
     messages.push({
       topic: topicWarning,
-      retain: true,
-      payload: "",
+      transportFields: {
+        retain: true,
+      },
+      payload: encodeText(""),
     });
   }
   return messages;
@@ -163,9 +181,9 @@ const checkThresholds = deduplicateCalls(function (
 
 function toJSON(payload: any, debug: boolean = false) {
   if (debug === true) {
-    return JSON.stringify(payload, null, "  ");
+    return encodeText(JSON.stringify(payload, null, "  "));
   }
-  return JSON.stringify(payload);
+  return encodeJSON(payload);
 }
 
 const publishTwinMessage = deduplicateCalls(function (
@@ -175,18 +193,21 @@ const publishTwinMessage = deduplicateCalls(function (
   return [
     {
       topic: `te/device/main///twin/${config?.twin_property || "tedge_Certificate"}`,
-      retain: true,
+      transportFields: {
+        retain: true,
+      },
       payload: toJSON(output, config?.debug),
     },
   ];
 });
 
-export function onMessage(message: Message, config: Config = {}): Message[] {
+export function onMessage(message: Message, context: Context): Message[] {
   console.debug("Input", {
     topic: message.topic,
     payload: message.payload,
   });
-  const fragment = parseInputMessage(message.payload);
+  const fragment = parseInputMessage(decodeText(message.payload));
+  const config = context.config as Config;
 
   const expiresAt = new Date(fragment.validUntil);
   let signedBy = "-";

@@ -1,0 +1,9 @@
+[input]
+mqtt.topics = [
+    "example/foo/bar",
+]
+
+[[steps]]
+script = "dist/main.mjs"
+config.debug = 1440
+config.custom_prop = "my/prop"

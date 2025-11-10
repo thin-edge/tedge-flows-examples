@@ -1,4 +1,10 @@
-import { Message } from "../../common/tedge";
+import {
+  Message,
+  Context,
+  encodeText,
+  encodeJSON,
+  decodeJSON,
+} from "../../common/tedge";
 import * as utils from "./utils";
 
 export interface Config {
@@ -11,19 +17,22 @@ function isTedgeCommandStatus(cloudPrefix: string, topic: string): boolean {
   return !!topic.match(pattern);
 }
 
-function handleCommandUpdate(message: Message): any[] {
-  const output: any[] = [];
-  if (!message.payload) {
+function handleCommandUpdate(message: Message): Message[] {
+  const output: Message[] = [];
+  if (message.payload.length === 0) {
     return output;
   }
-  const payload = JSON.parse(`${message.payload}`);
+
+  const payload = decodeJSON(message.payload);
 
   if (payload?.status == "successful" || payload?.status == "failed") {
     // clear message
     output.push({
       topic: message.topic,
-      retained: true,
-      payload: "",
+      transportFields: {
+        retain: true,
+      },
+      payload: encodeText(""),
     });
   } else {
     // TODO: send current status to the cloud
@@ -57,33 +66,34 @@ function createCommand(
   };
 
   messages.push({
-    timestamp: message.timestamp,
+    time: message.time,
     topic: [
       tedgeTopic,
       "cmd",
       cloudPayload.type,
       buildCommandID(cloud_prefix, message),
     ].join("/"),
-    payload: JSON.stringify(payload),
+    payload: encodeJSON(payload),
   });
   return messages;
 }
 
 function buildCommandID(cloudPrefix: string, message: Message): string {
-  return [cloudPrefix, message.timestamp.seconds].join("-");
+  return [cloudPrefix, message.time?.getTime()].join("-");
 }
 
-export function onMessage(message: Message, config: Config | undefined = {}) {
-  const { cloud_prefix = "azeg", commands = ["writeSetpoint"] } = config;
+export function onMessage(message: Message, context: Context): Message[] {
+  const { cloud_prefix = "azeg", commands = ["writeSetpoint"] } =
+    context.config;
   if (isTedgeCommandStatus(cloud_prefix, message.topic)) {
     return handleCommandUpdate(message);
   }
 
   // map a cloud message to a local tedge command based on the .type
-  const output = [];
-  const payload = JSON.parse(message.payload);
+  const output: Message[] = [];
+  const payload = decodeJSON(message.payload);
   if (commands.includes(payload.type)) {
-    output.push(...createCommand(message, payload, config));
+    output.push(...createCommand(message, payload, context.config));
   }
   return output;
 }

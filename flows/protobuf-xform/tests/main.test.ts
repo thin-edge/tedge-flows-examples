@@ -1,17 +1,16 @@
 import { expect, test } from "@jest/globals";
-import * as tedge from "../../common/tedge";
 import * as flow from "../src/main";
 
 import { fromBinary } from "@bufbuild/protobuf";
-import { base64Decode } from "@bufbuild/protobuf/wire";
 import { SensorMessageSchema } from "../src/gen/sensor_pb";
+import { encodeJSON } from "../../common/tedge";
 
-test("Converts payload to a environment sensor protobuf message", () => {
-  const output = flow.onMessage(
+test("Converts payload to a environment sensor protobuf message", async () => {
+  const output = await flow.onMessage(
     {
-      timestamp: tedge.mockGetTime(),
+      time: new Date(),
       topic: "something/environment",
-      payload: JSON.stringify({
+      payload: encodeJSON({
         temperature: 12.3,
         humidity: 40,
         sensorId: "foo",
@@ -34,12 +33,12 @@ test("Converts payload to a environment sensor protobuf message", () => {
   }
 });
 
-test("Converts payload to a location sensor protobuf message", () => {
-  const output = flow.onMessage(
+test("Converts payload to a location sensor protobuf message", async () => {
+  const output = await flow.onMessage(
     {
-      timestamp: tedge.mockGetTime(),
+      time: new Date(),
       topic: "something/location",
-      payload: JSON.stringify({
+      payload: encodeJSON({
         latitude: 12.345,
         longitude: -9.8765,
       }),
@@ -60,12 +59,12 @@ test("Converts payload to a location sensor protobuf message", () => {
   }
 });
 
-test("It skips messages with unknown types", () => {
-  const output = flow.onMessage(
+test("It skips messages with unknown types", async () => {
+  const output = await flow.onMessage(
     {
-      timestamp: tedge.mockGetTime(),
+      time: new Date(),
       topic: "something/new_sensor_data",
-      payload: JSON.stringify({
+      payload: encodeJSON({
         latitude: 12.345,
         longitude: -9.8765,
       }),
@@ -77,12 +76,12 @@ test("It skips messages with unknown types", () => {
   expect(output).toHaveLength(0);
 });
 
-test("Output topic supports template variables", () => {
-  const output = flow.onMessage(
+test("Output topic supports template variables", async () => {
+  const output = await flow.onMessage(
     {
-      timestamp: tedge.mockGetTime(),
+      time: new Date(),
       topic: "something/environment",
-      payload: JSON.stringify({
+      payload: encodeJSON({
         temperature: 12.3,
         humidity: 40,
         sensorId: "foo",

@@ -1,15 +1,18 @@
 import { expect, test, describe, beforeEach } from "@jest/globals";
-import * as tedge from "../../common/tedge";
 import * as flow from "../src/main";
+import { decodeJSON, encodeJSON, encodeText } from "../../common/tedge";
 
 jest.useFakeTimers();
 
-test("Converts string to a timestamp", () => {
-  const output = flow.onMessage({
-    timestamp: tedge.mockGetTime(),
-    topic: "example",
-    payload: "1",
-  });
+test("Converts string to a timestamp", async () => {
+  const output = await flow.onMessage(
+    {
+      time: new Date(),
+      topic: "example",
+      payload: encodeText("1"),
+    },
+    { config: {} },
+  );
   expect(output).toHaveLength(0);
 });
 
@@ -22,7 +25,7 @@ describe("process", () => {
   });
 
   describe("process", () => {
-    const now = new Date("2025-01-01T12:00:00Z").getTime();
+    const now = new Date("2025-01-01T12:00:00Z");
     let flow: typeof import("../src/main");
 
     beforeEach(() => {
@@ -30,34 +33,37 @@ describe("process", () => {
       flow = require("../src/main");
     });
 
-    test('should update status to online when payload is "1"', () => {
-      const timestamp = tedge.mockGetTime(now);
-      const message = { timestamp, topic: "test", payload: "1" };
-      flow.onMessage(message);
-      const output = flow.onInterval(timestamp, { window_size_minutes: 600 });
+    test('should update status to online when payload is "1"', async () => {
+      const message = { time: now, topic: "test", payload: encodeText("1") };
+      await flow.onMessage(message, { config: {} });
+      const output = await flow.onInterval(now, {
+        config: { window_size_minutes: 600 },
+      });
       const twinMessage = output.find((msg) =>
         msg.topic.includes("twin/onlineTracker"),
       );
       expect(twinMessage).toBeDefined();
       if (twinMessage) {
-        const payload = JSON.parse(twinMessage.payload);
+        const payload = decodeJSON(twinMessage.payload);
         expect(payload.online).toBeCloseTo(100, 1);
         expect(payload).toHaveProperty("currentStatus", "online");
       }
     });
   });
 
-  test('should update status to offline when payload is "0"', () => {
-    const timestamp = tedge.mockGetTime();
-    const message = { timestamp, topic: "test", payload: "0" };
-    flow.onMessage(message);
-    const output = flow.onInterval(timestamp, { window_size_minutes: 600 });
+  test('should update status to offline when payload is "0"', async () => {
+    const time = new Date();
+    const message = { time, topic: "test", payload: encodeText("0") };
+    flow.onMessage(message, { config: {} });
+    const output = await flow.onInterval(time, {
+      config: { window_size_minutes: 600 },
+    });
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
     expect(twinMessage).toBeDefined();
     if (twinMessage) {
-      const payload = JSON.parse(twinMessage.payload);
+      const payload = decodeJSON(twinMessage.payload);
       expect(payload.offline).toBeCloseTo(100, 1);
       expect(payload).toHaveProperty("currentStatus", "offline");
     }
@@ -72,9 +78,9 @@ describe("tick", () => {
     jest.resetModules();
   });
 
-  test("Tick should not crash if the config is set to null", () => {
-    const timestamp = tedge.mockGetTime();
-    const output = flow.onInterval(timestamp, null);
+  test("Tick should not crash if the config is set to null", async () => {
+    const time = new Date();
+    const output = await flow.onInterval(time, { config: {} });
     expect(output).toHaveLength(1);
   });
 });
@@ -118,104 +124,86 @@ describe("UptimeTracker advanced features", () => {
 
 describe("UptimeTracker process payload variants", () => {
   let flow: typeof import("../src/main");
-  const now = new Date("2025-01-01T12:00:00Z").getTime();
+  const now = new Date("2025-01-01T12:00:00Z");
   beforeEach(() => {
     jest.resetModules();
     flow = require("../src/main");
   });
 
-  test('payload "1" sets status to online', () => {
-    const timestamp = {
-      seconds: Math.floor(now / 1000),
-      nanoseconds: (now % 1000) * 1e6,
-    };
-    const message = { timestamp, topic: "test", payload: "1" };
-    flow.onMessage(message, null);
-    const output = flow.onInterval(timestamp, null);
+  test('payload "1" sets status to online', async () => {
+    const message = { time: now, topic: "test", payload: encodeText("1") };
+    await flow.onMessage(message, { config: {} });
+    const output = await flow.onInterval(now, { config: {} });
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
     expect(twinMessage).toBeDefined();
     if (twinMessage) {
-      const payload = JSON.parse(twinMessage.payload);
+      const payload = decodeJSON(twinMessage.payload);
       expect(payload.online).toBeCloseTo(100, 1);
     }
   });
 
-  test('payload "0" sets status to offline', () => {
-    const timestamp = {
-      seconds: Math.floor(now / 1000),
-      nanoseconds: (now % 1000) * 1e6,
-    };
-    const message = { timestamp, topic: "test", payload: "0" };
-    flow.onMessage(message, null);
-    const output = flow.onInterval(timestamp, null);
+  test('payload "0" sets status to offline', async () => {
+    const message = { time: now, topic: "test", payload: encodeText("0") };
+    await flow.onMessage(message, { config: {} });
+    const output = await flow.onInterval(now, { config: {} });
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
     expect(twinMessage).toBeDefined();
     if (twinMessage) {
-      const payload = JSON.parse(twinMessage.payload);
+      const payload = decodeJSON(twinMessage.payload);
       expect(payload.offline).toBeCloseTo(100, 1);
     }
   });
 
-  test('payload {"status": "up"} sets status to online', () => {
-    const timestamp = {
-      seconds: Math.floor(now / 1000),
-      nanoseconds: (now % 1000) * 1e6,
-    };
+  test('payload {"status": "up"} sets status to online', async () => {
     const message = {
-      timestamp,
+      time: now,
       topic: "test",
-      payload: JSON.stringify({ status: "up" }),
+      payload: encodeJSON({ status: "up" }),
     };
-    flow.onMessage(message, null);
-    const output = flow.onInterval(timestamp, null);
+    await flow.onMessage(message, { config: {} });
+    const output = flow.onInterval(now, { config: {} });
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
     expect(twinMessage).toBeDefined();
     if (twinMessage) {
-      const payload = JSON.parse(twinMessage.payload);
+      const payload = decodeJSON(twinMessage.payload);
       expect(payload.online).toBeCloseTo(100, 1);
     }
   });
 
-  test('payload {"status": "down"} sets status to offline', () => {
-    const timestamp = {
-      seconds: Math.floor(now / 1000),
-      nanoseconds: (now % 1000) * 1e6,
-    };
+  test('payload {"status": "down"} sets status to offline', async () => {
     const message = {
-      timestamp,
+      time: now,
       topic: "test",
-      payload: JSON.stringify({ status: "down" }),
+      payload: encodeJSON({ status: "down" }),
     };
-    flow.onMessage(message, null);
-    const output = flow.onInterval(timestamp, null);
+    await flow.onMessage(message, { config: {} });
+    const output = await flow.onInterval(now, { config: {} });
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
     expect(twinMessage).toBeDefined();
     if (twinMessage) {
-      const payload = JSON.parse(twinMessage.payload);
+      const payload = decodeJSON(twinMessage.payload);
       expect(payload.offline).toBeCloseTo(100, 1);
     }
   });
 
-  test('payload {"status": "unknown"} does not throw and sets status', () => {
-    const timestamp = {
-      seconds: Math.floor(now / 1000),
-      nanoseconds: (now % 1000) * 1e6,
-    };
+  test('payload {"status": "unknown"} does not throw and sets status', async () => {
     const message = {
-      timestamp,
+      time: now,
       topic: "test",
-      payload: JSON.stringify({ status: "unknown" }),
+      payload: encodeJSON({ status: "unknown" }),
     };
-    expect(() => flow.onMessage(message, null)).not.toThrow();
-    const output = flow.onInterval(timestamp, null);
+    expect(
+      async () => await flow.onMessage(message, { config: {} }),
+    ).not.toThrow();
+    const output = flow.onInterval(now, { config: {} });
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );

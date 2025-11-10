@@ -64,24 +64,24 @@ The flow processes messages as follows:
 `.trimStart();
 
 const templateMainTS = `
-import { Message, fromTimestamp } from "../../common/tedge";
+import { Message, Context, decodeJSON, encodeJSON } from "../../common/tedge";
 
 export interface Config {
   debug?: boolean;
   custom_prop?: string;
 }
 
-export function onMessage(message: Message, config: Config | undefined = {}): Message[] {
+export function onMessage(message: Message, context: Context): Message[] {
   const output = [];
+  const config: Config = context.config;
 
   // TODO: append any messages you want to the output array.
   const topicSegments = message.topic.split("/");
-  const payload = JSON.parse(message.payload);
-  const receivedAt = new Date(fromTimestamp(message.timestamp));
+  const payload = decodeJSON(message.payload);
   output.push({
     topic: \`te/device/\${topicSegments[1]}///m/\${topicSegments[topicSegments.length - 1]}\`,
-    payload: JSON.stringify({
-      time: receivedAt.toISOString(),
+    payload: encodeJSON({
+      time: message.time.toISOString(),
       ...payload,
     }),
   });
@@ -98,15 +98,15 @@ import * as flow from "../src/main";
 describe("map messages", () => {
   test("simple message", () => {
     const output = flow.onMessage({
-      timestamp: tedge.mockGetTime(new Date("2025-01-01").getTime()),
+      time: new Date("2025-01-01"),
       topic: "example/foo/bar",
-      payload: JSON.stringify({
+      payload: encodeJSON({
         temperature: 23.0,
       }),
     });
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("te/device/foo///m/bar");
-    const payload = JSON.parse(output[0].payload);
+    const payload = decodeJSON(output[0].payload);
     expect(payload).toEqual({
       time: "2025-01-01T00:00:00.000Z",
       temperature: 23.0,

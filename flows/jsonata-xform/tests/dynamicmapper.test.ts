@@ -1,13 +1,13 @@
 import { expect, test } from "@jest/globals";
-import * as tedge from "../../common/tedge";
 import * as dm from "../src/dynamicmapper";
+import { encodeJSON } from "../../common/tedge";
 
 test("Converts string to a timestamp", async () => {
   const output = await dm.build(
     {
-      timestamp: tedge.mockGetTime(),
+      time: new Date(),
       topic: "/plant1/line1/device1_measure1_Type",
-      payload: JSON.stringify({
+      payload: encodeJSON({
         time: 1.1234,
         value: 100,
         value2: 99.1,

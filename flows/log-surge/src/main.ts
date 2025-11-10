@@ -3,7 +3,7 @@
 */
 
 import * as model from "../../common/model";
-import { Message, Timestamp, Run, mockGetTime } from "./../../common/tedge";
+import { Message, Context, encodeJSON, decodeJSON } from "./../../common/tedge";
 import * as journald from "./journald";
 
 export interface Config {
@@ -44,9 +44,16 @@ export function get_state(): FlowState {
   return state;
 }
 
-export function onMessage(message: Message, config: Config | null): Message[] {
-  const { with_logs = false, debug = false, text_filter = [] } = config || {};
-  let payload = JSON.parse(message.payload);
+export async function onMessage(
+  message: Message,
+  context: Context,
+): Promise<Message[]> {
+  const {
+    with_logs = false,
+    debug = false,
+    text_filter = [],
+  } = context.config || {};
+  let payload = decodeJSON(message.payload);
   const output = journald.transform(payload);
 
   // Check data transform and reject invalid data
@@ -59,7 +66,7 @@ export function onMessage(message: Message, config: Config | null): Message[] {
       return element.test(text);
     };
   };
-  if (!text_filter.map((v) => RegExp(v)).every(contains(output.text))) {
+  if (!text_filter.map((v: any) => RegExp(v)).every(contains(output.text))) {
     TEST: if (debug) {
       console.log("Skipping message as it did not match the text filter", {
         text_filter,
@@ -75,37 +82,40 @@ export function onMessage(message: Message, config: Config | null): Message[] {
   if (with_logs) {
     return [
       {
-        timestamp: message.timestamp,
+        time: message.time,
         topic: "stream/logs/journald",
-        payload: JSON.stringify(output),
+        payload: encodeJSON(output),
       },
     ];
   }
   return [];
 }
 
-export function onInterval(timestamp: Timestamp, config: Config | null) {
+export async function onInterval(
+  timestamp: Date,
+  context: Context,
+): Promise<Message[]> {
   const {
     debug = false,
     publish_statistics = false,
     stats_topic = "stats/logs",
     threshold = {},
-  } = config || {};
+  } = context.config || {};
   TEST: if (debug) {
     console.log("Calling tick");
   }
 
   const { info = 0, warning = 0, error = 0, total = 0 } = threshold;
 
-  state.dateTo = timestamp.seconds + timestamp.nanoseconds / 1e9;
+  state.dateTo = timestamp.getTime() / 1000;
   const stats = state.stats;
   const output: Message[] = [];
 
   if (publish_statistics) {
     output.push({
-      timestamp: timestamp,
+      time: timestamp,
       topic: `te/device/main///${stats_topic}`,
-      payload: JSON.stringify(stats),
+      payload: encodeJSON(stats),
     });
   }
 
@@ -132,11 +142,11 @@ export function onInterval(timestamp: Timestamp, config: Config | null) {
 
   if (alarmText) {
     output.push({
-      timestamp: timestamp,
+      time: timestamp,
       topic: `te/device/main///a/log_surge`,
-      payload: JSON.stringify({
+      payload: encodeJSON({
         text: alarmText,
-        time: timestamp.seconds,
+        time: timestamp.getTime() / 1000,
         severity: severity,
         statistics: stats,
       }),
@@ -146,10 +156,12 @@ export function onInterval(timestamp: Timestamp, config: Config | null) {
       console.log("clearing log_surge alarm (if present)");
     }
     output.push({
-      timestamp: timestamp,
+      time: timestamp,
       topic: `te/device/main///a/log_surge`,
-      retain: true,
-      payload: ``,
+      transportFields: {
+        retain: true,
+      },
+      payload: encodeJSON(``),
     });
   }
 

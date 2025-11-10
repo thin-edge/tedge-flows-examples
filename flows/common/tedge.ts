@@ -1,46 +1,57 @@
-export interface Timestamp {
-  seconds: number;
-  nanoseconds: number;
-}
-
 export interface Flow {
-  onMessage(message: Message, config: any): Message[];
-  onInterval?: (timestamp: Timestamp, config: any) => Message[];
-  onConfigUpdate?: (message: Message, config: any) => void;
+  onMessage(message: Message, context: Context): Promise<Message[]>;
+  onInterval?(time: Date, context: Context): Promise<Message[]>;
+  onConfigUpdate?(message: Message, context: Context): void;
 }
 
 export interface Message {
-  timestamp?: Timestamp;
+  time?: Date;
   topic: string;
-  payload: string;
-  raw_payload?: Uint8Array<ArrayBufferLike>;
-  retain?: boolean;
-}
-
-export function mockGetTime(time: number = Date.now()): Timestamp {
-  const seconds = time / 1000;
-  const whole_seconds = Math.trunc(seconds);
-  const nanoseconds = (seconds - whole_seconds) * 10e9;
-  return {
-    seconds: whole_seconds,
-    nanoseconds,
+  payload: Uint8Array;
+  transportFields?: {
+    retain?: boolean;
+    [key: string]: any;
   };
 }
 
-// Convert the tedge timestamp to milliseconds since epoch
-export function fromTimestamp(t?: Timestamp): number {
-  if (!t) {
-    return Date.now();
-  }
-  return t.seconds * 1000 + t.nanoseconds / 1e6;
+export function decodeJSON(data?: Uint8Array): any {
+  return JSON.parse(new TextDecoder().decode(data));
 }
 
-export function Run(module: Flow, messages: Message[], config: any): Message[] {
+export function decodeText(data?: Uint8Array): string {
+  return new TextDecoder().decode(data);
+}
+
+export function encodeJSON(data?: any): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(data));
+}
+
+export function encodeText(data?: string): Uint8Array {
+  return new TextEncoder().encode(data);
+}
+
+export interface Context {
+  readonly runtime?: "thin-edge.io";
+
+  /** Get state */
+  getState?(key: string, defaultValue?: any): any;
+
+  /** Set state. Not shared across flow instances */
+  setState?(key: string, value: any): void;
+
+  /** Flow configuration object, for parameterization. */
+  readonly config: any;
+}
+
+export async function Run(
+  module: Flow,
+  messages: Message[],
+  config: any,
+): Promise<Message[]> {
   const outputMessages: Message[] = [];
-  messages.forEach((message) => {
-    const timestamp = mockGetTime();
-    message.timestamp = timestamp;
-    const output = module.onMessage(message, config);
+  messages.forEach(async (message) => {
+    message.time = new Date();
+    const output = await module.onMessage(message, config);
     outputMessages.push(...output);
     if (output.length > 0) {
       console.log(JSON.stringify(output));
@@ -48,7 +59,7 @@ export function Run(module: Flow, messages: Message[], config: any): Message[] {
   });
 
   if (module.onInterval) {
-    const output = module.onInterval(mockGetTime(), config);
+    const output = await module.onInterval(new Date(), config);
     outputMessages.push(...output);
     console.log(JSON.stringify(output));
   }

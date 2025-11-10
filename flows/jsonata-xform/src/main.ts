@@ -1,7 +1,7 @@
 /*
   Calculate the total of the input values
 */
-import { Message } from "../../common/tedge";
+import { Message, Context, encodeJSON } from "../../common/tedge";
 import {
   build,
   Substitution,
@@ -20,11 +20,11 @@ function buildTopic(externalID: string, ...paths: string[]): string {
   return ["te", "device", externalID, "", "", ...paths].join("/");
 }
 
-export async function onMessage(message: Message, config: Config = {}) {
+export async function onMessage(message: Message, context: Context) {
   const rule: DynamicMappingRule = {
-    targetTopic: config.targetTopic,
-    targetAPI: config.targetAPI,
-    substitutions: config.substitutions || [],
+    targetTopic: context.config.targetTopic,
+    targetAPI: context.config.targetAPI,
+    substitutions: context.config.substitutions || [],
   };
   const output = await build(message, rule);
 
@@ -69,6 +69,6 @@ export async function onMessage(message: Message, config: Config = {}) {
 
   return {
     topic,
-    payload: JSON.stringify(output),
+    payload: encodeJSON(output),
   };
 }
