@@ -4,7 +4,7 @@ Experimental repository to exchange examples which use the upcoming tedge-flows 
 
 ## Building locally
 
-You can build the flows locally with the following steps which requires nodejs >= 18.
+You can build the flows locally with the following steps which requires nodejs >= 20.
 
 1. Install the dependencies (using `npm ci` instead of `npm install` to install the exact versions defined in the package-lock.json file)
 
