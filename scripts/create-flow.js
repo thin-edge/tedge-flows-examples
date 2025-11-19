@@ -26,7 +26,6 @@ const packageTemplate = {
   author: "thin-edge.io",
   license: "Apache-2.0",
   devDependencies: {
-    "@faker-js/faker": "^9.9.0",
     "@types/jest": "^30.0.0",
     esbuild: "^0.25.5",
     "esbuild-register": "^3.6.0",
