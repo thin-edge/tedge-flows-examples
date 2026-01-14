@@ -1,0 +1,169 @@
+# ThingsBoard Flow
+
+This flow demonstrates how to map **thin-edge.io** data to **ThingsBoard**.
+
+## Supported Mapping Features
+
+The flow supports mapping from Thin Edge JSON to the ThingsBoard Gateway API.
+
+- [x] Measurements -> Telemetry
+- [x] Twin -> Attributes
+- [ ] Alarms -> Alarms (todo)
+- [ ] Events -> Telemetry (todo)
+- [ ] Commands -> RPC (todo)
+
+## Flow Custom Configuration
+
+- `add_type_to_key`: `<true|false>`
+  - Determines whether the measurements/twin type is prefixed to the keys.
+  - For example,
+    - topic: `te/device/main///m/sensor`
+    - payload: `{"temperature: 10}`
+    - If set to `true`, the converted payload becomes: `{"sensor::temperature": 10}`
+
+- If you don't want to add timestamp to telemetry, remove the builtin `add-timestamp` step from `flow.toml`.
+
+## Setup
+
+### ThingsBoard Setup
+
+Register the main device beforehand. It must be **gateway**.
+The device ID and access token will be used in the later mosquitto bridge setup.
+
+### Flow Configuration
+
+Set `config.main_device_name` to your device's main name in `flow.toml`.
+
+```toml
+config.main_device_name = "{{MAIN_DEVICE_NAME}}"
+```
+
+If you are unsure which value to use, run the following command to get your device ID:
+
+```sh
+tedge config get device.id
+```
+
+**Note**: this settings is a workaround to tell the main device's name to the flow. Once the access to the entity store is implemented, this settings will be removed.
+
+### Mosquitto Bridge Configuration
+
+You must manually create a mosquitto bridge configuration.
+Replace `{{URL}}`, `{{DEVICE_ID}}`, and `{{ACCESS_TOKEN}}` for your tenant.
+
+File: `/etc/tedge/mosquitto-conf/thingsboard-bridge.conf`
+
+Content:
+
+```sh
+### Bridge
+connection edge_to_things
+address {{URL}}:8883
+bridge_capath /etc/ssl/certs
+remote_clientid {{DEVICE_ID}}
+local_clientid ThingsBoard
+remote_username {{ACCESS_TOKEN}}
+try_private false
+start_type automatic
+cleansession true
+local_cleansession false
+notifications true
+notifications_local_only true
+notification_topic te/device/main/service/mosquitto-things-bridge/status/health
+bridge_attempt_unsubscribe false
+
+### Topics
+### ThingsBoard Gateway API topics
+topic connect out 1 tb/gateway/ v1/gateway/
+topic disconnect out 1 tb/gateway/ v1/gateway/
+topic telemetry out 1 tb/gateway/ v1/gateway/
+topic attributes both 1 tb/gateway/ v1/gateway/
+topic attributes/request/# out 1 tb/gateway/ v1/gateway/
+topic attributes/response/# in 1 tb/gateway/ v1/gateway/
+topic rpc in 1 tb/gateway/ v1/gateway/
+topic claim out 1 tb/gateway/ v1/gateway/
+
+### ThingsBoard Device API topics
+topic telemetry out 1 tb/me/ v1/devices/me/
+topic attributes both 1 tb/me/ v1/devices/me/
+topic attributes/request/# out 1 tb/me v1/devices/me/
+topic attributes/response/# in 1 tb/me/ v1/devices/me/
+topic rpc/request/# in 1 tb/me/ v1/devices/me/
+topic rpc/response/# out 1 tb/me/ v1/devices/me/
+```
+
+Note: After creating the bridge configuration file, you must restart the `mosquitto` service.
+
+```sh
+sudo systemctl restart mosquitto
+```
+
+## Example Conversion
+
+### Telemetry
+
+#### thin-edge.io measurements
+
+topic: `te/device/main///m/sensor`
+
+```json
+{
+  "temperature": 10,
+  "time": "2020-10-15T05:30:47+00:00"
+}
+```
+
+#### ThingsBoard telemetry
+
+topic: `tb/gateway/telemetry`
+
+```json
+{
+  "MAIN": [
+    "ts": 1602739847000,
+    "values": {
+      "sensor::temperature": 10
+    }
+  ]
+}
+```
+
+### Attributes
+
+#### thin-edge.io twin
+
+topic: `te/device/main///twin/software`
+
+```json
+{
+  "os": "debian"
+}
+```
+
+#### ThingsBoard attributes
+
+topic: `tb/gateway/attributes`
+
+```json
+{
+  "MAIN": {
+    "software::os": "debian"
+  }
+}
+```
+
+## Device Name Mapping Rules
+
+Since `tedge-flows` cannot access to the thin-edge.io entity store,
+this flow uses predefined conversion rules to derive ThingsBoard device names.
+
+Assuming that your `config.main_device_name` is set to **MAIN**,
+
+| thin-edge.io Topic Pattern         | Logic Applied                        | ThingsBoard Name |
+| :--------------------------------- | :----------------------------------- | :--------------- |
+| `te/device/main///m/`              | Alias from `config.main_device_name` | **MAIN**         |
+| `te/device/child1///m/`            | Use Device ID                        | **child1**       |
+| `te/device/main/service/app1/m/`   | `{Device}_{Service}`                 | **MAIN_app1**    |
+| `te/device/child1/service/app2/m/` | `{Device}_{Service}`                 | **child1_app2**  |
+| `te/device/main/some/thing/m/`     | Use Device ID as fallback            | **MAIN**         |
+| `te/device/child1/some/thing/m/`   | Use Device ID as fallback            | **child1**       |

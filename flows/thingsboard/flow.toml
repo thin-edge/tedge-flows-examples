@@ -1,0 +1,14 @@
+input.mqtt.topics = ["te/device/+/+/+/m/+", "te/device/+/+/+/twin/+"]
+
+[[steps]]
+builtin = "add-timestamp"
+config.property = "time"
+config.format = "unix"
+config.reformat = true
+
+[[steps]]
+script = "dist/main.mjs"
+config.main_device_name = "{{MAIN_DEVICE_NAME}}"
+config.add_type_to_key = true
+
+errors.mqtt.topic = "te/errors"
