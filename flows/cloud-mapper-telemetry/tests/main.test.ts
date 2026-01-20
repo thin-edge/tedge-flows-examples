@@ -6,7 +6,7 @@ import * as flow from "../src/main";
 describe("measurement conversions", () => {
   test("Single value", () => {
     const output = flow.onMessage({
-      timestamp: tedge.mockGetTime(new Date("2025-01-01").getTime()),
+      time: tedge.mockGetTime(new Date("2025-01-01")),
       topic: "te/device/child1///m/example",
       payload: JSON.stringify({
         temperature: 23.0,
@@ -30,7 +30,7 @@ describe("measurement conversions", () => {
 
   test("Multiple values with mixed levels", () => {
     const output = flow.onMessage({
-      timestamp: tedge.mockGetTime(new Date("2025-01-01").getTime()),
+      time: tedge.mockGetTime(new Date("2025-01-01")),
       topic: "te/device/child-other-2///m/example",
       payload: JSON.stringify({
         temperature: 23.0,
@@ -68,7 +68,7 @@ describe("tedge-flows tests", () => {
       return;
     }
     const output = testing.runCommand(__dirname, {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "te/device/child-1///m/hello",
       payload: JSON.stringify({
         temperature: 23.0,

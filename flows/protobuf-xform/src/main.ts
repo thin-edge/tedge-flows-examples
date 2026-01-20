@@ -29,7 +29,7 @@ function onSetpoint(
   let setPoint = fromBinary(SensorMessageSchema, binPayload);
   return [
     {
-      timestamp: message.timestamp,
+      time: message.time,
       topic: topic,
       payload: JSON.stringify(setPoint),
     },
@@ -89,7 +89,7 @@ export function onMessage(
 
   return [
     {
-      timestamp: message.timestamp,
+      time: message.time,
       topic: outputTopic,
       payload: binPayload,
     },

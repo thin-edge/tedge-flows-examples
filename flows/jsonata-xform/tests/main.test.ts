@@ -5,7 +5,7 @@ import * as flow from "../src/main";
 test("Maps message to a custom topic", async () => {
   const data = await flow.onMessage(
     {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "/plant1/line1/device1_measure1_Type",
       payload: JSON.stringify({
         value: 100,
@@ -42,7 +42,7 @@ test("Maps message to a custom topic", async () => {
 test("Maps message to a measurement using targetAPI", async () => {
   const data = await flow.onMessage(
     {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "/plant1/line1/device1_measure1_Type",
       payload: JSON.stringify({
         value: 100,
@@ -82,7 +82,7 @@ test("Maps message to a measurement using targetAPI", async () => {
 test("Maps message to an event using targetAPI", async () => {
   const data = await flow.onMessage(
     {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "/plant1/line1/device1_measure1_Type",
       payload: JSON.stringify({
         value: 100,
@@ -122,7 +122,7 @@ test("Maps message to an event using targetAPI", async () => {
 test("Maps message to an alarm using targetAPI", async () => {
   const data = await flow.onMessage(
     {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "/plant1/line1/device1_measure1_Type",
       payload: JSON.stringify({
         value: 100,
@@ -169,7 +169,7 @@ test("Maps message to an alarm using targetAPI", async () => {
 test("Maps message to an twin fragment using targetAPI", async () => {
   const data = await flow.onMessage(
     {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "/plant1/line1/prop1",
       payload: JSON.stringify({
         os: "Debian",

@@ -6,7 +6,7 @@ jest.useFakeTimers();
 
 test("Converts string to a timestamp", () => {
   const output = flow.onMessage({
-    timestamp: tedge.mockGetTime(),
+    time: tedge.mockGetTime(),
     topic: "example",
     payload: "1",
   });
@@ -22,7 +22,7 @@ describe("process", () => {
   });
 
   describe("process", () => {
-    const now = new Date("2025-01-01T12:00:00Z").getTime();
+    const now = new Date("2025-01-01T12:00:00Z");
     let flow: typeof import("../src/main");
 
     beforeEach(() => {
@@ -31,10 +31,10 @@ describe("process", () => {
     });
 
     test('should update status to online when payload is "1"', () => {
-      const timestamp = tedge.mockGetTime(now);
-      const message = { timestamp, topic: "test", payload: "1" };
+      const time = now;
+      const message = { time, topic: "test", payload: "1" };
       flow.onMessage(message);
-      const output = flow.onInterval(timestamp, { window_size_minutes: 600 });
+      const output = flow.onInterval(time, { window_size_minutes: 600 });
       const twinMessage = output.find((msg) =>
         msg.topic.includes("twin/onlineTracker"),
       );
@@ -48,10 +48,10 @@ describe("process", () => {
   });
 
   test('should update status to offline when payload is "0"', () => {
-    const timestamp = tedge.mockGetTime();
-    const message = { timestamp, topic: "test", payload: "0" };
+    const time = new Date();
+    const message = { time, topic: "test", payload: "0" };
     flow.onMessage(message);
-    const output = flow.onInterval(timestamp, { window_size_minutes: 600 });
+    const output = flow.onInterval(time, { window_size_minutes: 600 });
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
@@ -125,13 +125,10 @@ describe("UptimeTracker process payload variants", () => {
   });
 
   test('payload "1" sets status to online', () => {
-    const timestamp = {
-      seconds: Math.floor(now / 1000),
-      nanoseconds: (now % 1000) * 1e6,
-    };
-    const message = { timestamp, topic: "test", payload: "1" };
+    const time = new Date(now);
+    const message = { time, topic: "test", payload: "1" };
     flow.onMessage(message, null);
-    const output = flow.onInterval(timestamp, null);
+    const output = flow.onInterval(time, null);
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
@@ -143,13 +140,10 @@ describe("UptimeTracker process payload variants", () => {
   });
 
   test('payload "0" sets status to offline', () => {
-    const timestamp = {
-      seconds: Math.floor(now / 1000),
-      nanoseconds: (now % 1000) * 1e6,
-    };
-    const message = { timestamp, topic: "test", payload: "0" };
+    const time = new Date(now);
+    const message = { time, topic: "test", payload: "0" };
     flow.onMessage(message, null);
-    const output = flow.onInterval(timestamp, null);
+    const output = flow.onInterval(time, null);
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
@@ -161,17 +155,14 @@ describe("UptimeTracker process payload variants", () => {
   });
 
   test('payload {"status": "up"} sets status to online', () => {
-    const timestamp = {
-      seconds: Math.floor(now / 1000),
-      nanoseconds: (now % 1000) * 1e6,
-    };
+    const time = new Date(now);
     const message = {
-      timestamp,
+      time,
       topic: "test",
       payload: JSON.stringify({ status: "up" }),
     };
     flow.onMessage(message, null);
-    const output = flow.onInterval(timestamp, null);
+    const output = flow.onInterval(time, null);
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
@@ -183,17 +174,14 @@ describe("UptimeTracker process payload variants", () => {
   });
 
   test('payload {"status": "down"} sets status to offline', () => {
-    const timestamp = {
-      seconds: Math.floor(now / 1000),
-      nanoseconds: (now % 1000) * 1e6,
-    };
+    const time = new Date(now);
     const message = {
-      timestamp,
+      time,
       topic: "test",
       payload: JSON.stringify({ status: "down" }),
     };
     flow.onMessage(message, null);
-    const output = flow.onInterval(timestamp, null);
+    const output = flow.onInterval(time, null);
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
@@ -205,17 +193,14 @@ describe("UptimeTracker process payload variants", () => {
   });
 
   test('payload {"status": "unknown"} does not throw and sets status', () => {
-    const timestamp = {
-      seconds: Math.floor(now / 1000),
-      nanoseconds: (now % 1000) * 1e6,
-    };
+    const time = new Date(now);
     const message = {
-      timestamp,
+      time,
       topic: "test",
       payload: JSON.stringify({ status: "unknown" }),
     };
     expect(() => flow.onMessage(message, null)).not.toThrow();
-    const output = flow.onInterval(timestamp, null);
+    const output = flow.onInterval(time, null);
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );

@@ -57,7 +57,7 @@ function createCommand(
   };
 
   messages.push({
-    timestamp: message.timestamp,
+    time: message.time,
     topic: [
       tedgeTopic,
       "cmd",
@@ -70,7 +70,7 @@ function createCommand(
 }
 
 function buildCommandID(cloudPrefix: string, message: Message): string {
-  return [cloudPrefix, message.timestamp.seconds].join("-");
+  return [cloudPrefix, message.time.getTime()].join("-");
 }
 
 export function onMessage(message: Message, config: Config | undefined = {}) {

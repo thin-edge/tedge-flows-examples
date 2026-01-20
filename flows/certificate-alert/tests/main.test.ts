@@ -62,7 +62,7 @@ describe("flow tests", () => {
   test("Publish certificate meta information to json - c8y-ca", () => {
     const output = flow.onMessage(
       {
-        timestamp: tedge.mockGetTime(),
+        time: tedge.mockGetTime(),
         topic: "",
         payload: inputCumulocityCA,
       },
@@ -80,7 +80,7 @@ describe("flow tests", () => {
   test("Publish certificate meta information to json - self signed", () => {
     const output = flow.onMessage(
       {
-        timestamp: tedge.mockGetTime(),
+        time: tedge.mockGetTime(),
         topic: "",
         payload: inputSelfSigned,
       },
@@ -98,7 +98,7 @@ describe("flow tests", () => {
   test("Publish a warning when certificate crosses threshold", () => {
     const output = flow.onMessage(
       {
-        timestamp: tedge.mockGetTime(),
+        time: tedge.mockGetTime(),
         topic: "",
         payload: inputCumulocityCA,
       },
@@ -139,7 +139,7 @@ describe("flow tests", () => {
   test("Publish an alarm when certificate will expire less than given threshold", () => {
     const output = flow.onMessage(
       {
-        timestamp: tedge.mockGetTime(),
+        time: tedge.mockGetTime(),
         topic: "",
         payload: inputCumulocityCA,
       },
@@ -180,7 +180,7 @@ describe("flow tests", () => {
   test("De-duplication of output", () => {
     const output = flow.onMessage(
       {
-        timestamp: tedge.mockGetTime(),
+        time: tedge.mockGetTime(),
         topic: "",
         payload: inputCumulocityCA,
       },
@@ -195,7 +195,7 @@ describe("flow tests", () => {
     // execute a second time with the same input
     const output2 = flow.onMessage(
       {
-        timestamp: tedge.mockGetTime(),
+        time: tedge.mockGetTime(),
         topic: "",
         payload: inputCumulocityCA,
       },
@@ -211,7 +211,7 @@ describe("flow tests", () => {
   test("Only publish alarms", () => {
     const output = flow.onMessage(
       {
-        timestamp: tedge.mockGetTime(),
+        time: tedge.mockGetTime(),
         topic: "",
         payload: inputCumulocityCA,
       },

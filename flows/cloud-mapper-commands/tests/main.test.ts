@@ -5,7 +5,7 @@ import * as flow from "../src/main";
 describe("Cloud to device", () => {
   test("Ignore unknown cloud commands", () => {
     const output = flow.onMessage({
-      timestamp: tedge.mockGetTime(new Date("2025-01-01").getTime()),
+      time: tedge.mockGetTime(new Date("2025-01-01")),
       topic: "azeg/DCMD/device_child-1",
       payload: JSON.stringify({
         type: "unknown-command",
@@ -16,7 +16,7 @@ describe("Cloud to device", () => {
 
   test("Map cloud command to local tedge command", () => {
     const output = flow.onMessage({
-      timestamp: tedge.mockGetTime(new Date("2025-01-01").getTime()),
+      time: tedge.mockGetTime(new Date("2025-01-01")),
       topic: "azeg/DCMD/device_child-1",
       payload: JSON.stringify({
         type: "writeSetpoint",
@@ -48,7 +48,7 @@ describe("Cloud to device", () => {
 describe("Device to cloud mappings", () => {
   const inputMessage = (status: string) => {
     return {
-      timestamp: tedge.mockGetTime(new Date("2025-01-01").getTime()),
+      time: tedge.mockGetTime(new Date("2025-01-01")),
       topic: "te/device/child-1///cmd/writeSetpoint/azeg-123456",
       payload: JSON.stringify({
         type: "writeSetpoint",
@@ -78,7 +78,7 @@ describe("Device to cloud mappings", () => {
 
   test("Clearing a local commands does not create more messages", () => {
     const output = flow.onMessage({
-      timestamp: tedge.mockGetTime(new Date("2025-01-01").getTime()),
+      time: tedge.mockGetTime(new Date("2025-01-01")),
       topic: "te/device/child-1///cmd/writeSetpoint/azeg-123456",
       retain: true,
       payload: "",

@@ -3,7 +3,7 @@
 */
 
 import * as model from "../../common/model";
-import { Message, Timestamp, Run, mockGetTime } from "./../../common/tedge";
+import { Message } from "./../../common/tedge";
 import * as journald from "./journald";
 
 export interface Config {
@@ -75,7 +75,7 @@ export function onMessage(message: Message, config: Config | null): Message[] {
   if (with_logs) {
     return [
       {
-        timestamp: message.timestamp,
+        time: message.time,
         topic: "stream/logs/journald",
         payload: JSON.stringify(output),
       },
@@ -84,7 +84,7 @@ export function onMessage(message: Message, config: Config | null): Message[] {
   return [];
 }
 
-export function onInterval(timestamp: Timestamp, config: Config | null) {
+export function onInterval(time: Date, config: Config | null) {
   const {
     debug = false,
     publish_statistics = false,
@@ -97,13 +97,13 @@ export function onInterval(timestamp: Timestamp, config: Config | null) {
 
   const { info = 0, warning = 0, error = 0, total = 0 } = threshold;
 
-  state.dateTo = timestamp.seconds + timestamp.nanoseconds / 1e9;
+  state.dateTo = time.getTime() / 1000;
   const stats = state.stats;
   const output: Message[] = [];
 
   if (publish_statistics) {
     output.push({
-      timestamp: timestamp,
+      time,
       topic: `te/device/main///${stats_topic}`,
       payload: JSON.stringify(stats),
     });
@@ -132,11 +132,11 @@ export function onInterval(timestamp: Timestamp, config: Config | null) {
 
   if (alarmText) {
     output.push({
-      timestamp: timestamp,
+      time,
       topic: `te/device/main///a/log_surge`,
       payload: JSON.stringify({
         text: alarmText,
-        time: timestamp.seconds,
+        time: time.toISOString(),
         severity: severity,
         statistics: stats,
       }),
@@ -146,7 +146,7 @@ export function onInterval(timestamp: Timestamp, config: Config | null) {
       console.log("clearing log_surge alarm (if present)");
     }
     output.push({
-      timestamp: timestamp,
+      time,
       topic: `te/device/main///a/log_surge`,
       retain: true,
       payload: ``,

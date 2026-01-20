@@ -1,4 +1,4 @@
-import { Message, fromTimestamp, isMainDevice } from "../../common/tedge";
+import { Message, isMainDevice } from "../../common/tedge";
 
 export interface Config {
   cloud_topic_prefix?: string;
@@ -34,7 +34,7 @@ export function onMessage(message: Message, config: Config | null = {}) {
   }
 
   const payload = JSON.parse(`${message.payload}`);
-  const receivedAt = new Date(fromTimestamp(message.timestamp)).toISOString();
+  const receivedAt = message.time?.toISOString();
   const timestamp = payload.time || receivedAt;
 
   const output = [];

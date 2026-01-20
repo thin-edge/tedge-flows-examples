@@ -10,7 +10,7 @@ beforeEach(() => {
 
 test("Config with_logs returns the log entries", () => {
   const message: tedge.Message = {
-    timestamp: tedge.mockGetTime(),
+    time: tedge.mockGetTime(),
     topic: "dummy",
     payload: JSON.stringify(<journald.JOURNALD_RAW_MESSAGE>{
       _SOURCE_REALTIME_TIMESTAMP: "1751468051367349",
@@ -37,7 +37,7 @@ describe.each([
   (text: string, text_filter: string[], expected: number) => {
     test("matches the expected count", () => {
       const message: tedge.Message = {
-        timestamp: tedge.mockGetTime(),
+        time: tedge.mockGetTime(),
         topic: "dummy",
         payload: JSON.stringify(<journald.JOURNALD_RAW_MESSAGE>{
           _SOURCE_REALTIME_TIMESTAMP: "1751468051367349",
@@ -56,7 +56,7 @@ describe.each([
 test("Detect log entries with an unknown log level", () => {
   const output = flow.onMessage(
     {
-      timestamp: { seconds: 1, nanoseconds: 1234 },
+      time: new Date(),
       topic: "",
       payload: JSON.stringify({
         _SOURCE_REALTIME_TIMESTAMP: 123456,
@@ -85,7 +85,7 @@ describe.each([
   test("Strips leading timestamp from mosquitto log messages", () => {
     const output = flow.onMessage(
       {
-        timestamp: { seconds: 1, nanoseconds: 1234 },
+        time: new Date(),
         topic: "",
         payload: JSON.stringify(<journald.JOURNALD_RAW_MESSAGE>{
           SYSLOG_IDENTIFIER: "mosquitto",
@@ -118,7 +118,7 @@ describe.each([
     test(`Uppercase ${level.toUpperCase()}`, () => {
       const output = flow.onMessage(
         {
-          timestamp: tedge.mockGetTime(),
+          time: tedge.mockGetTime(),
           topic: "dummy",
           payload: JSON.stringify(<journald.JOURNALD_RAW_MESSAGE>{
             _SOURCE_REALTIME_TIMESTAMP: "123456",
@@ -138,7 +138,7 @@ describe.each([
     test(`Lowercase ${level.toLowerCase()}`, () => {
       const output = flow.onMessage(
         {
-          timestamp: tedge.mockGetTime(),
+          time: tedge.mockGetTime(),
           topic: "dummy",
           payload: JSON.stringify(<journald.JOURNALD_RAW_MESSAGE>{
             _SOURCE_REALTIME_TIMESTAMP: "123456",
@@ -174,7 +174,7 @@ test("Process mock data", () => {
   const messages: tedge.Message[] = journald
     .mockJournaldLogs(10)
     .map((value) => ({
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "dummy",
       payload: JSON.stringify(value),
     }));

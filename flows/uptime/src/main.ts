@@ -1,14 +1,10 @@
 /*
   Calculate the 
 */
-import { Message, Timestamp, Run } from "../../common/tedge";
+import { Message } from "../../common/tedge";
 import { UptimeTracker, Status } from "./uptime";
 
 const state = new UptimeTracker(10);
-
-function fromTimestamp(t: Timestamp): number {
-  return t.seconds * 1000 + t.nanoseconds / 1e6;
-}
 
 export interface Config {
   window_size_minutes?: number;
@@ -34,7 +30,7 @@ export function onMessage(message: Message, config: Config | null = {}) {
     }
   }
 
-  const timestamp_milliseconds = fromTimestamp(message.timestamp);
+  const timestamp_milliseconds = message.time.getTime();
   if (
     !initTracker(state, window_size_minutes, status, timestamp_milliseconds)
   ) {
@@ -44,21 +40,14 @@ export function onMessage(message: Message, config: Config | null = {}) {
   return [];
 }
 
-export function onInterval(timestamp: Timestamp, config: Config | null) {
+export function onInterval(time: Date, config: Config | null) {
   const {
     window_size_minutes = 1440,
     stats_topic = "twin/onlineTracker",
     default_status = "uninitialized",
   } = config || {};
 
-  if (
-    initTracker(
-      state,
-      window_size_minutes,
-      default_status,
-      fromTimestamp(timestamp),
-    )
-  ) {
+  if (initTracker(state, window_size_minutes, default_status, time.getTime())) {
     return [];
   }
 
@@ -79,7 +68,7 @@ export function onInterval(timestamp: Timestamp, config: Config | null) {
   const currentStatus = state.currentStatus();
   const output: Message[] = [
     {
-      timestamp,
+      time: time,
       topic: `te/device/main///${stats_topic}`,
       payload: JSON.stringify({
         online,

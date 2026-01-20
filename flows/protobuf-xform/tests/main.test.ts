@@ -9,7 +9,7 @@ import { SensorMessageSchema } from "../src/gen/sensor_pb";
 test("Converts payload to a environment sensor protobuf message", () => {
   const output = flow.onMessage(
     {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "something/environment",
       payload: JSON.stringify({
         temperature: 12.3,
@@ -37,7 +37,7 @@ test("Converts payload to a environment sensor protobuf message", () => {
 test("Converts payload to a location sensor protobuf message", () => {
   const output = flow.onMessage(
     {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "something/location",
       payload: JSON.stringify({
         latitude: 12.345,
@@ -63,7 +63,7 @@ test("Converts payload to a location sensor protobuf message", () => {
 test("It skips messages with unknown types", () => {
   const output = flow.onMessage(
     {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "something/new_sensor_data",
       payload: JSON.stringify({
         latitude: 12.345,
@@ -80,7 +80,7 @@ test("It skips messages with unknown types", () => {
 test("Output topic supports template variables", () => {
   const output = flow.onMessage(
     {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "something/environment",
       payload: JSON.stringify({
         temperature: 12.3,
