@@ -36,11 +36,9 @@ describe("process", () => {
     test('should update status to online when payload is "1"', () => {
       const time = now;
       const message = { time, topic: "test", payload: "1" };
-      flow.onMessage(message, tedge.createContext());
-      const output = flow.onInterval(
-        time,
-        tedge.createContext({ window_size_minutes: 600 }),
-      );
+      const context = tedge.createContext({ window_size_minutes: 600 });
+      flow.onMessage(message, context);
+      const output = flow.onInterval(time, context);
       const twinMessage = output.find((msg) =>
         msg.topic.includes("twin/onlineTracker"),
       );
@@ -56,10 +54,9 @@ describe("process", () => {
   test('should update status to offline when payload is "0"', () => {
     const time = new Date();
     const message = { time, topic: "test", payload: "0" };
-    flow.onMessage(message, tedge.createContext());
-    const output = flow.onInterval(time, {
-      config: { window_size_minutes: 600 },
-    });
+    const context = tedge.createContext({ window_size_minutes: 600 });
+    flow.onMessage(message, context);
+    const output = flow.onInterval(time, context);
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
@@ -120,8 +117,9 @@ describe("UptimeTracker process payload variants", () => {
   test('payload "1" sets status to online', () => {
     const time = new Date(now);
     const message = { time, topic: "test", payload: "1" };
-    flow.onMessage(message, tedge.createContext());
-    const output = flow.onInterval(time, tedge.createContext());
+    const context = tedge.createContext({});
+    flow.onMessage(message, context);
+    const output = flow.onInterval(time, context);
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
@@ -135,8 +133,9 @@ describe("UptimeTracker process payload variants", () => {
   test('payload "0" sets status to offline', () => {
     const time = new Date(now);
     const message = { time, topic: "test", payload: "0" };
-    flow.onMessage(message, tedge.createContext());
-    const output = flow.onInterval(time, tedge.createContext());
+    const context = tedge.createContext({});
+    flow.onMessage(message, context);
+    const output = flow.onInterval(time, context);
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
@@ -154,8 +153,9 @@ describe("UptimeTracker process payload variants", () => {
       topic: "test",
       payload: JSON.stringify({ status: "up" }),
     };
-    flow.onMessage(message, tedge.createContext());
-    const output = flow.onInterval(time, tedge.createContext());
+    const context = tedge.createContext({});
+    flow.onMessage(message, context);
+    const output = flow.onInterval(time, context);
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
@@ -173,8 +173,9 @@ describe("UptimeTracker process payload variants", () => {
       topic: "test",
       payload: JSON.stringify({ status: "down" }),
     };
-    flow.onMessage(message, tedge.createContext());
-    const output = flow.onInterval(time, tedge.createContext());
+    const context = tedge.createContext({});
+    flow.onMessage(message, context);
+    const output = flow.onInterval(time, context);
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
@@ -192,8 +193,9 @@ describe("UptimeTracker process payload variants", () => {
       topic: "test",
       payload: JSON.stringify({ status: "unknown" }),
     };
-    expect(() => flow.onMessage(message, tedge.createContext())).not.toThrow();
-    const output = flow.onInterval(time, tedge.createContext());
+    const context = tedge.createContext({});
+    expect(() => flow.onMessage(message, context)).not.toThrow();
+    const output = flow.onInterval(time, context);
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );

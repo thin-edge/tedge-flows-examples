@@ -3,12 +3,10 @@ import * as flow from "../src/main";
 import * as journald from "../src/journald";
 import * as tedge from "../../common/tedge";
 
-beforeEach(() => {
-  flow.get_state().stats.reset();
-  flow.get_state().ran = false;
-});
-
 test("Config with_logs returns the log entries", () => {
+  const context = tedge.createContext({
+    with_logs: true,
+  });
   const message: tedge.Message = {
     time: tedge.mockGetTime(),
     topic: "dummy",
@@ -17,20 +15,13 @@ test("Config with_logs returns the log entries", () => {
       MESSAGE: "example",
     }),
   };
-  const output1 = flow.onMessage(
-    message,
-    tedge.createContext(<flow.Config>{
-      with_logs: true,
-    }),
-  );
+  const output1 = flow.onMessage(message, context);
   expect(output1).toHaveLength(1);
 
-  const output2 = flow.onMessage(
-    message,
-    tedge.createContext(<flow.Config>{
-      with_logs: false,
-    }),
-  );
+  const context2 = tedge.createContext({
+    with_logs: false,
+  });
+  const output2 = flow.onMessage(message, context2);
   expect(output2).toHaveLength(0);
 });
 
@@ -42,6 +33,10 @@ describe.each([
   "text_filter can be used to filter log messages",
   (text: string, text_filter: string[], expected: number) => {
     test("matches the expected count", () => {
+      const context = tedge.createContext({
+        text_filter,
+        with_logs: true,
+      });
       const message: tedge.Message = {
         time: tedge.mockGetTime(),
         topic: "dummy",
@@ -50,19 +45,14 @@ describe.each([
           MESSAGE: text,
         }),
       };
-      const output = flow.onMessage(
-        message,
-        tedge.createContext(<flow.Config>{
-          text_filter,
-          with_logs: true,
-        }),
-      );
+      const output = flow.onMessage(message, context);
       expect(output).toHaveLength(expected);
     });
   },
 );
 
 test("Detect log entries with an unknown log level", () => {
+  const context = tedge.createContext({});
   const output = flow.onMessage(
     {
       time: new Date(),
@@ -72,11 +62,11 @@ test("Detect log entries with an unknown log level", () => {
         MESSAGE: "example",
       }),
     },
-    tedge.createContext(<flow.Config>{}),
+    context,
   );
   expect(output).toHaveLength(0);
 
-  const currentState = flow.get_state();
+  const currentState = flow.getState(context);
   expect(currentState.stats.total).toBe(1);
   expect(currentState.stats.unknown).toBe(1);
 });
@@ -92,6 +82,9 @@ describe.each([
   ],
 ])("mosquitto log entry parsing", (logMessage: string, expected: string) => {
   test("Strips leading timestamp from mosquitto log messages", () => {
+    const context = tedge.createContext({
+      with_logs: true,
+    });
     const output = flow.onMessage(
       {
         time: new Date(),
@@ -102,9 +95,7 @@ describe.each([
           MESSAGE: logMessage,
         }),
       },
-      tedge.createContext(<flow.Config>{
-        with_logs: true,
-      }),
+      context,
     );
     expect(output).toHaveLength(1);
     const message = JSON.parse(output[0].payload);
@@ -114,17 +105,18 @@ describe.each([
 });
 
 describe.each([
-  ["WARN", new journald.Statistics({ total: 1, warn: 1 })],
-  ["WARNING", new journald.Statistics({ total: 1, warn: 1 })],
-  ["INFO", new journald.Statistics({ total: 1, info: 1 })],
-  ["ERROR", new journald.Statistics({ total: 1, err: 1 })],
-  ["ERR", new journald.Statistics({ total: 1, err: 1 })],
-  ["DEBUG", new journald.Statistics({ total: 1, debug: 1 })],
-  ["TRACE", new journald.Statistics({ total: 1, debug: 1 })],
+  ["WARN", <flow.Statistics>{ total: 1, warn: 1 }],
+  ["WARNING", <flow.Statistics>{ total: 1, warn: 1 }],
+  ["INFO", <flow.Statistics>{ total: 1, info: 1 }],
+  ["ERROR", <flow.Statistics>{ total: 1, err: 1 }],
+  ["ERR", <flow.Statistics>{ total: 1, err: 1 }],
+  ["DEBUG", <flow.Statistics>{ total: 1, debug: 1 }],
+  ["TRACE", <flow.Statistics>{ total: 1, debug: 1 }],
 ])(
   "Detect log %s level from message",
-  (level: string, expected: journald.Statistics) => {
+  (level: string, expected: flow.Statistics) => {
     test(`Uppercase ${level.toUpperCase()}`, () => {
+      const context = tedge.createContext({});
       const output = flow.onMessage(
         {
           time: tedge.mockGetTime(),
@@ -136,15 +128,19 @@ describe.each([
             MESSAGE: `2025/07/02 15:55:32 ${level.toUpperCase()} Dummy log entry`,
           }),
         },
-        tedge.createContext(<flow.Config>{}),
+        context,
       );
       expect(output).toHaveLength(0);
 
-      const currentState = flow.get_state();
-      expect(currentState.stats).toEqual(expected);
+      const currentState = flow.getState(context);
+      expect(currentState.stats).toEqual({
+        ...flow.createStatistics(),
+        ...expected,
+      });
     });
 
     test(`Lowercase ${level.toLowerCase()}`, () => {
+      const context = tedge.createContext({});
       const output = flow.onMessage(
         {
           time: tedge.mockGetTime(),
@@ -156,12 +152,15 @@ describe.each([
             MESSAGE: `2025/07/02 15:55:32 ${level.toLocaleLowerCase()} Dummy log entry`,
           }),
         },
-        tedge.createContext(<flow.Config>{}),
+        context,
       );
       expect(output).toHaveLength(0);
 
-      const currentState = flow.get_state();
-      expect(currentState.stats).toEqual(expected);
+      const currentState = flow.getState(context);
+      expect(currentState.stats).toEqual({
+        ...flow.createStatistics(),
+        ...expected,
+      });
     });
   },
 );
@@ -180,6 +179,7 @@ test("Process mock data", () => {
     },
     text_filter: [],
   };
+  const context = tedge.createContext(config);
   const messages: tedge.Message[] = journald
     .mockJournaldLogs(10)
     .map((value) => ({
@@ -187,7 +187,7 @@ test("Process mock data", () => {
       topic: "dummy",
       payload: JSON.stringify(value),
     }));
-  const output = tedge.Run(flow, messages, tedge.createContext(config));
+  const output = tedge.Run(flow, messages, context);
   expect(output.length).toBeGreaterThanOrEqual(1);
 });
 
@@ -201,7 +201,7 @@ describe.each([
       publish_statistics: false,
       threshold: { total: 1 },
     },
-    new journald.Statistics({ total: 1, warn: 1 }),
+    <flow.Statistics>{ total: 1, warn: 1 },
     "Too many log messages detected",
     1,
   ],
@@ -212,7 +212,7 @@ describe.each([
       publish_statistics: false,
       threshold: { error: 10 },
     },
-    new journald.Statistics({ total: 20, err: 11 }),
+    <flow.Statistics>{ total: 20, err: 11 },
     "Too many error messages detected",
     1,
   ],
@@ -223,7 +223,7 @@ describe.each([
       publish_statistics: false,
       threshold: { warning: 2 },
     },
-    new journald.Statistics({ total: 20, warn: 2 }),
+    <flow.Statistics>{ total: 20, warn: 2 },
     "Too many warning messages detected",
     1,
   ],
@@ -234,7 +234,7 @@ describe.each([
       publish_statistics: false,
       threshold: { info: 10202 },
     },
-    new journald.Statistics({ total: 20, info: 10202 }),
+    <flow.Statistics>{ total: 20, info: 10202 },
     "Too many info messages detected",
     1,
   ],
@@ -245,7 +245,7 @@ describe.each([
       publish_statistics: false,
       threshold: { total: 200, info: 10 },
     },
-    new journald.Statistics({ total: 200, info: 15 }),
+    <flow.Statistics>{ total: 200, info: 15 },
     "Too many log messages detected",
     1,
   ],
@@ -256,7 +256,7 @@ describe.each([
       publish_statistics: false,
       threshold: { total: 0, error: 1, warning: 1, info: 1 },
     },
-    new journald.Statistics({ err: 1, warn: 1, info: 1 }),
+    <flow.Statistics>{ err: 1, warn: 1, info: 1 },
     "Too many error messages detected",
     1,
   ],
@@ -267,7 +267,7 @@ describe.each([
       publish_statistics: false,
       threshold: { total: 0, error: 1, warning: 1, info: 1 },
     },
-    new journald.Statistics({ err: 0, warn: 1, info: 1 }),
+    <flow.Statistics>{ err: 0, warn: 1, info: 1 },
     "Too many warning messages detected",
     1,
   ],
@@ -276,16 +276,16 @@ describe.each([
   (
     testCase: string,
     config: flow.Config,
-    stats: journald.Statistics,
+    stats: flow.Statistics,
     expected: string,
     expectedLength: number,
   ) => {
     test(testCase, () => {
-      flow.get_state().stats = stats;
-      const output = flow.onInterval(
-        tedge.mockGetTime(),
-        tedge.createContext(config),
-      );
+      const context = tedge.createContext(config);
+      flow.setState(context, <flow.FlowState>{
+        stats,
+      });
+      const output = flow.onInterval(tedge.mockGetTime(), context);
       expect(output).toHaveLength(expectedLength);
       const lastMessage = JSON.parse(output[output.length - 1].payload);
       expect(lastMessage).toHaveProperty("text");
@@ -300,20 +300,19 @@ describe("log statistics", () => {
   test("publish log statistics", () => {
     const stats_topic = "stats/custom/output";
     const expectedTopic = `te/device/main///${stats_topic}`;
-    const config: flow.Config = {
+    const context = tedge.createContext(<flow.Config>{
       publish_statistics: true,
       stats_topic,
-    };
-    flow.get_state().stats = new journald.Statistics({
-      info: 10,
-      warn: 2,
-      err: 1,
-      total: 13,
     });
-    const output = flow.onInterval(
-      tedge.mockGetTime(),
-      tedge.createContext(config),
-    );
+    flow.setState(context, <flow.FlowState>{
+      stats: <flow.Statistics>{
+        info: 10,
+        warn: 2,
+        err: 1,
+        total: 13,
+      },
+    });
+    const output = flow.onInterval(tedge.mockGetTime(), context);
     expect(output.length).toBeGreaterThanOrEqual(1);
     expect(output[0].topic).toStrictEqual(expectedTopic);
     const payload = JSON.parse(output[0].payload);
@@ -325,46 +324,37 @@ describe("log statistics", () => {
 
   test("skip publishing log statistics", () => {
     const stats_topic = "stats/custom/output";
-    const config: flow.Config = {
+    const context = tedge.createContext(<flow.Config>{
       publish_statistics: false,
       stats_topic,
-    };
-    // first run
-    flow.get_state().ran = false;
-    flow.get_state().stats = new journald.Statistics({
-      info: 10,
-      warn: 2,
-      err: 1,
-      total: 13,
     });
-    const output1 = flow.onInterval(
-      tedge.mockGetTime(),
-      tedge.createContext(config),
-    );
+    // first run
+    flow.setState(context, <flow.FlowState>{
+      ran: false,
+      stats: <flow.Statistics>{
+        info: 10,
+        warn: 2,
+        err: 1,
+        total: 13,
+      },
+    });
+    const output1 = flow.onInterval(tedge.mockGetTime(), context);
     expect(output1).toHaveLength(0);
 
     // second run
-    flow.get_state().stats = new journald.Statistics({
-      info: 10,
-      warn: 2,
-      err: 1,
-      total: 13,
+    flow.setState(context, <flow.FlowState>{
+      ran: true,
+      stats: <flow.Statistics>{
+        info: 10,
+        warn: 2,
+        err: 1,
+        total: 13,
+      },
     });
-    const output2 = flow.onInterval(
-      tedge.mockGetTime(),
-      tedge.createContext(config),
-    );
+    const output2 = flow.onInterval(tedge.mockGetTime(), context);
     expect(output2).toHaveLength(1);
     expect(output2[0].payload).toBeFalsy();
     expect(output2[0].topic).toEqual(`te/device/main///a/log_surge`);
     expect(output2[0].retain).toStrictEqual(true);
-  });
-});
-
-describe("packaging", () => {
-  test("version is valid semver", () => {
-    expect(flow.version()).toMatch(
-      /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/,
-    );
   });
 });

@@ -1,6 +1,6 @@
 export type Status = "online" | "offline" | "uninitialized";
 
-interface StatusChange {
+export interface StatusChange {
   timestamp: number;
   status: Status;
 }
@@ -9,8 +9,9 @@ export class UptimeTracker {
   private history: StatusChange[] = [];
   private windowSizeMs: number;
 
-  constructor(windowSizeMinutes: number) {
+  constructor(windowSizeMinutes: number = 10, history: StatusChange[] = []) {
     this.windowSizeMs = windowSizeMinutes * 60 * 1000;
+    this.history = history;
   }
 
   updateStatus(status: Status, timestamp: number) {
@@ -18,6 +19,7 @@ export class UptimeTracker {
     if (!last || last.status !== status) {
       this.history.push({ status, timestamp });
     }
+    return this.history;
   }
 
   /**

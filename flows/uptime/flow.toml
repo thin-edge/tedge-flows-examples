@@ -9,4 +9,3 @@ script = "dist/main.mjs"
 interval = "10s"
 config.window_size_minutes = 1440
 config.stats_topic = "twin/onlineTracker"
-config.default_status = "uninitialized"
