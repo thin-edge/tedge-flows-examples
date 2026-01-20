@@ -19,16 +19,9 @@ function getHistory(context: FlowContext): StatusChange[] {
 
 export function onMessage(message: Message, context: FlowContext) {
   const { window_size_minutes = 1440 } = context.config || {};
-  console.log("onMessage", {
-    context,
-  });
 
   const history = getHistory(context);
   const state = new UptimeTracker(window_size_minutes, history);
-
-  console.log("onMessage", {
-    context,
-  });
 
   let status: Status = "online";
   if (message.payload === "0") {
@@ -48,10 +41,6 @@ export function onMessage(message: Message, context: FlowContext) {
     "history",
     state.updateStatus(status, message.time.getTime()),
   );
-
-  console.log("history", {
-    history: getHistory(context),
-  });
 
   return [];
 }
