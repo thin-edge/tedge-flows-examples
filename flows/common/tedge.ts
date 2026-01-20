@@ -4,6 +4,10 @@ export interface Flow {
   onConfigUpdate?: (message: Message, config: any) => void;
 }
 
+export interface Context {
+  config: any;
+}
+
 export interface Message {
   time: Date;
   topic: string;
@@ -12,15 +16,25 @@ export interface Message {
   retain?: boolean;
 }
 
+export function createContext(config: any = {}): Context {
+  return {
+    config,
+  };
+}
+
 export function mockGetTime(time: Date = new Date()): Date {
   return time;
 }
 
-export function Run(module: Flow, messages: Message[], config: any): Message[] {
+export function Run(
+  module: Flow,
+  messages: Message[],
+  context: Context = { config: {} },
+): Message[] {
   const outputMessages: Message[] = [];
   messages.forEach((message) => {
     message.time = new Date();
-    const output = module.onMessage(message, config);
+    const output = module.onMessage(message, context);
     outputMessages.push(...output);
     if (output.length > 0) {
       console.log(JSON.stringify(output));
@@ -28,7 +42,7 @@ export function Run(module: Flow, messages: Message[], config: any): Message[] {
   });
 
   if (module.onInterval) {
-    const output = module.onInterval(new Date(), config);
+    const output = module.onInterval(new Date(), context);
     outputMessages.push(...output);
     console.log(JSON.stringify(output));
   }

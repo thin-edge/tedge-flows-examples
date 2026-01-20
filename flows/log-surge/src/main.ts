@@ -3,7 +3,7 @@
 */
 
 import * as model from "../../common/model";
-import { Message } from "./../../common/tedge";
+import { Message, Context } from "./../../common/tedge";
 import * as journald from "./journald";
 
 export interface Config {
@@ -19,6 +19,10 @@ export interface Config {
     error?: number;
     total?: number;
   };
+}
+
+export interface FlowContext extends Context {
+  config: Config;
 }
 
 interface FlowState {
@@ -44,8 +48,12 @@ export function get_state(): FlowState {
   return state;
 }
 
-export function onMessage(message: Message, config: Config | null): Message[] {
-  const { with_logs = false, debug = false, text_filter = [] } = config || {};
+export function onMessage(message: Message, context: FlowContext): Message[] {
+  const {
+    with_logs = false,
+    debug = false,
+    text_filter = [],
+  } = context.config || {};
   let payload = JSON.parse(message.payload);
   const output = journald.transform(payload);
 
@@ -84,13 +92,13 @@ export function onMessage(message: Message, config: Config | null): Message[] {
   return [];
 }
 
-export function onInterval(time: Date, config: Config | null) {
+export function onInterval(time: Date, context: FlowContext) {
   const {
     debug = false,
     publish_statistics = false,
     stats_topic = "stats/logs",
     threshold = {},
-  } = config || {};
+  } = context.config || {};
   TEST: if (debug) {
     console.log("Calling tick");
   }

@@ -12,22 +12,24 @@ test("Maps message to a custom topic", async () => {
       }),
     },
     {
-      targetTopic:
-        "'te/device/' & _TOPIC_LEVEL_[1] & '///m/' & $replace(_TOPIC_LEVEL_[-1], /^[^_]+_/, '')",
-      substitutions: [
-        {
-          pathSource: "value",
-          pathTarget: "output",
-        },
-        {
-          pathSource: "'measure1_Type'",
-          pathTarget: "type",
-        },
-        {
-          pathSource: "$now()",
-          pathTarget: "time",
-        },
-      ],
+      config: {
+        targetTopic:
+          "'te/device/' & _TOPIC_LEVEL_[1] & '///m/' & $replace(_TOPIC_LEVEL_[-1], /^[^_]+_/, '')",
+        substitutions: [
+          {
+            pathSource: "value",
+            pathTarget: "output",
+          },
+          {
+            pathSource: "'measure1_Type'",
+            pathTarget: "type",
+          },
+          {
+            pathSource: "$now()",
+            pathTarget: "time",
+          },
+        ],
+      },
     },
   );
 
@@ -49,25 +51,27 @@ test("Maps message to a measurement using targetAPI", async () => {
       }),
     },
     {
-      targetAPI: "MEASUREMENT",
-      substitutions: [
-        {
-          pathSource: "_TOPIC_LEVEL_[1]",
-          pathTarget: "_IDENTITY_.externalId",
-        },
-        {
-          pathSource: "value",
-          pathTarget: "output",
-        },
-        {
-          pathSource: "$replace(_TOPIC_LEVEL_[-1], /^[^_]+_/, '')",
-          pathTarget: "type",
-        },
-        {
-          pathSource: "$now()",
-          pathTarget: "time",
-        },
-      ],
+      config: {
+        targetAPI: "MEASUREMENT",
+        substitutions: [
+          {
+            pathSource: "_TOPIC_LEVEL_[1]",
+            pathTarget: "_IDENTITY_.externalId",
+          },
+          {
+            pathSource: "value",
+            pathTarget: "output",
+          },
+          {
+            pathSource: "$replace(_TOPIC_LEVEL_[-1], /^[^_]+_/, '')",
+            pathTarget: "type",
+          },
+          {
+            pathSource: "$now()",
+            pathTarget: "time",
+          },
+        ],
+      },
     },
   );
 
@@ -89,25 +93,27 @@ test("Maps message to an event using targetAPI", async () => {
       }),
     },
     {
-      targetAPI: "EVENT",
-      substitutions: [
-        {
-          pathSource: "_TOPIC_LEVEL_[1]",
-          pathTarget: "_IDENTITY_.externalId",
-        },
-        {
-          pathSource: "value",
-          pathTarget: "output",
-        },
-        {
-          pathSource: "$replace(_TOPIC_LEVEL_[-1], /^[^_]+_/, '')",
-          pathTarget: "type",
-        },
-        {
-          pathSource: "$now()",
-          pathTarget: "time",
-        },
-      ],
+      config: {
+        targetAPI: "EVENT",
+        substitutions: [
+          {
+            pathSource: "_TOPIC_LEVEL_[1]",
+            pathTarget: "_IDENTITY_.externalId",
+          },
+          {
+            pathSource: "value",
+            pathTarget: "output",
+          },
+          {
+            pathSource: "$replace(_TOPIC_LEVEL_[-1], /^[^_]+_/, '')",
+            pathTarget: "type",
+          },
+          {
+            pathSource: "$now()",
+            pathTarget: "time",
+          },
+        ],
+      },
     },
   );
 
@@ -130,30 +136,32 @@ test("Maps message to an alarm using targetAPI", async () => {
       }),
     },
     {
-      targetAPI: "ALARM",
-      substitutions: [
-        {
-          // remove path
-          pathSource: "value",
-          pathTarget: "",
-        },
-        {
-          pathSource: "_TOPIC_LEVEL_[1]",
-          pathTarget: "_IDENTITY_.externalId",
-        },
-        {
-          pathSource: "'major'",
-          pathTarget: "severity",
-        },
-        {
-          pathSource: "$replace(_TOPIC_LEVEL_[-1], /^[^_]+_/, '')",
-          pathTarget: "type",
-        },
-        {
-          pathSource: "$now()",
-          pathTarget: "time",
-        },
-      ],
+      config: {
+        targetAPI: "ALARM",
+        substitutions: [
+          {
+            // remove path
+            pathSource: "value",
+            pathTarget: "",
+          },
+          {
+            pathSource: "_TOPIC_LEVEL_[1]",
+            pathTarget: "_IDENTITY_.externalId",
+          },
+          {
+            pathSource: "'major'",
+            pathTarget: "severity",
+          },
+          {
+            pathSource: "$replace(_TOPIC_LEVEL_[-1], /^[^_]+_/, '')",
+            pathTarget: "type",
+          },
+          {
+            pathSource: "$now()",
+            pathTarget: "time",
+          },
+        ],
+      },
     },
   );
 
@@ -177,21 +185,23 @@ test("Maps message to an twin fragment using targetAPI", async () => {
       }),
     },
     {
-      targetAPI: "INVENTORY",
-      substitutions: [
-        {
-          pathSource: "_TOPIC_LEVEL_[1]",
-          pathTarget: "_IDENTITY_.externalId",
-        },
-        {
-          pathSource: "_TOPIC_LEVEL_[-1]",
-          pathTarget: "type",
-        },
-        {
-          pathSource: "$now()",
-          pathTarget: "updatedAt",
-        },
-      ],
+      config: {
+        targetAPI: "INVENTORY",
+        substitutions: [
+          {
+            pathSource: "_TOPIC_LEVEL_[1]",
+            pathTarget: "_IDENTITY_.externalId",
+          },
+          {
+            pathSource: "_TOPIC_LEVEL_[-1]",
+            pathTarget: "type",
+          },
+          {
+            pathSource: "$now()",
+            pathTarget: "updatedAt",
+          },
+        ],
+      },
     },
   );
 

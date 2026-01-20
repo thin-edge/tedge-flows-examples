@@ -17,9 +17,9 @@ test("Converts payload to a environment sensor protobuf message", () => {
         sensorId: "foo",
       }),
     },
-    {
+    tedge.createContext({
       topic: "custom/output",
-    },
+    }),
   );
 
   expect(output[0].topic).toBe("custom/output");
@@ -44,9 +44,9 @@ test("Converts payload to a location sensor protobuf message", () => {
         longitude: -9.8765,
       }),
     },
-    {
+    tedge.createContext({
       topic: "custom/output",
-    },
+    }),
   );
 
   expect(output[0].topic).toBe("custom/output");
@@ -70,9 +70,9 @@ test("It skips messages with unknown types", () => {
         longitude: -9.8765,
       }),
     },
-    {
+    tedge.createContext({
       topic: "custom/output",
-    },
+    }),
   );
   expect(output).toHaveLength(0);
 });
@@ -88,9 +88,9 @@ test("Output topic supports template variables", () => {
         sensorId: "foo",
       }),
     },
-    {
+    tedge.createContext({
       topic: "custom/{{type}}/proto",
-    },
+    }),
   );
 
   expect(output[0].topic).toBe("custom/environment/proto");

@@ -5,11 +5,14 @@ import * as flow from "../src/main";
 jest.useFakeTimers();
 
 test("Converts string to a timestamp", () => {
-  const output = flow.onMessage({
-    time: tedge.mockGetTime(),
-    topic: "example",
-    payload: "1",
-  });
+  const output = flow.onMessage(
+    {
+      time: tedge.mockGetTime(),
+      topic: "example",
+      payload: "1",
+    },
+    tedge.createContext(),
+  );
   expect(output).toHaveLength(0);
 });
 
@@ -33,8 +36,11 @@ describe("process", () => {
     test('should update status to online when payload is "1"', () => {
       const time = now;
       const message = { time, topic: "test", payload: "1" };
-      flow.onMessage(message);
-      const output = flow.onInterval(time, { window_size_minutes: 600 });
+      flow.onMessage(message, tedge.createContext());
+      const output = flow.onInterval(
+        time,
+        tedge.createContext({ window_size_minutes: 600 }),
+      );
       const twinMessage = output.find((msg) =>
         msg.topic.includes("twin/onlineTracker"),
       );
@@ -50,8 +56,10 @@ describe("process", () => {
   test('should update status to offline when payload is "0"', () => {
     const time = new Date();
     const message = { time, topic: "test", payload: "0" };
-    flow.onMessage(message);
-    const output = flow.onInterval(time, { window_size_minutes: 600 });
+    flow.onMessage(message, tedge.createContext());
+    const output = flow.onInterval(time, {
+      config: { window_size_minutes: 600 },
+    });
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
@@ -61,21 +69,6 @@ describe("process", () => {
       expect(payload.offline).toBeCloseTo(100, 1);
       expect(payload).toHaveProperty("currentStatus", "offline");
     }
-  });
-});
-
-describe("tick", () => {
-  beforeEach(() => {
-    // Reset the internal state of the UptimeTracker in main.ts
-    // This is a bit hacky, ideally UptimeTracker would be injected or resettable
-    // For testing purposes, we can re-initialize it if it's a global instance
-    jest.resetModules();
-  });
-
-  test("Tick should not crash if the config is set to null", () => {
-    const timestamp = tedge.mockGetTime();
-    const output = flow.onInterval(timestamp, null);
-    expect(output).toHaveLength(1);
   });
 });
 
@@ -127,8 +120,8 @@ describe("UptimeTracker process payload variants", () => {
   test('payload "1" sets status to online', () => {
     const time = new Date(now);
     const message = { time, topic: "test", payload: "1" };
-    flow.onMessage(message, null);
-    const output = flow.onInterval(time, null);
+    flow.onMessage(message, tedge.createContext());
+    const output = flow.onInterval(time, tedge.createContext());
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
@@ -142,8 +135,8 @@ describe("UptimeTracker process payload variants", () => {
   test('payload "0" sets status to offline', () => {
     const time = new Date(now);
     const message = { time, topic: "test", payload: "0" };
-    flow.onMessage(message, null);
-    const output = flow.onInterval(time, null);
+    flow.onMessage(message, tedge.createContext());
+    const output = flow.onInterval(time, tedge.createContext());
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
@@ -161,8 +154,8 @@ describe("UptimeTracker process payload variants", () => {
       topic: "test",
       payload: JSON.stringify({ status: "up" }),
     };
-    flow.onMessage(message, null);
-    const output = flow.onInterval(time, null);
+    flow.onMessage(message, tedge.createContext());
+    const output = flow.onInterval(time, tedge.createContext());
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
@@ -180,8 +173,8 @@ describe("UptimeTracker process payload variants", () => {
       topic: "test",
       payload: JSON.stringify({ status: "down" }),
     };
-    flow.onMessage(message, null);
-    const output = flow.onInterval(time, null);
+    flow.onMessage(message, tedge.createContext());
+    const output = flow.onInterval(time, tedge.createContext());
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );
@@ -199,8 +192,8 @@ describe("UptimeTracker process payload variants", () => {
       topic: "test",
       payload: JSON.stringify({ status: "unknown" }),
     };
-    expect(() => flow.onMessage(message, null)).not.toThrow();
-    const output = flow.onInterval(time, null);
+    expect(() => flow.onMessage(message, tedge.createContext())).not.toThrow();
+    const output = flow.onInterval(time, tedge.createContext());
     const twinMessage = output.find((msg) =>
       msg.topic.includes("twin/onlineTracker"),
     );

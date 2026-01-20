@@ -1,7 +1,7 @@
 /*
   Calculate the 
 */
-import { Message } from "../../common/tedge";
+import { Message, Context } from "../../common/tedge";
 import { UptimeTracker, Status } from "./uptime";
 
 const state = new UptimeTracker(10);
@@ -12,8 +12,12 @@ export interface Config {
   default_status?: Status;
 }
 
-export function onMessage(message: Message, config: Config | null = {}) {
-  const { window_size_minutes = 1440 } = config || {};
+export interface FlowContext extends Context {
+  config: Config;
+}
+
+export function onMessage(message: Message, context: FlowContext) {
+  const { window_size_minutes = 1440 } = context.config || {};
 
   let status: Status = "online";
   if (message.payload === "0") {
@@ -40,12 +44,12 @@ export function onMessage(message: Message, config: Config | null = {}) {
   return [];
 }
 
-export function onInterval(time: Date, config: Config | null) {
+export function onInterval(time: Date, context: FlowContext) {
   const {
     window_size_minutes = 1440,
     stats_topic = "twin/onlineTracker",
     default_status = "uninitialized",
-  } = config || {};
+  } = context.config || {};
 
   if (initTracker(state, window_size_minutes, default_status, time.getTime())) {
     return [];

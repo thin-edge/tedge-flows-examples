@@ -17,14 +17,20 @@ test("Config with_logs returns the log entries", () => {
       MESSAGE: "example",
     }),
   };
-  const output1 = flow.onMessage(message, <flow.Config>{
-    with_logs: true,
-  });
+  const output1 = flow.onMessage(
+    message,
+    tedge.createContext(<flow.Config>{
+      with_logs: true,
+    }),
+  );
   expect(output1).toHaveLength(1);
 
-  const output2 = flow.onMessage(message, <flow.Config>{
-    with_logs: false,
-  });
+  const output2 = flow.onMessage(
+    message,
+    tedge.createContext(<flow.Config>{
+      with_logs: false,
+    }),
+  );
   expect(output2).toHaveLength(0);
 });
 
@@ -44,10 +50,13 @@ describe.each([
           MESSAGE: text,
         }),
       };
-      const output = flow.onMessage(message, <flow.Config>{
-        text_filter,
-        with_logs: true,
-      });
+      const output = flow.onMessage(
+        message,
+        tedge.createContext(<flow.Config>{
+          text_filter,
+          with_logs: true,
+        }),
+      );
       expect(output).toHaveLength(expected);
     });
   },
@@ -63,7 +72,7 @@ test("Detect log entries with an unknown log level", () => {
         MESSAGE: "example",
       }),
     },
-    <flow.Config>{},
+    tedge.createContext(<flow.Config>{}),
   );
   expect(output).toHaveLength(0);
 
@@ -93,9 +102,9 @@ describe.each([
           MESSAGE: logMessage,
         }),
       },
-      <flow.Config>{
+      tedge.createContext(<flow.Config>{
         with_logs: true,
-      },
+      }),
     );
     expect(output).toHaveLength(1);
     const message = JSON.parse(output[0].payload);
@@ -127,7 +136,7 @@ describe.each([
             MESSAGE: `2025/07/02 15:55:32 ${level.toUpperCase()} Dummy log entry`,
           }),
         },
-        <flow.Config>{},
+        tedge.createContext(<flow.Config>{}),
       );
       expect(output).toHaveLength(0);
 
@@ -147,7 +156,7 @@ describe.each([
             MESSAGE: `2025/07/02 15:55:32 ${level.toLocaleLowerCase()} Dummy log entry`,
           }),
         },
-        {},
+        tedge.createContext(<flow.Config>{}),
       );
       expect(output).toHaveLength(0);
 
@@ -178,7 +187,7 @@ test("Process mock data", () => {
       topic: "dummy",
       payload: JSON.stringify(value),
     }));
-  const output = tedge.Run(flow, messages, config);
+  const output = tedge.Run(flow, messages, tedge.createContext(config));
   expect(output.length).toBeGreaterThanOrEqual(1);
 });
 
@@ -273,7 +282,10 @@ describe.each([
   ) => {
     test(testCase, () => {
       flow.get_state().stats = stats;
-      const output = flow.onInterval(tedge.mockGetTime(), config);
+      const output = flow.onInterval(
+        tedge.mockGetTime(),
+        tedge.createContext(config),
+      );
       expect(output).toHaveLength(expectedLength);
       const lastMessage = JSON.parse(output[output.length - 1].payload);
       expect(lastMessage).toHaveProperty("text");
@@ -298,7 +310,10 @@ describe("log statistics", () => {
       err: 1,
       total: 13,
     });
-    const output = flow.onInterval(tedge.mockGetTime(), config);
+    const output = flow.onInterval(
+      tedge.mockGetTime(),
+      tedge.createContext(config),
+    );
     expect(output.length).toBeGreaterThanOrEqual(1);
     expect(output[0].topic).toStrictEqual(expectedTopic);
     const payload = JSON.parse(output[0].payload);
@@ -322,7 +337,10 @@ describe("log statistics", () => {
       err: 1,
       total: 13,
     });
-    const output1 = flow.onInterval(tedge.mockGetTime(), config);
+    const output1 = flow.onInterval(
+      tedge.mockGetTime(),
+      tedge.createContext(config),
+    );
     expect(output1).toHaveLength(0);
 
     // second run
@@ -332,7 +350,10 @@ describe("log statistics", () => {
       err: 1,
       total: 13,
     });
-    const output2 = flow.onInterval(tedge.mockGetTime(), config);
+    const output2 = flow.onInterval(
+      tedge.mockGetTime(),
+      tedge.createContext(config),
+    );
     expect(output2).toHaveLength(1);
     expect(output2[0].payload).toBeFalsy();
     expect(output2[0].topic).toEqual(`te/device/main///a/log_surge`);
