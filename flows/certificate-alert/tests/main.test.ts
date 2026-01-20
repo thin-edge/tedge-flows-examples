@@ -62,12 +62,14 @@ describe("flow tests", () => {
   test("Publish certificate meta information to json - c8y-ca", () => {
     const output = flow.onMessage(
       {
-        timestamp: tedge.mockGetTime(),
+        time: tedge.mockGetTime(),
         topic: "",
         payload: inputCumulocityCA,
       },
       {
-        disable_alarms: true,
+        config: {
+          disable_alarms: true,
+        },
       },
     );
     expect(output).toHaveLength(1);
@@ -80,12 +82,14 @@ describe("flow tests", () => {
   test("Publish certificate meta information to json - self signed", () => {
     const output = flow.onMessage(
       {
-        timestamp: tedge.mockGetTime(),
+        time: tedge.mockGetTime(),
         topic: "",
         payload: inputSelfSigned,
       },
       {
-        disable_alarms: true,
+        config: {
+          disable_alarms: true,
+        },
       },
     );
     expect(output).toHaveLength(1);
@@ -98,14 +102,16 @@ describe("flow tests", () => {
   test("Publish a warning when certificate crosses threshold", () => {
     const output = flow.onMessage(
       {
-        timestamp: tedge.mockGetTime(),
+        time: tedge.mockGetTime(),
         topic: "",
         payload: inputCumulocityCA,
       },
       {
-        disable_alarms: false,
-        warning: "300d",
-        alarm: "60d",
+        config: {
+          disable_alarms: false,
+          warning: "300d",
+          alarm: "60d",
+        },
       },
     );
     expect(output).toHaveLength(3);
@@ -139,14 +145,16 @@ describe("flow tests", () => {
   test("Publish an alarm when certificate will expire less than given threshold", () => {
     const output = flow.onMessage(
       {
-        timestamp: tedge.mockGetTime(),
+        time: tedge.mockGetTime(),
         topic: "",
         payload: inputCumulocityCA,
       },
       {
-        disable_alarms: false,
-        warning: "365d",
-        alarm: "300d",
+        config: {
+          disable_alarms: false,
+          warning: "365d",
+          alarm: "300d",
+        },
       },
     );
     expect(output).toHaveLength(3);
@@ -180,14 +188,16 @@ describe("flow tests", () => {
   test("De-duplication of output", () => {
     const output = flow.onMessage(
       {
-        timestamp: tedge.mockGetTime(),
+        time: tedge.mockGetTime(),
         topic: "",
         payload: inputCumulocityCA,
       },
       {
-        disable_alarms: false,
-        warning: "365d",
-        alarm: "300d",
+        config: {
+          disable_alarms: false,
+          warning: "365d",
+          alarm: "300d",
+        },
       },
     );
     expect(output).toHaveLength(3);
@@ -195,14 +205,16 @@ describe("flow tests", () => {
     // execute a second time with the same input
     const output2 = flow.onMessage(
       {
-        timestamp: tedge.mockGetTime(),
+        time: tedge.mockGetTime(),
         topic: "",
         payload: inputCumulocityCA,
       },
       {
-        disable_alarms: false,
-        warning: "365d",
-        alarm: "300d",
+        config: {
+          disable_alarms: false,
+          warning: "365d",
+          alarm: "300d",
+        },
       },
     );
     expect(output2).toHaveLength(0);
@@ -211,15 +223,17 @@ describe("flow tests", () => {
   test("Only publish alarms", () => {
     const output = flow.onMessage(
       {
-        timestamp: tedge.mockGetTime(),
+        time: tedge.mockGetTime(),
         topic: "",
         payload: inputCumulocityCA,
       },
       {
-        disable_alarms: false,
-        disable_twin: true,
-        warning: "365d",
-        alarm: "300d",
+        config: {
+          disable_alarms: false,
+          disable_twin: true,
+          warning: "365d",
+          alarm: "300d",
+        },
       },
     );
     expect(output).toHaveLength(2);

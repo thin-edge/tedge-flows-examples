@@ -1,14 +1,10 @@
 /*
   Calculate the 
 */
-import { Message, Timestamp, Run } from "../../common/tedge";
+import { Message, Context } from "../../common/tedge";
 import { UptimeTracker, Status } from "./uptime";
 
 const state = new UptimeTracker(10);
-
-function fromTimestamp(t: Timestamp): number {
-  return t.seconds * 1000 + t.nanoseconds / 1e6;
-}
 
 export interface Config {
   window_size_minutes?: number;
@@ -16,8 +12,12 @@ export interface Config {
   default_status?: Status;
 }
 
-export function onMessage(message: Message, config: Config | null = {}) {
-  const { window_size_minutes = 1440 } = config || {};
+export interface FlowContext extends Context {
+  config: Config;
+}
+
+export function onMessage(message: Message, context: FlowContext) {
+  const { window_size_minutes = 1440 } = context.config || {};
 
   let status: Status = "online";
   if (message.payload === "0") {
@@ -34,7 +34,7 @@ export function onMessage(message: Message, config: Config | null = {}) {
     }
   }
 
-  const timestamp_milliseconds = fromTimestamp(message.timestamp);
+  const timestamp_milliseconds = message.time.getTime();
   if (
     !initTracker(state, window_size_minutes, status, timestamp_milliseconds)
   ) {
@@ -44,21 +44,14 @@ export function onMessage(message: Message, config: Config | null = {}) {
   return [];
 }
 
-export function onInterval(timestamp: Timestamp, config: Config | null) {
+export function onInterval(time: Date, context: FlowContext) {
   const {
     window_size_minutes = 1440,
     stats_topic = "twin/onlineTracker",
     default_status = "uninitialized",
-  } = config || {};
+  } = context.config || {};
 
-  if (
-    initTracker(
-      state,
-      window_size_minutes,
-      default_status,
-      fromTimestamp(timestamp),
-    )
-  ) {
+  if (initTracker(state, window_size_minutes, default_status, time.getTime())) {
     return [];
   }
 
@@ -79,7 +72,7 @@ export function onInterval(timestamp: Timestamp, config: Config | null) {
   const currentStatus = state.currentStatus();
   const output: Message[] = [
     {
-      timestamp,
+      time: time,
       topic: `te/device/main///${stats_topic}`,
       payload: JSON.stringify({
         online,

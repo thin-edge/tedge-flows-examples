@@ -3,7 +3,7 @@
 */
 
 import * as model from "../../common/model";
-import { Message, Timestamp, Run, mockGetTime } from "./../../common/tedge";
+import { Message, Context } from "./../../common/tedge";
 import * as journald from "./journald";
 
 export interface Config {
@@ -19,6 +19,10 @@ export interface Config {
     error?: number;
     total?: number;
   };
+}
+
+export interface FlowContext extends Context {
+  config: Config;
 }
 
 interface FlowState {
@@ -44,8 +48,12 @@ export function get_state(): FlowState {
   return state;
 }
 
-export function onMessage(message: Message, config: Config | null): Message[] {
-  const { with_logs = false, debug = false, text_filter = [] } = config || {};
+export function onMessage(message: Message, context: FlowContext): Message[] {
+  const {
+    with_logs = false,
+    debug = false,
+    text_filter = [],
+  } = context.config || {};
   let payload = JSON.parse(message.payload);
   const output = journald.transform(payload);
 
@@ -75,7 +83,7 @@ export function onMessage(message: Message, config: Config | null): Message[] {
   if (with_logs) {
     return [
       {
-        timestamp: message.timestamp,
+        time: message.time,
         topic: "stream/logs/journald",
         payload: JSON.stringify(output),
       },
@@ -84,26 +92,26 @@ export function onMessage(message: Message, config: Config | null): Message[] {
   return [];
 }
 
-export function onInterval(timestamp: Timestamp, config: Config | null) {
+export function onInterval(time: Date, context: FlowContext) {
   const {
     debug = false,
     publish_statistics = false,
     stats_topic = "stats/logs",
     threshold = {},
-  } = config || {};
+  } = context.config || {};
   TEST: if (debug) {
     console.log("Calling tick");
   }
 
   const { info = 0, warning = 0, error = 0, total = 0 } = threshold;
 
-  state.dateTo = timestamp.seconds + timestamp.nanoseconds / 1e9;
+  state.dateTo = time.getTime() / 1000;
   const stats = state.stats;
   const output: Message[] = [];
 
   if (publish_statistics) {
     output.push({
-      timestamp: timestamp,
+      time,
       topic: `te/device/main///${stats_topic}`,
       payload: JSON.stringify(stats),
     });
@@ -132,11 +140,11 @@ export function onInterval(timestamp: Timestamp, config: Config | null) {
 
   if (alarmText) {
     output.push({
-      timestamp: timestamp,
+      time,
       topic: `te/device/main///a/log_surge`,
       payload: JSON.stringify({
         text: alarmText,
-        time: timestamp.seconds,
+        time: time.toISOString(),
         severity: severity,
         statistics: stats,
       }),
@@ -146,7 +154,7 @@ export function onInterval(timestamp: Timestamp, config: Config | null) {
       console.log("clearing log_surge alarm (if present)");
     }
     output.push({
-      timestamp: timestamp,
+      time,
       topic: `te/device/main///a/log_surge`,
       retain: true,
       payload: ``,

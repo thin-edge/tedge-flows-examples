@@ -1,9 +1,13 @@
-import { Message } from "../../common/tedge";
+import { Message, Context } from "../../common/tedge";
 import * as utils from "./utils";
 
 export interface Config {
   cloud_prefix?: string;
   commands?: string[];
+}
+
+export interface FlowContext extends Context {
+  config: Config;
 }
 
 function isTedgeCommandStatus(cloudPrefix: string, topic: string): boolean {
@@ -34,7 +38,7 @@ function handleCommandUpdate(message: Message): any[] {
 function createCommand(
   message: Message,
   cloudPayload: any,
-  config?: Config,
+  context: FlowContext,
 ): Message[] {
   const messages: Message[] = [];
   const tedgeTopic = utils.getTedgeTopicID(message.topic);
@@ -45,7 +49,7 @@ function createCommand(
     });
     return messages;
   }
-  const { cloud_prefix = "azeg" } = config || {};
+  const { cloud_prefix = "azeg" } = context.config || {};
 
   // map cloud payloads to local payload if required
   const payload = {
@@ -57,7 +61,7 @@ function createCommand(
   };
 
   messages.push({
-    timestamp: message.timestamp,
+    time: message.time,
     topic: [
       tedgeTopic,
       "cmd",
@@ -70,11 +74,12 @@ function createCommand(
 }
 
 function buildCommandID(cloudPrefix: string, message: Message): string {
-  return [cloudPrefix, message.timestamp.seconds].join("-");
+  return [cloudPrefix, message.time.getTime()].join("-");
 }
 
-export function onMessage(message: Message, config: Config | undefined = {}) {
-  const { cloud_prefix = "azeg", commands = ["writeSetpoint"] } = config;
+export function onMessage(message: Message, context: FlowContext) {
+  const { cloud_prefix = "azeg", commands = ["writeSetpoint"] } =
+    context.config;
   if (isTedgeCommandStatus(cloud_prefix, message.topic)) {
     return handleCommandUpdate(message);
   }
@@ -83,7 +88,7 @@ export function onMessage(message: Message, config: Config | undefined = {}) {
   const output = [];
   const payload = JSON.parse(message.payload);
   if (commands.includes(payload.type)) {
-    output.push(...createCommand(message, payload, config));
+    output.push(...createCommand(message, payload, context));
   }
   return output;
 }

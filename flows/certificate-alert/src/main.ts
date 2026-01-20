@@ -1,4 +1,4 @@
-import { Message, Timestamp, Run, mockGetTime } from "./../../common/tedge";
+import { Message, Context } from "./../../common/tedge";
 
 interface Config {
   disable_twin?: boolean;
@@ -7,6 +7,10 @@ interface Config {
   warning?: string;
   twin_property?: string;
   debug?: boolean;
+}
+
+export interface FlowContext extends Context {
+  config: Config;
 }
 
 function camelize(value: string) {
@@ -181,7 +185,7 @@ const publishTwinMessage = deduplicateCalls(function (
   ];
 });
 
-export function onMessage(message: Message, config: Config = {}): Message[] {
+export function onMessage(message: Message, context: FlowContext): Message[] {
   console.debug("Input", {
     topic: message.topic,
     payload: message.payload,
@@ -212,13 +216,13 @@ export function onMessage(message: Message, config: Config = {}): Message[] {
   };
 
   const outputMessages = [];
-  if (!config?.disable_twin) {
-    outputMessages.push(...publishTwinMessage(output, config));
+  if (!context.config?.disable_twin) {
+    outputMessages.push(...publishTwinMessage(output, context.config));
   }
 
-  if (!config?.disable_alarms) {
+  if (!context.config?.disable_alarms) {
     outputMessages.push(
-      ...checkThresholds(expiresAt.getTime(), output, config),
+      ...checkThresholds(expiresAt.getTime(), output, context.config),
     );
   }
   return outputMessages;

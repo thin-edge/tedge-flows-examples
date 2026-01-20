@@ -1,46 +1,40 @@
-export interface Timestamp {
-  seconds: number;
-  nanoseconds: number;
-}
-
 export interface Flow {
   onMessage(message: Message, config: any): Message[];
-  onInterval?: (timestamp: Timestamp, config: any) => Message[];
+  onInterval?: (time: Date, config: any) => Message[];
   onConfigUpdate?: (message: Message, config: any) => void;
 }
 
+export interface Context {
+  config: any;
+}
+
 export interface Message {
-  timestamp?: Timestamp;
+  time: Date;
   topic: string;
   payload: string;
   raw_payload?: Uint8Array<ArrayBufferLike>;
   retain?: boolean;
 }
 
-export function mockGetTime(time: number = Date.now()): Timestamp {
-  const seconds = time / 1000;
-  const whole_seconds = Math.trunc(seconds);
-  const nanoseconds = (seconds - whole_seconds) * 10e9;
+export function createContext(config: any = {}): Context {
   return {
-    seconds: whole_seconds,
-    nanoseconds,
+    config,
   };
 }
 
-// Convert the tedge timestamp to milliseconds since epoch
-export function fromTimestamp(t?: Timestamp): number {
-  if (!t) {
-    return Date.now();
-  }
-  return t.seconds * 1000 + t.nanoseconds / 1e6;
+export function mockGetTime(time: Date = new Date()): Date {
+  return time;
 }
 
-export function Run(module: Flow, messages: Message[], config: any): Message[] {
+export function Run(
+  module: Flow,
+  messages: Message[],
+  context: Context = { config: {} },
+): Message[] {
   const outputMessages: Message[] = [];
   messages.forEach((message) => {
-    const timestamp = mockGetTime();
-    message.timestamp = timestamp;
-    const output = module.onMessage(message, config);
+    message.time = new Date();
+    const output = module.onMessage(message, context);
     outputMessages.push(...output);
     if (output.length > 0) {
       console.log(JSON.stringify(output));
@@ -48,7 +42,7 @@ export function Run(module: Flow, messages: Message[], config: any): Message[] {
   });
 
   if (module.onInterval) {
-    const output = module.onInterval(mockGetTime(), config);
+    const output = module.onInterval(new Date(), context);
     outputMessages.push(...output);
     console.log(JSON.stringify(output));
   }

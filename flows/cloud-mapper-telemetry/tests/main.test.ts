@@ -5,13 +5,16 @@ import * as flow from "../src/main";
 
 describe("measurement conversions", () => {
   test("Single value", () => {
-    const output = flow.onMessage({
-      timestamp: tedge.mockGetTime(new Date("2025-01-01").getTime()),
-      topic: "te/device/child1///m/example",
-      payload: JSON.stringify({
-        temperature: 23.0,
-      }),
-    });
+    const output = flow.onMessage(
+      {
+        time: tedge.mockGetTime(new Date("2025-01-01")),
+        topic: "te/device/child1///m/example",
+        payload: JSON.stringify({
+          temperature: 23.0,
+        }),
+      },
+      tedge.createContext(),
+    );
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("azeg/DDATA/device_child1");
     const payload = JSON.parse(output[0].payload);
@@ -29,16 +32,19 @@ describe("measurement conversions", () => {
   });
 
   test("Multiple values with mixed levels", () => {
-    const output = flow.onMessage({
-      timestamp: tedge.mockGetTime(new Date("2025-01-01").getTime()),
-      topic: "te/device/child-other-2///m/example",
-      payload: JSON.stringify({
-        temperature: 23.0,
-        sensor: {
-          humidity: 90,
-        },
-      }),
-    });
+    const output = flow.onMessage(
+      {
+        time: tedge.mockGetTime(new Date("2025-01-01")),
+        topic: "te/device/child-other-2///m/example",
+        payload: JSON.stringify({
+          temperature: 23.0,
+          sensor: {
+            humidity: 90,
+          },
+        }),
+      },
+      tedge.createContext(),
+    );
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("azeg/DDATA/device_child-other-2");
     const payload = JSON.parse(output[0].payload);
@@ -68,7 +74,7 @@ describe("tedge-flows tests", () => {
       return;
     }
     const output = testing.runCommand(__dirname, {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "te/device/child-1///m/hello",
       payload: JSON.stringify({
         temperature: 23.0,

@@ -10,21 +10,27 @@ beforeEach(() => {
 
 test("Config with_logs returns the log entries", () => {
   const message: tedge.Message = {
-    timestamp: tedge.mockGetTime(),
+    time: tedge.mockGetTime(),
     topic: "dummy",
     payload: JSON.stringify(<journald.JOURNALD_RAW_MESSAGE>{
       _SOURCE_REALTIME_TIMESTAMP: "1751468051367349",
       MESSAGE: "example",
     }),
   };
-  const output1 = flow.onMessage(message, <flow.Config>{
-    with_logs: true,
-  });
+  const output1 = flow.onMessage(
+    message,
+    tedge.createContext(<flow.Config>{
+      with_logs: true,
+    }),
+  );
   expect(output1).toHaveLength(1);
 
-  const output2 = flow.onMessage(message, <flow.Config>{
-    with_logs: false,
-  });
+  const output2 = flow.onMessage(
+    message,
+    tedge.createContext(<flow.Config>{
+      with_logs: false,
+    }),
+  );
   expect(output2).toHaveLength(0);
 });
 
@@ -37,17 +43,20 @@ describe.each([
   (text: string, text_filter: string[], expected: number) => {
     test("matches the expected count", () => {
       const message: tedge.Message = {
-        timestamp: tedge.mockGetTime(),
+        time: tedge.mockGetTime(),
         topic: "dummy",
         payload: JSON.stringify(<journald.JOURNALD_RAW_MESSAGE>{
           _SOURCE_REALTIME_TIMESTAMP: "1751468051367349",
           MESSAGE: text,
         }),
       };
-      const output = flow.onMessage(message, <flow.Config>{
-        text_filter,
-        with_logs: true,
-      });
+      const output = flow.onMessage(
+        message,
+        tedge.createContext(<flow.Config>{
+          text_filter,
+          with_logs: true,
+        }),
+      );
       expect(output).toHaveLength(expected);
     });
   },
@@ -56,14 +65,14 @@ describe.each([
 test("Detect log entries with an unknown log level", () => {
   const output = flow.onMessage(
     {
-      timestamp: { seconds: 1, nanoseconds: 1234 },
+      time: new Date(),
       topic: "",
       payload: JSON.stringify({
         _SOURCE_REALTIME_TIMESTAMP: 123456,
         MESSAGE: "example",
       }),
     },
-    <flow.Config>{},
+    tedge.createContext(<flow.Config>{}),
   );
   expect(output).toHaveLength(0);
 
@@ -85,7 +94,7 @@ describe.each([
   test("Strips leading timestamp from mosquitto log messages", () => {
     const output = flow.onMessage(
       {
-        timestamp: { seconds: 1, nanoseconds: 1234 },
+        time: new Date(),
         topic: "",
         payload: JSON.stringify(<journald.JOURNALD_RAW_MESSAGE>{
           SYSLOG_IDENTIFIER: "mosquitto",
@@ -93,9 +102,9 @@ describe.each([
           MESSAGE: logMessage,
         }),
       },
-      <flow.Config>{
+      tedge.createContext(<flow.Config>{
         with_logs: true,
-      },
+      }),
     );
     expect(output).toHaveLength(1);
     const message = JSON.parse(output[0].payload);
@@ -118,7 +127,7 @@ describe.each([
     test(`Uppercase ${level.toUpperCase()}`, () => {
       const output = flow.onMessage(
         {
-          timestamp: tedge.mockGetTime(),
+          time: tedge.mockGetTime(),
           topic: "dummy",
           payload: JSON.stringify(<journald.JOURNALD_RAW_MESSAGE>{
             _SOURCE_REALTIME_TIMESTAMP: "123456",
@@ -127,7 +136,7 @@ describe.each([
             MESSAGE: `2025/07/02 15:55:32 ${level.toUpperCase()} Dummy log entry`,
           }),
         },
-        <flow.Config>{},
+        tedge.createContext(<flow.Config>{}),
       );
       expect(output).toHaveLength(0);
 
@@ -138,7 +147,7 @@ describe.each([
     test(`Lowercase ${level.toLowerCase()}`, () => {
       const output = flow.onMessage(
         {
-          timestamp: tedge.mockGetTime(),
+          time: tedge.mockGetTime(),
           topic: "dummy",
           payload: JSON.stringify(<journald.JOURNALD_RAW_MESSAGE>{
             _SOURCE_REALTIME_TIMESTAMP: "123456",
@@ -147,7 +156,7 @@ describe.each([
             MESSAGE: `2025/07/02 15:55:32 ${level.toLocaleLowerCase()} Dummy log entry`,
           }),
         },
-        {},
+        tedge.createContext(<flow.Config>{}),
       );
       expect(output).toHaveLength(0);
 
@@ -174,11 +183,11 @@ test("Process mock data", () => {
   const messages: tedge.Message[] = journald
     .mockJournaldLogs(10)
     .map((value) => ({
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "dummy",
       payload: JSON.stringify(value),
     }));
-  const output = tedge.Run(flow, messages, config);
+  const output = tedge.Run(flow, messages, tedge.createContext(config));
   expect(output.length).toBeGreaterThanOrEqual(1);
 });
 
@@ -273,7 +282,10 @@ describe.each([
   ) => {
     test(testCase, () => {
       flow.get_state().stats = stats;
-      const output = flow.onInterval(tedge.mockGetTime(), config);
+      const output = flow.onInterval(
+        tedge.mockGetTime(),
+        tedge.createContext(config),
+      );
       expect(output).toHaveLength(expectedLength);
       const lastMessage = JSON.parse(output[output.length - 1].payload);
       expect(lastMessage).toHaveProperty("text");
@@ -298,7 +310,10 @@ describe("log statistics", () => {
       err: 1,
       total: 13,
     });
-    const output = flow.onInterval(tedge.mockGetTime(), config);
+    const output = flow.onInterval(
+      tedge.mockGetTime(),
+      tedge.createContext(config),
+    );
     expect(output.length).toBeGreaterThanOrEqual(1);
     expect(output[0].topic).toStrictEqual(expectedTopic);
     const payload = JSON.parse(output[0].payload);
@@ -322,7 +337,10 @@ describe("log statistics", () => {
       err: 1,
       total: 13,
     });
-    const output1 = flow.onInterval(tedge.mockGetTime(), config);
+    const output1 = flow.onInterval(
+      tedge.mockGetTime(),
+      tedge.createContext(config),
+    );
     expect(output1).toHaveLength(0);
 
     // second run
@@ -332,7 +350,10 @@ describe("log statistics", () => {
       err: 1,
       total: 13,
     });
-    const output2 = flow.onInterval(tedge.mockGetTime(), config);
+    const output2 = flow.onInterval(
+      tedge.mockGetTime(),
+      tedge.createContext(config),
+    );
     expect(output2).toHaveLength(1);
     expect(output2[0].payload).toBeFalsy();
     expect(output2[0].topic).toEqual(`te/device/main///a/log_surge`);

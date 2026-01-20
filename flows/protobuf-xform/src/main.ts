@@ -2,7 +2,7 @@
   Serialize json messages into protobuf
 */
 // import * as proto from 'protobufjs';
-import { Message } from "../../common/tedge";
+import { Message, Context } from "../../common/tedge";
 import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
 import { base64Decode, base64Encode } from "@bufbuild/protobuf/wire";
 import {
@@ -13,6 +13,12 @@ import {
 
 export interface Config {
   topic: string;
+  cmdtopic: string;
+  base64: boolean;
+}
+
+export interface FlowContext extends Context {
+  config: Config;
 }
 
 function onSetpoint(
@@ -29,22 +35,21 @@ function onSetpoint(
   let setPoint = fromBinary(SensorMessageSchema, binPayload);
   return [
     {
-      timestamp: message.timestamp,
+      time: message.time,
       topic: topic,
       payload: JSON.stringify(setPoint),
     },
   ];
 }
 
-export function onMessage(
-  message: Message,
-  {
+export function onMessage(message: Message, context: FlowContext): Message[] {
+  const payloadType = message.topic.split("/").slice(-1)[0];
+
+  const {
     topic = "out/proto/sensor",
     cmdtopic = "out/proto/actuator",
     base64 = false,
-  },
-): Message[] {
-  const payloadType = message.topic.split("/").slice(-1)[0];
+  } = context.config;
 
   let data;
   if (payloadType == "environment") {
@@ -89,7 +94,7 @@ export function onMessage(
 
   return [
     {
-      timestamp: message.timestamp,
+      time: message.time,
       topic: outputTopic,
       payload: binPayload,
     },

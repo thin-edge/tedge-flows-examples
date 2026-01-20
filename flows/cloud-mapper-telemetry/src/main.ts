@@ -1,8 +1,12 @@
-import { Message, fromTimestamp, isMainDevice } from "../../common/tedge";
+import { Message, Context, isMainDevice } from "../../common/tedge";
 
 export interface Config {
   cloud_topic_prefix?: string;
   pretty_print?: boolean;
+}
+
+export interface FlowContext extends Context {
+  config: Config;
 }
 
 function getCloudID(topic: string): string | undefined {
@@ -23,9 +27,9 @@ function convertToMetrics(payload: object, timestamp = "", prefix = ""): any {
   return metrics;
 }
 
-export function onMessage(message: Message, config: Config | null = {}) {
+export function onMessage(message: Message, context: FlowContext) {
   const { cloud_topic_prefix = "azeg/DDATA", pretty_print = false } =
-    config || {};
+    context.config || {};
   if (isMainDevice(message.topic)) {
     console.debug("Skipping messages for the main device", {
       topic: message.topic,
@@ -34,7 +38,7 @@ export function onMessage(message: Message, config: Config | null = {}) {
   }
 
   const payload = JSON.parse(`${message.payload}`);
-  const receivedAt = new Date(fromTimestamp(message.timestamp)).toISOString();
+  const receivedAt = message.time?.toISOString();
   const timestamp = payload.time || receivedAt;
 
   const output = [];

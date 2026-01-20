@@ -4,28 +4,34 @@ import * as flow from "../src/main";
 
 describe("Cloud to device", () => {
   test("Ignore unknown cloud commands", () => {
-    const output = flow.onMessage({
-      timestamp: tedge.mockGetTime(new Date("2025-01-01").getTime()),
-      topic: "azeg/DCMD/device_child-1",
-      payload: JSON.stringify({
-        type: "unknown-command",
-      }),
-    });
+    const output = flow.onMessage(
+      {
+        time: tedge.mockGetTime(new Date("2025-01-01")),
+        topic: "azeg/DCMD/device_child-1",
+        payload: JSON.stringify({
+          type: "unknown-command",
+        }),
+      },
+      tedge.createContext(),
+    );
     expect(output).toHaveLength(0);
   });
 
   test("Map cloud command to local tedge command", () => {
-    const output = flow.onMessage({
-      timestamp: tedge.mockGetTime(new Date("2025-01-01").getTime()),
-      topic: "azeg/DCMD/device_child-1",
-      payload: JSON.stringify({
-        type: "writeSetpoint",
-        parameters: {
-          name: "flow.limit",
-          value: 30.1,
-        },
-      }),
-    });
+    const output = flow.onMessage(
+      {
+        time: tedge.mockGetTime(new Date("2025-01-01")),
+        topic: "azeg/DCMD/device_child-1",
+        payload: JSON.stringify({
+          type: "writeSetpoint",
+          parameters: {
+            name: "flow.limit",
+            value: 30.1,
+          },
+        }),
+      },
+      tedge.createContext(),
+    );
     expect(output).toHaveLength(1);
     expect(output[0].topic).toMatch(
       RegExp(`^te/device/child-1///cmd/writeSetpoint/azeg-[0-9]+`),
@@ -48,7 +54,7 @@ describe("Cloud to device", () => {
 describe("Device to cloud mappings", () => {
   const inputMessage = (status: string) => {
     return {
-      timestamp: tedge.mockGetTime(new Date("2025-01-01").getTime()),
+      time: tedge.mockGetTime(new Date("2025-01-01")),
       topic: "te/device/child-1///cmd/writeSetpoint/azeg-123456",
       payload: JSON.stringify({
         type: "writeSetpoint",
@@ -65,7 +71,7 @@ describe("Device to cloud mappings", () => {
     "Clear local command once it has completed",
     (input: any, expectedCount: number, expectedPayload: any) => {
       test("command is cleared", () => {
-        const output = flow.onMessage(input);
+        const output = flow.onMessage(input, tedge.createContext());
         expect(output).toHaveLength(expectedCount);
         if (expectedCount > 0) {
           expect(output[0].retained).toBe(true);
@@ -77,12 +83,15 @@ describe("Device to cloud mappings", () => {
   );
 
   test("Clearing a local commands does not create more messages", () => {
-    const output = flow.onMessage({
-      timestamp: tedge.mockGetTime(new Date("2025-01-01").getTime()),
-      topic: "te/device/child-1///cmd/writeSetpoint/azeg-123456",
-      retain: true,
-      payload: "",
-    });
+    const output = flow.onMessage(
+      {
+        time: tedge.mockGetTime(new Date("2025-01-01")),
+        topic: "te/device/child-1///cmd/writeSetpoint/azeg-123456",
+        retain: true,
+        payload: "",
+      },
+      tedge.createContext(),
+    );
     expect(output).toHaveLength(0);
   });
 });
