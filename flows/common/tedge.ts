@@ -1,11 +1,41 @@
 export interface Flow {
-  onMessage(message: Message, config: any): Message[];
-  onInterval?: (time: Date, config: any) => Message[];
-  onConfigUpdate?: (message: Message, config: any) => void;
+  onMessage(message: Message, context: Context): Message[];
+  onInterval?: (time: Date, context: Context) => Message[];
 }
 
-export interface Context {
+interface StateInterface {
+  get(key: string): any;
+  set(key: string, value: any): void;
+}
+
+export interface ContextInterface {
   config: any;
+
+  // context
+  script: StateInterface;
+  mapper: StateInterface;
+  flow: StateInterface;
+}
+
+class ContextObject {
+  _state: any = {};
+  public get(key: string): any {
+    return this._state[key];
+  }
+  public set(key: string, value: any): void {
+    return (this._state[key] = value);
+  }
+}
+
+export class Context implements ContextInterface {
+  config: any;
+  mapper: StateInterface = new ContextObject();
+  script: StateInterface = new ContextObject();
+  flow: StateInterface = new ContextObject();
+
+  constructor(config: any = {}) {
+    this.config = config;
+  }
 }
 
 export interface Message {
@@ -17,9 +47,7 @@ export interface Message {
 }
 
 export function createContext(config: any = {}): Context {
-  return {
-    config,
-  };
+  return new Context(config);
 }
 
 export function mockGetTime(time: Date = new Date()): Date {
@@ -29,7 +57,7 @@ export function mockGetTime(time: Date = new Date()): Date {
 export function Run(
   module: Flow,
   messages: Message[],
-  context: Context = { config: {} },
+  context: Context = <Context>{ config: {} },
 ): Message[] {
   const outputMessages: Message[] = [];
   messages.forEach((message) => {
