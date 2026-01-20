@@ -2,22 +2,33 @@
   Calculate the 
 */
 import { Message, Context } from "../../common/tedge";
-import { UptimeTracker, Status } from "./uptime";
-
-const state = new UptimeTracker(10);
+import { UptimeTracker, Status, StatusChange } from "./uptime";
 
 export interface Config {
   window_size_minutes?: number;
   stats_topic?: string;
-  default_status?: Status;
 }
 
 export interface FlowContext extends Context {
   config: Config;
 }
 
+function getHistory(context: FlowContext): StatusChange[] {
+  return context.flow.get("history") || [];
+}
+
 export function onMessage(message: Message, context: FlowContext) {
   const { window_size_minutes = 1440 } = context.config || {};
+  console.log("onMessage", {
+    context,
+  });
+
+  const history = getHistory(context);
+  const state = new UptimeTracker(window_size_minutes, history);
+
+  console.log("onMessage", {
+    context,
+  });
 
   let status: Status = "online";
   if (message.payload === "0") {
@@ -33,34 +44,30 @@ export function onMessage(message: Message, context: FlowContext) {
       status = "offline";
     }
   }
+  context.flow.set(
+    "history",
+    state.updateStatus(status, message.time.getTime()),
+  );
 
-  const timestamp_milliseconds = message.time.getTime();
-  if (
-    !initTracker(state, window_size_minutes, status, timestamp_milliseconds)
-  ) {
-    state.updateStatus(status, timestamp_milliseconds);
-  }
+  console.log("history", {
+    history: getHistory(context),
+  });
 
   return [];
 }
 
 export function onInterval(time: Date, context: FlowContext) {
-  const {
-    window_size_minutes = 1440,
-    stats_topic = "twin/onlineTracker",
-    default_status = "uninitialized",
-  } = context.config || {};
+  const { window_size_minutes = 1440, stats_topic = "twin/onlineTracker" } =
+    context.config || {};
 
-  if (initTracker(state, window_size_minutes, default_status, time.getTime())) {
+  const history = getHistory(context);
+
+  if (history.length === 0) {
+    console.log("onInterval: history hasn't been initialized");
     return [];
   }
 
-  if (state.isUninitialized()) {
-    console.log(
-      "UptimeTracker is not initialized, waiting for initial status of the subscribed topic",
-    );
-    return [];
-  }
+  const state = new UptimeTracker(window_size_minutes, history);
 
   const {
     percentage: onlineRaw,
@@ -84,23 +91,4 @@ export function onInterval(time: Date, context: FlowContext) {
     },
   ];
   return output;
-}
-
-let trackerInitialized = false;
-
-/**
- * Initialize the tracker only once. Accepts the state (UptimeTracker instance) and any reset arguments.
- */
-export function initTracker(
-  tracker: UptimeTracker,
-  windowSizeMinutes: number,
-  initialStatus: Status,
-  initialTimestamp?: number,
-): boolean {
-  if (!trackerInitialized) {
-    tracker.reset(windowSizeMinutes, initialStatus, initialTimestamp);
-    trackerInitialized = true;
-    return true;
-  }
-  return false;
 }
