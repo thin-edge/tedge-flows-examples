@@ -25,27 +25,64 @@ export interface FlowContext extends Context {
   config: Config;
 }
 
-interface FlowState {
-  stats: journald.Statistics;
+export function createStatistics(): Statistics {
+  return <Statistics>{
+    emerg: 0,
+    alert: 0,
+    crit: 0,
+    err: 0,
+    warn: 0,
+    notice: 0,
+    info: 0,
+    debug: 0,
+    total: 0,
+    unknown: 0,
+  };
+}
+
+export interface Statistics {
+  [key: string]: number;
+  emerg: number;
+  alert: number;
+  crit: number;
+  err: number;
+  warn: number;
+  notice: number;
+  info: number;
+  debug: number;
+  total: number;
+  unknown: number;
+}
+
+export interface FlowState {
+  stats: Statistics;
   dateFrom: Number;
   dateTo: Number;
   ran: boolean;
 }
 
-// State
-const state: FlowState = {
-  stats: new journald.Statistics(),
-  dateFrom: Date.now() / 1000,
-  dateTo: Date.now() / 1000,
-  ran: false,
-};
-
-export function version() {
-  return "0.0.1";
+export function getState(context: FlowContext): FlowState {
+  return (
+    context.flow.get("state") ||
+    <FlowState>{
+      stats: createStatistics(),
+      dateFrom: Date.now() / 1000,
+      dateTo: Date.now() / 1000,
+      ran: false,
+    }
+  );
 }
 
-export function get_state(): FlowState {
-  return state;
+export function setState(context: FlowContext, value: FlowState): void {
+  context.flow.set("state", value);
+}
+
+export function updateState(
+  context: FlowContext,
+  fn: (v: FlowState) => FlowState,
+) {
+  const current = getState(context);
+  setState(context, fn(current));
 }
 
 export function onMessage(message: Message, context: FlowContext): Message[] {
@@ -77,8 +114,11 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   }
 
   // Record statistics
-  state.stats[output.level] += 1;
-  state.stats.total += 1;
+  updateState(context, (current: FlowState) => {
+    current.stats[output.level] = (current.stats[output.level] || 0) + 1;
+    current.stats.total += 1;
+    return current;
+  });
 
   if (with_logs) {
     return [
@@ -104,6 +144,7 @@ export function onInterval(time: Date, context: FlowContext) {
   }
 
   const { info = 0, warning = 0, error = 0, total = 0 } = threshold;
+  const state = getState(context);
 
   state.dateTo = time.getTime() / 1000;
   const stats = state.stats;
@@ -163,7 +204,8 @@ export function onInterval(time: Date, context: FlowContext) {
 
   // reset statistics
   state.dateFrom = state.dateTo;
-  state.stats.reset();
+  state.stats = createStatistics();
   state.ran = true;
+  setState(context, state);
   return output;
 }

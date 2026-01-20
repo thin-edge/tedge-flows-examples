@@ -55,56 +55,6 @@ export function transform(payload: any): LogEntry {
   return output;
 }
 
-export class Statistics {
-  emerg: number = 0;
-  alert: number = 0;
-  crit: number = 0;
-  err: number = 0;
-  warn: number = 0;
-  notice: number = 0;
-  info: number = 0;
-  debug: number = 0;
-  total: number = 0;
-  unknown: number = 0;
-
-  constructor({
-    emerg = 0,
-    alert = 0,
-    crit = 0,
-    err = 0,
-    warn = 0,
-    notice = 0,
-    info = 0,
-    debug = 0,
-    total = 0,
-    unknown = 0,
-  } = {}) {
-    this.emerg = emerg;
-    this.alert = alert;
-    this.crit = crit;
-    this.err = err;
-    this.warn = warn;
-    this.notice = notice;
-    this.info = info;
-    this.debug = debug;
-    this.total = total;
-    this.unknown = unknown;
-  }
-
-  reset() {
-    this.emerg = 0;
-    this.alert = 0;
-    this.crit = 0;
-    this.err = 0;
-    this.warn = 0;
-    this.notice = 0;
-    this.info = 0;
-    this.debug = 0;
-    this.total = 0;
-    this.unknown = 0;
-  }
-}
-
 export interface JOURNALD_RAW_MESSAGE {
   _RUNTIME_SCOPE?: string;
   _UID?: string;
