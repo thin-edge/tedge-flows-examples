@@ -1,6 +1,6 @@
 {
   "name": "uptime",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "This flow demonstrates how to keep track of online calculator.",
   "source": "src/main.ts",
   "module": "dist/main.mjs",
