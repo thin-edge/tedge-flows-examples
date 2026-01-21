@@ -37,7 +37,7 @@ export function transform(payload: any): LogEntry {
     level:
       priorities[String(payload.PRIORITY) as keyof typeof priorities] ||
       "unknown",
-    text: stripTimestampPrefix(payload.MESSAGE),
+    text: stripTimestampPrefix(payload.MESSAGE || ""),
   };
 
   // service is not writing directly to syslog, so the log level needs to be parsed from the message
