@@ -7,18 +7,17 @@ jest.useFakeTimers();
 describe("Map Measurements to Telemetry", () => {
   test("should add type to key", () => {
     const message: tedge.Message = {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "te/device/main///m/sensor",
       payload: JSON.stringify({
         temperature: 10,
       }),
     };
-    const output = flow.onMessage(message, {
-      config: {
-        main_device_name: "PROD_GATEWAY",
-        add_type_to_key: true,
-      },
+    const context = tedge.createContext({
+      main_device_name: "PROD_GATEWAY",
+      add_type_to_key: true,
     });
+    const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
@@ -32,19 +31,18 @@ describe("Map Measurements to Telemetry", () => {
 
   test("should convert timestamp", () => {
     const message: tedge.Message = {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "te/device/main///m/sensor",
       payload: JSON.stringify({
         temperature: 10,
         time: 1602739847.0,
       }),
     };
-    const output = flow.onMessage(message, {
-      config: {
-        main_device_name: "PROD_GATEWAY",
-        add_type_to_key: true,
-      },
+    const context = tedge.createContext({
+      main_device_name: "PROD_GATEWAY",
+      add_type_to_key: true,
     });
+    const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
@@ -61,17 +59,16 @@ describe("Map Measurements to Telemetry", () => {
 
   test("should not add type due to config", () => {
     const message: tedge.Message = {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "te/device/child1///m/sensor",
       payload: JSON.stringify({
         temperature: 10,
       }),
     };
-    const output = flow.onMessage(message, {
-      config: {
-        add_type_to_key: false,
-      },
+    const context = tedge.createContext({
+      add_type_to_key: false,
     });
+    const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
@@ -85,15 +82,14 @@ describe("Map Measurements to Telemetry", () => {
 
   test("Should not add type due to lacking type in topic", () => {
     const message: tedge.Message = {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "te/device/child1/service/app1/m/",
       payload: JSON.stringify({
         temperature: 10,
       }),
     };
-    const output = flow.onMessage(message, {
-      config: {},
-    });
+    const context = tedge.createContext();
+    const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
@@ -109,7 +105,7 @@ describe("Map Measurements to Telemetry", () => {
 describe("Map Twin to Attributes", () => {
   test("should remove timestamp", () => {
     const message: tedge.Message = {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "te/device/main///twin/software",
       payload: JSON.stringify({
         os: "debian",
@@ -117,12 +113,11 @@ describe("Map Twin to Attributes", () => {
         time: 1602739847.0,
       }),
     };
-    const output = flow.onMessage(message, {
-      config: {
-        main_device_name: "PROD_GATEWAY",
-        add_type_to_key: true,
-      },
+    const context = tedge.createContext({
+      main_device_name: "PROD_GATEWAY",
+      add_type_to_key: true,
     });
+    const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
@@ -135,19 +130,18 @@ describe("Map Twin to Attributes", () => {
 
   test("should add type to key", () => {
     const message: tedge.Message = {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "te/device/main///twin/software",
       payload: JSON.stringify({
         os: "debian",
         version: "bullseye",
       }),
     };
-    const output = flow.onMessage(message, {
-      config: {
-        main_device_name: "PROD_GATEWAY",
-        add_type_to_key: true,
-      },
+    const context = tedge.createContext({
+      main_device_name: "PROD_GATEWAY",
+      add_type_to_key: true,
     });
+    const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
@@ -160,18 +154,17 @@ describe("Map Twin to Attributes", () => {
 
   test("should not add type due to config", () => {
     const message: tedge.Message = {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "te/device/child1///twin/software",
       payload: JSON.stringify({
         os: "debian",
         version: "bullseye",
       }),
     };
-    const output = flow.onMessage(message, {
-      config: {
-        add_type_to_key: false,
-      },
+    const context = tedge.createContext({
+      add_type_to_key: false,
     });
+    const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
@@ -184,14 +177,15 @@ describe("Map Twin to Attributes", () => {
 
   test("Should not add type due to lacking type in topic", () => {
     const message: tedge.Message = {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "te/device/child1/service/app1/twin/",
       payload: JSON.stringify({
         os: "debian",
         version: "bullseye",
       }),
     };
-    const output = flow.onMessage(message);
+    const context = tedge.createContext();
+    const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
@@ -204,11 +198,12 @@ describe("Map Twin to Attributes", () => {
 
   test("Should accept string payload", () => {
     const message: tedge.Message = {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "te/device/child1/service/app1/twin/os",
       payload: "debian",
     };
-    const output = flow.onMessage(message);
+    const context = tedge.createContext();
+    const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
@@ -220,11 +215,12 @@ describe("Map Twin to Attributes", () => {
 
   test("Should accept boolean payload", () => {
     const message: tedge.Message = {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "te/device/child1/service/app1/twin/isActive",
       payload: "true",
     };
-    const output = flow.onMessage(message);
+    const context = tedge.createContext();
+    const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({

@@ -1,13 +1,15 @@
-import { Message } from "../../common/tedge";
+import { Message, Context } from "../../common/tedge";
 
 export interface Config {
   main_device_name?: string;
   add_type_to_key?: boolean;
 }
+export interface FlowContext extends Context {
+  config: Config;
+}
 
-export function onMessage(message: Message, context: { config?: Config } = {}) {
-  const { config = {} } = context;
-  const { main_device_name = "MAIN", add_type_to_key = true } = config;
+export function onMessage(message: Message, context: FlowContext) {
+  const { main_device_name = "MAIN", add_type_to_key = true } = context.config;
   const payload = message.payload;
   const parts = message.topic.split("/");
   const deviceName = mapTopicToDeviceName(message.topic, main_device_name);
