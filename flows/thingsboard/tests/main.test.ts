@@ -72,7 +72,7 @@ describe("Map Measurements to Telemetry", () => {
     expect(output).toHaveLength(1);
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
-      child1: [
+      "MAIN:device:child1": [
         {
           temperature: 10,
         },
@@ -93,7 +93,7 @@ describe("Map Measurements to Telemetry", () => {
     expect(output).toHaveLength(1);
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
-      child1_app1: [
+      "MAIN:device:child1:service:app1": [
         {
           temperature: 10,
         },
@@ -168,7 +168,7 @@ describe("Map Twin to Attributes", () => {
     expect(output).toHaveLength(1);
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
-      child1: {
+      "MAIN:device:child1": {
         os: "debian",
         version: "bullseye",
       },
@@ -189,7 +189,7 @@ describe("Map Twin to Attributes", () => {
     expect(output).toHaveLength(1);
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
-      child1_app1: {
+      "MAIN:device:child1:service:app1": {
         os: "debian",
         version: "bullseye",
       },
@@ -207,7 +207,7 @@ describe("Map Twin to Attributes", () => {
     expect(output).toHaveLength(1);
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
-      child1_app1: {
+      "MAIN:device:child1:service:app1": {
         os: "debian",
       },
     });
@@ -224,47 +224,9 @@ describe("Map Twin to Attributes", () => {
     expect(output).toHaveLength(1);
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
-      child1_app1: {
+      "MAIN:device:child1:service:app1": {
         isActive: true,
       },
     });
-  });
-});
-
-describe("thin-edge.io to ThingsBoard Device Naming", () => {
-  test("should map main device to value from config", () => {
-    const topic = "te/device/main///m/sensor";
-    expect(flow.mapTopicToDeviceName(topic, "PROD_GATEWAY")).toBe(
-      "PROD_GATEWAY",
-    );
-  });
-
-  test("should map main device to default", () => {
-    const topic = "te/device/main///m/sensor";
-    expect(flow.mapTopicToDeviceName(topic)).toBe("MAIN");
-  });
-
-  test("should map child devices directly", () => {
-    const topic = "te/device/child1///m/sensor";
-    expect(flow.mapTopicToDeviceName(topic)).toBe("child1");
-  });
-
-  test("should concatenate main services correctly", () => {
-    const topic = "te/device/main/service/app1/m/sensor";
-    expect(flow.mapTopicToDeviceName(topic, "PROD_GATEWAY")).toBe(
-      "PROD_GATEWAY_app1",
-    );
-  });
-
-  test("should concatenate child services correctly", () => {
-    const topic = "te/device/child1/service/app2/m/sensor";
-    expect(flow.mapTopicToDeviceName(topic)).toBe("child1_app2");
-  });
-
-  test("should fallback to device ID for unknown segments", () => {
-    const topic1 = "te/device/main/some/thing/m/sensor";
-    const topic2 = "te/device/child1/some/thing/m/sensor";
-    expect(flow.mapTopicToDeviceName(topic1)).toBe("MAIN");
-    expect(flow.mapTopicToDeviceName(topic2)).toBe("child1");
   });
 });

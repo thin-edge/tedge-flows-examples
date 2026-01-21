@@ -12,12 +12,13 @@ export function onMessage(message: Message, context: FlowContext) {
   const { main_device_name = "MAIN", add_type_to_key = true } = context.config;
   const payload = message.payload;
   const parts = message.topic.split("/");
-  const deviceName = mapTopicToDeviceName(message.topic, main_device_name);
-  const category = parts[5];
-  const type = parts[6];
+  const [root, seg1, seg2, seg3, seg4, channel, type] = parts;
+  const entityId = `${seg1}/${seg2}/${seg3}/${seg4}`;
+
+  const deviceName = getDeviceName(entityId, main_device_name);
   const shouldTransform = (add_type_to_key && type.length > 0) || false;
 
-  switch (category) {
+  switch (channel) {
     case "m":
       return convertMeasurementToTelemetry(
         shouldTransform,
@@ -30,6 +31,14 @@ export function onMessage(message: Message, context: FlowContext) {
     default:
       return [];
   }
+}
+
+function getDeviceName(entityId: string, mainName: string): string {
+  if (entityId === "device/main//") {
+    return mainName;
+  }
+  const segments = entityId.split("/").filter((segment) => segment.length > 0);
+  return `${mainName}:${segments.join(":")}`;
 }
 
 function convertMeasurementToTelemetry(
@@ -114,21 +123,4 @@ function convertTwinToAttribute(
       }),
     },
   ];
-}
-
-export function mapTopicToDeviceName(topic: string, mainReplacement = "MAIN") {
-  const parts = topic.split("/");
-
-  let deviceId = parts[2];
-  let serviceId = null;
-
-  if (deviceId === "main") {
-    deviceId = mainReplacement;
-  }
-
-  if (parts[3] === "service" && parts[4]) {
-    serviceId = parts[4];
-  }
-
-  return serviceId ? `${deviceId}_${serviceId}` : deviceId;
 }
