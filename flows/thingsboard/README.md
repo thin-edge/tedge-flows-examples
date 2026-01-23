@@ -9,7 +9,7 @@ The flow supports mapping from Thin Edge JSON to the ThingsBoard Gateway API.
 - [x] Measurements -> Telemetry
 - [x] Twin -> Attributes
 - [x] Alarms -> Telemetry
-- [ ] Events -> Telemetry (todo)
+- [x] Events -> Telemetry
 - [ ] Commands -> RPC (todo)
 
 ## Flow Custom Configuration
@@ -204,6 +204,36 @@ topic: `tb/gateway/telemetry`
     "values": {
       "alarm::temperature_high": {
         "status": "cleared",
+      }
+    }
+  ]
+}
+```
+
+### Events -> Telemetry
+
+#### thin-edge.io active events
+
+topic: `te/device/main///e/login_event`
+
+```json
+{
+  "text": "A user just logged in",
+  "time": "2020-10-15T05:30:47+00:00"
+}
+```
+
+#### ThingsBoard active events
+
+topic: `tb/gateway/telemetry`
+
+```json
+{
+  "MAIN": [
+    "ts": 1602739847000,
+    "values": {
+      "event::login_event": {
+        "text": "A user just logged in"
       }
     }
   ]
