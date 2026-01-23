@@ -1,4 +1,4 @@
-input.mqtt.topics = ["te/device/+/+/+/m/+", "te/device/+/+/+/twin/+"]
+input.mqtt.topics = ["te/device/+/+/+/m/+", "te/device/+/+/+/twin/+", "te/device/+/+/+/a/+"]
 
 [[steps]]
 builtin = "add-timestamp"

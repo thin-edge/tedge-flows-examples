@@ -28,6 +28,8 @@ export function onMessage(message: Message, context: FlowContext) {
       );
     case "twin":
       return convertTwinToAttribute(shouldTransform, payload, deviceName, type);
+    case "a":
+      return convertAlarmToTelemetry(payload, deviceName, type);
     default:
       return [];
   }
@@ -120,6 +122,47 @@ function convertTwinToAttribute(
       topic: "tb/gateway/attributes",
       payload: JSON.stringify({
         [deviceName]: attributesData,
+      }),
+    },
+  ];
+}
+
+function convertAlarmToTelemetry(
+  payload: string,
+  deviceName: string,
+  type: string,
+) {
+  const originalData = JSON.parse(payload);
+  const { time, ...dataWithoutTime } = originalData;
+
+  const isCleared = Object.keys(dataWithoutTime).length === 0;
+
+  const rawTime = originalData["time"];
+  const timestamp = rawTime ? Math.round(Number(rawTime) * 1000) : null;
+
+  const telemetryValue = isCleared
+    ? { status: "cleared" }
+    : {
+        status: "active",
+        ...dataWithoutTime,
+      };
+
+  const telemetryEntry = timestamp
+    ? {
+        ts: timestamp,
+        values: {
+          [`alarm::${type}`]: telemetryValue,
+        },
+      }
+    : {
+        [`alarm::${type}`]: telemetryValue,
+      };
+
+  return [
+    {
+      topic: "tb/gateway/telemetry",
+      payload: JSON.stringify({
+        [deviceName]: [telemetryEntry],
       }),
     },
   ];

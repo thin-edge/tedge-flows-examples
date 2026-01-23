@@ -8,7 +8,7 @@ The flow supports mapping from Thin Edge JSON to the ThingsBoard Gateway API.
 
 - [x] Measurements -> Telemetry
 - [x] Twin -> Attributes
-- [ ] Alarms -> Alarms (todo)
+- [x] Alarms -> Telemetry
 - [ ] Events -> Telemetry (todo)
 - [ ] Commands -> RPC (todo)
 
@@ -100,7 +100,7 @@ sudo systemctl restart mosquitto
 
 ## Example Conversion
 
-### Telemetry
+### Measurements -> Telemetry
 
 #### thin-edge.io measurements
 
@@ -128,7 +128,7 @@ topic: `tb/gateway/telemetry`
 }
 ```
 
-### Attributes
+### Twin -> Attributes
 
 #### thin-edge.io twin
 
@@ -149,6 +149,64 @@ topic: `tb/gateway/attributes`
   "MAIN": {
     "software::os": "debian"
   }
+}
+```
+
+### Alarms -> Telemetry
+
+#### thin-edge.io active alarms
+
+topic: `te/device/main///a/temperature_high`
+
+```json
+{
+  "severity": "critical",
+  "text": "Temperature is very high",
+  "time": "2020-10-15T05:30:47+00:00"
+}
+```
+
+#### ThingsBoard active alarms
+
+topic: `tb/gateway/telemetry`
+
+```json
+{
+  "MAIN": [
+    "ts": 1602739847000,
+    "values": {
+      "alarm::temperature_high": {
+        "status": "active",
+        "severity": "critical",
+        "text": "Temperature is very high"
+      }
+    }
+  ]
+}
+```
+
+#### thin-edge.io cleared alarms
+
+topic: `te/device/main///a/temperature_high`
+
+```json
+{}
+```
+
+#### ThingsBoard cleared alarms
+
+topic: `tb/gateway/telemetry`
+
+```json
+{
+  "MAIN": [
+    "ts": 1602739847000,
+    "values": {
+      "alarm::temperature_high": {
+        "status": "cleared",
+      }
+    }
+  ]
 }
 ```
 
