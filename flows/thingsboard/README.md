@@ -8,8 +8,8 @@ The flow supports mapping from Thin Edge JSON to the ThingsBoard Gateway API.
 
 - [x] Measurements -> Telemetry
 - [x] Twin -> Attributes
-- [ ] Alarms -> Alarms (todo)
-- [ ] Events -> Telemetry (todo)
+- [x] Alarms -> Telemetry
+- [x] Events -> Telemetry
 - [ ] Commands -> RPC (todo)
 
 ## Flow Custom Configuration
@@ -20,6 +20,11 @@ The flow supports mapping from Thin Edge JSON to the ThingsBoard Gateway API.
     - topic: `te/device/main///m/sensor`
     - payload: `{"temperature: 10}`
     - If set to `true`, the converted payload becomes: `{"sensor::temperature": 10}`
+
+- `alarm_prefix`: `<string>`
+- `event_prefix`: `<string>`
+  - To distinguish alarms and events from other data types, the step prepends these prefixes to the type from the MQTT topic to form the telemetry key used by ThingsBoard.
+    Refer to the [alarm example](#alarms---telemetry) and [event example](#events---telemetry) to see how this works (`alarm::` and `event::` respectively).
 
 - If you don't want to add timestamp to telemetry, remove the builtin `add-timestamp` step from `flow.toml`.
 
@@ -100,7 +105,7 @@ sudo systemctl restart mosquitto
 
 ## Example Conversion
 
-### Telemetry
+### Measurements -> Telemetry
 
 #### thin-edge.io measurements
 
@@ -128,7 +133,7 @@ topic: `tb/gateway/telemetry`
 }
 ```
 
-### Attributes
+### Twin -> Attributes
 
 #### thin-edge.io twin
 
@@ -149,6 +154,89 @@ topic: `tb/gateway/attributes`
   "MAIN": {
     "software::os": "debian"
   }
+}
+```
+
+### Alarms -> Telemetry
+
+#### thin-edge.io active alarms
+
+topic: `te/device/main///a/temperature_high`
+
+```json
+{
+  "severity": "critical",
+  "text": "Temperature is very high",
+  "time": "2020-10-15T05:30:47+00:00"
+}
+```
+
+#### ThingsBoard active alarms
+
+topic: `tb/gateway/telemetry`
+
+```json
+{
+  "MAIN": [
+    "ts": 1602739847000,
+    "values": {
+      "alarm::temperature_high": {
+        "status": "active",
+        "severity": "critical",
+        "text": "Temperature is very high"
+      }
+    }
+  ]
+}
+```
+
+#### thin-edge.io cleared alarms
+
+topic: `te/device/main///a/temperature_high`
+
+empty payload
+
+#### ThingsBoard cleared alarms
+
+topic: `tb/gateway/telemetry`
+
+```json
+{
+  "MAIN": [
+    "alarm::temperature_high": {
+      "status": "cleared",
+    }
+  ]
+}
+```
+
+### Events -> Telemetry
+
+#### thin-edge.io active events
+
+topic: `te/device/main///e/login_event`
+
+```json
+{
+  "text": "A user just logged in",
+  "time": "2020-10-15T05:30:47+00:00"
+}
+```
+
+#### ThingsBoard active events
+
+topic: `tb/gateway/telemetry`
+
+```json
+{
+  "MAIN": [
+    "ts": 1602739847000,
+    "values": {
+      "event::login_event": {
+        "text": "A user just logged in"
+      }
+    }
+  ]
 }
 ```
 

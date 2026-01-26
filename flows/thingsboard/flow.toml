@@ -1,4 +1,4 @@
-input.mqtt.topics = ["te/device/+/+/+/m/+", "te/device/+/+/+/twin/+"]
+input.mqtt.topics = ["te/device/+/+/+/m/+", "te/device/+/+/+/twin/+", "te/device/+/+/+/a/+",  "te/device/+/+/+/e/+"]
 
 [[steps]]
 builtin = "add-timestamp"
@@ -10,5 +10,7 @@ config.reformat = true
 script = "dist/main.mjs"
 config.main_device_name = "{{MAIN_DEVICE_NAME}}"
 config.add_type_to_key = true
+config.alarm_prefix = "alarm::"
+config.event_prefix = "event::"
 
 errors.mqtt.topic = "te/errors"

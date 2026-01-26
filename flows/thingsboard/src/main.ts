@@ -3,13 +3,20 @@ import { Message, Context } from "../../common/tedge";
 export interface Config {
   main_device_name?: string;
   add_type_to_key?: boolean;
+  alarm_prefix?: string;
+  event_prefix?: string;
 }
 export interface FlowContext extends Context {
   config: Config;
 }
 
 export function onMessage(message: Message, context: FlowContext) {
-  const { main_device_name = "MAIN", add_type_to_key = true } = context.config;
+  const {
+    main_device_name = "MAIN",
+    add_type_to_key = true,
+    alarm_prefix = "",
+    event_prefix = "",
+  } = context.config;
   const payload = message.payload;
   const parts = message.topic.split("/");
   const [root, seg1, seg2, seg3, seg4, channel, type] = parts;
@@ -28,6 +35,10 @@ export function onMessage(message: Message, context: FlowContext) {
       );
     case "twin":
       return convertTwinToAttribute(shouldTransform, payload, deviceName, type);
+    case "a":
+      return convertAlarmToTelemetry(payload, deviceName, type, alarm_prefix);
+    case "e":
+      return convertEventToTelemetry(payload, deviceName, type, event_prefix);
     default:
       return [];
   }
@@ -120,6 +131,85 @@ function convertTwinToAttribute(
       topic: "tb/gateway/attributes",
       payload: JSON.stringify({
         [deviceName]: attributesData,
+      }),
+    },
+  ];
+}
+
+function convertAlarmToTelemetry(
+  payload: string,
+  deviceName: string,
+  type: string,
+  alarmPrefix: string,
+) {
+  let telemetryEntry: Record<string, any> = {};
+
+  if (payload.length === 0) {
+    telemetryEntry = {
+      [`${alarmPrefix}${type}`]: { status: "cleared" },
+    };
+  } else {
+    const originalData = JSON.parse(payload);
+    const { time, ...dataWithoutTime } = originalData;
+
+    const rawTime = originalData["time"];
+    const timestamp = rawTime ? Math.round(Number(rawTime) * 1000) : null;
+
+    const telemetryValue = {
+      status: "active",
+      ...dataWithoutTime,
+    };
+
+    telemetryEntry = timestamp
+      ? {
+          ts: timestamp,
+          values: {
+            [`${alarmPrefix}${type}`]: telemetryValue,
+          },
+        }
+      : {
+          [`${alarmPrefix}${type}`]: telemetryValue,
+        };
+  }
+
+  return [
+    {
+      topic: "tb/gateway/telemetry",
+      payload: JSON.stringify({
+        [deviceName]: [telemetryEntry],
+      }),
+    },
+  ];
+}
+
+function convertEventToTelemetry(
+  payload: string,
+  deviceName: string,
+  type: string,
+  eventPrefix: string,
+) {
+  const originalData = JSON.parse(payload);
+  const { time, ...dataWithoutTime } = originalData;
+
+  const rawTime = originalData["time"];
+  const timestamp = rawTime ? Math.round(Number(rawTime) * 1000) : null;
+
+  const telemetryEntry = timestamp
+    ? {
+        ts: timestamp,
+        values: {
+          [`${eventPrefix}${type}`]: dataWithoutTime,
+        },
+      }
+    : {
+        [`${eventPrefix}${type}`]: dataWithoutTime,
+      };
+
+  return [
+    {
+      topic: "tb/gateway/telemetry",
+      payload: JSON.stringify({
+        [deviceName]: [telemetryEntry],
       }),
     },
   ];
