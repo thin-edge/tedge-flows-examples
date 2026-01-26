@@ -21,6 +21,11 @@ The flow supports mapping from Thin Edge JSON to the ThingsBoard Gateway API.
     - payload: `{"temperature: 10}`
     - If set to `true`, the converted payload becomes: `{"sensor::temperature": 10}`
 
+- `alarm_prefix`: `<string>`
+- `event_prefix`: `<string>`
+  - To distinguish alarms and events from other data types, the step prepends these prefixes to the type from the MQTT topic to form the telemetry key used by ThingsBoard.
+    Refer to the [alarm example](#alarms---telemetry) and [event example](#events---telemetry) to see how this works (`alarm::` and `event::` respectively).
+
 - If you don't want to add timestamp to telemetry, remove the builtin `add-timestamp` step from `flow.toml`.
 
 ## Setup
@@ -189,9 +194,7 @@ topic: `tb/gateway/telemetry`
 
 topic: `te/device/main///a/temperature_high`
 
-```json
-{}
-```
+empty payload
 
 #### ThingsBoard cleared alarms
 
@@ -200,11 +203,8 @@ topic: `tb/gateway/telemetry`
 ```json
 {
   "MAIN": [
-    "ts": 1602739847000,
-    "values": {
-      "alarm::temperature_high": {
-        "status": "cleared",
-      }
+    "alarm::temperature_high": {
+      "status": "cleared",
     }
   ]
 }

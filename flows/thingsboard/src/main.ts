@@ -3,13 +3,20 @@ import { Message, Context } from "../../common/tedge";
 export interface Config {
   main_device_name?: string;
   add_type_to_key?: boolean;
+  alarm_prefix?: string;
+  event_prefix?: string;
 }
 export interface FlowContext extends Context {
   config: Config;
 }
 
 export function onMessage(message: Message, context: FlowContext) {
-  const { main_device_name = "MAIN", add_type_to_key = true } = context.config;
+  const {
+    main_device_name = "MAIN",
+    add_type_to_key = true,
+    alarm_prefix = "",
+    event_prefix = "",
+  } = context.config;
   const payload = message.payload;
   const parts = message.topic.split("/");
   const [root, seg1, seg2, seg3, seg4, channel, type] = parts;
@@ -29,9 +36,9 @@ export function onMessage(message: Message, context: FlowContext) {
     case "twin":
       return convertTwinToAttribute(shouldTransform, payload, deviceName, type);
     case "a":
-      return convertAlarmToTelemetry(payload, deviceName, type);
+      return convertAlarmToTelemetry(payload, deviceName, type, alarm_prefix);
     case "e":
-      return convertEventToTelemetry(payload, deviceName, type);
+      return convertEventToTelemetry(payload, deviceName, type, event_prefix);
     default:
       return [];
   }
@@ -133,32 +140,37 @@ function convertAlarmToTelemetry(
   payload: string,
   deviceName: string,
   type: string,
+  alarmPrefix: string,
 ) {
-  const originalData = JSON.parse(payload);
-  const { time, ...dataWithoutTime } = originalData;
+  let telemetryEntry: Record<string, any> = {};
 
-  const isCleared = Object.keys(dataWithoutTime).length === 0;
+  if (payload.length === 0) {
+    telemetryEntry = {
+      [`${alarmPrefix}${type}`]: { status: "cleared" },
+    };
+  } else {
+    const originalData = JSON.parse(payload);
+    const { time, ...dataWithoutTime } = originalData;
 
-  const rawTime = originalData["time"];
-  const timestamp = rawTime ? Math.round(Number(rawTime) * 1000) : null;
+    const rawTime = originalData["time"];
+    const timestamp = rawTime ? Math.round(Number(rawTime) * 1000) : null;
 
-  const telemetryValue = isCleared
-    ? { status: "cleared" }
-    : {
-        status: "active",
-        ...dataWithoutTime,
-      };
+    const telemetryValue = {
+      status: "active",
+      ...dataWithoutTime,
+    };
 
-  const telemetryEntry = timestamp
-    ? {
-        ts: timestamp,
-        values: {
-          [`alarm::${type}`]: telemetryValue,
-        },
-      }
-    : {
-        [`alarm::${type}`]: telemetryValue,
-      };
+    telemetryEntry = timestamp
+      ? {
+          ts: timestamp,
+          values: {
+            [`${alarmPrefix}${type}`]: telemetryValue,
+          },
+        }
+      : {
+          [`${alarmPrefix}${type}`]: telemetryValue,
+        };
+  }
 
   return [
     {
@@ -174,6 +186,7 @@ function convertEventToTelemetry(
   payload: string,
   deviceName: string,
   type: string,
+  eventPrefix: string,
 ) {
   const originalData = JSON.parse(payload);
   const { time, ...dataWithoutTime } = originalData;
@@ -185,11 +198,11 @@ function convertEventToTelemetry(
     ? {
         ts: timestamp,
         values: {
-          [`event::${type}`]: dataWithoutTime,
+          [`${eventPrefix}${type}`]: dataWithoutTime,
         },
       }
     : {
-        [`event::${type}`]: dataWithoutTime,
+        [`${eventPrefix}${type}`]: dataWithoutTime,
       };
 
   return [

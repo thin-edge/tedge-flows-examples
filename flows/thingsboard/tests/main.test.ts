@@ -250,6 +250,7 @@ describe("Map Alarms to Telemetry", () => {
     const context = tedge.createContext({
       main_device_name: "PROD_GATEWAY",
       add_type_to_key: true,
+      alarm_prefix: "alarm::",
     });
     const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
@@ -275,17 +276,16 @@ describe("Map Alarms to Telemetry", () => {
     });
   });
 
-  test("Convert a cleared alarm", () => {
+  test("Convert an empty JSON to an active alarm", () => {
     const message: tedge.Message = {
       time: tedge.mockGetTime(),
       topic: "te/device/main///a/temperature_high",
-      payload: JSON.stringify({
-        time: 1602739847.0,
-      }),
+      payload: JSON.stringify({}),
     };
     const context = tedge.createContext({
       main_device_name: "PROD_GATEWAY",
       add_type_to_key: true,
+      alarm_prefix: "alarm::",
     });
     const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
@@ -293,11 +293,33 @@ describe("Map Alarms to Telemetry", () => {
     expect(payload).toStrictEqual({
       PROD_GATEWAY: [
         {
-          ts: 1602739847000,
-          values: {
-            "alarm::temperature_high": {
-              status: "cleared",
-            },
+          "alarm::temperature_high": {
+            status: "active",
+          },
+        },
+      ],
+    });
+  });
+
+  test("Convert a cleared alarm", () => {
+    const message: tedge.Message = {
+      time: tedge.mockGetTime(),
+      topic: "te/device/main///a/temperature_high",
+      payload: "",
+    };
+    const context = tedge.createContext({
+      main_device_name: "PROD_GATEWAY",
+      add_type_to_key: true,
+      alarm_prefix: "alarm::",
+    });
+    const output = flow.onMessage(message, context);
+    expect(output).toHaveLength(1);
+    const payload = JSON.parse(output[0].payload);
+    expect(payload).toStrictEqual({
+      PROD_GATEWAY: [
+        {
+          "alarm::temperature_high": {
+            status: "cleared",
           },
         },
       ],
@@ -323,7 +345,7 @@ describe("Map Alarms to Telemetry", () => {
     expect(payload).toStrictEqual({
       PROD_GATEWAY: [
         {
-          "alarm::temperature_high": {
+          temperature_high: {
             status: "active",
             severity: "major",
             text: "Temperature is very high",
@@ -352,6 +374,7 @@ describe("Map Events to Telemetry", () => {
     const context = tedge.createContext({
       main_device_name: "PROD_GATEWAY",
       add_type_to_key: true,
+      event_prefix: "event::",
     });
     const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
@@ -393,7 +416,7 @@ describe("Map Events to Telemetry", () => {
     expect(payload).toStrictEqual({
       PROD_GATEWAY: [
         {
-          "event::login_event": {
+          login_event: {
             text: "A user just logged in",
           },
         },
