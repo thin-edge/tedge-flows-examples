@@ -31,7 +31,7 @@ Below shows the mapping done by the flow.
     topics = ["app/sensor1/DDATA/temperature"]
 
 [[steps]]
-  script = "/usr/share/tedge/flows/jsonata-xform:0.0.3/dist/main.mjs"
+  script = "/usr/share/tedge/flows/jsonata-xform:0.0.3/lib/main.js"
   [steps.config]
     # map to measurement
     targetTopic = "'te/device/' & _TOPIC_LEVEL_[1] & '///m/' & _TOPIC_LEVEL_[-1]"

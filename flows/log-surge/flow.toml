@@ -9,7 +9,7 @@ command = """sudo journalctl -o json -b --cursor-file=/tmp/log-surge-cursor --no
 interval = "300s"
 
 [[steps]]
-script = "log-surge/dist/main.mjs"
+script = "log-surge/lib/main.js"
 interval = "600s"
 
 config.with_logs = false

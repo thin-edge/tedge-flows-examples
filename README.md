@@ -18,10 +18,10 @@ You can build the flows locally with the following steps which requires nodejs >
    npm run build-all
    ```
 
-Each bundled flow is stored under the `dist/main.mjs` of its flows directory. For example, for the `uptime` flow, the bundled file can be found under:
+Each bundled flow is stored under the `lib/main.js` of its flows directory. For example, for the `uptime` flow, the bundled file can be found under:
 
 ```sh
-ls -l flows/uptime/dist/main.mjs
+ls -l flows/uptime/lib/main.js
 ```
 
 ## Adding a new flow to the workspace
