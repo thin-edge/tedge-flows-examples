@@ -3,6 +3,7 @@ export function convertTwinToAttribute(
   payload: string,
   deviceName: string,
   type: string,
+  isMain: boolean,
 ) {
   let attributesData: Record<string, any> = {};
 
@@ -32,12 +33,21 @@ export function convertTwinToAttribute(
     attributesData = { [type]: payload };
   }
 
-  return [
-    {
-      topic: "tb/gateway/attributes",
-      payload: JSON.stringify({
-        [deviceName]: attributesData,
-      }),
-    },
-  ];
+  if (isMain) {
+    return [
+      {
+        topic: "tb/me/attributes",
+        payload: JSON.stringify(attributesData),
+      },
+    ];
+  } else {
+    return [
+      {
+        topic: "tb/gateway/attributes",
+        payload: JSON.stringify({
+          [deviceName]: attributesData,
+        }),
+      },
+    ];
+  }
 }

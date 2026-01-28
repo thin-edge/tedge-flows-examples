@@ -1,8 +1,11 @@
+import { formatTelemetryMessage } from "../utils";
+
 export function convertEventToTelemetry(
   payload: string,
   deviceName: string,
   type: string,
   eventPrefix: string,
+  isMain: boolean,
 ) {
   const originalData = JSON.parse(payload);
   const { time, ...dataWithoutTime } = originalData;
@@ -21,12 +24,5 @@ export function convertEventToTelemetry(
         [`${eventPrefix}${type}`]: dataWithoutTime,
       };
 
-  return [
-    {
-      topic: "tb/gateway/telemetry",
-      payload: JSON.stringify({
-        [deviceName]: [telemetryEntry],
-      }),
-    },
-  ];
+  return formatTelemetryMessage(deviceName, telemetryEntry, isMain);
 }

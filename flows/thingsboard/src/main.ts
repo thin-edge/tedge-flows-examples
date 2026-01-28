@@ -28,6 +28,7 @@ export function onMessage(message: Message, context: FlowContext) {
   const entityId = `${seg1}/${seg2}/${seg3}/${seg4}`;
 
   const deviceName = getDeviceName(entityId, main_device_name);
+  const isMain = entityId === "device/main//";
   const shouldTransform = (add_type_to_key && type.length > 0) || false;
 
   switch (channel) {
@@ -37,13 +38,32 @@ export function onMessage(message: Message, context: FlowContext) {
         payload,
         deviceName,
         type,
+        isMain,
       );
     case "twin":
-      return convertTwinToAttribute(shouldTransform, payload, deviceName, type);
+      return convertTwinToAttribute(
+        shouldTransform,
+        payload,
+        deviceName,
+        type,
+        isMain,
+      );
     case "a":
-      return convertAlarmToTelemetry(payload, deviceName, type, alarm_prefix);
+      return convertAlarmToTelemetry(
+        payload,
+        deviceName,
+        type,
+        alarm_prefix,
+        isMain,
+      );
     case "e":
-      return convertEventToTelemetry(payload, deviceName, type, event_prefix);
+      return convertEventToTelemetry(
+        payload,
+        deviceName,
+        type,
+        event_prefix,
+        isMain,
+      );
     default:
       return [];
   }

@@ -1,8 +1,11 @@
+import { formatTelemetryMessage } from "../utils";
+
 export function convertMeasurementToTelemetry(
   shouldTransform: boolean,
   payload: string,
   deviceName: string,
   type: string,
+  isMain: boolean,
 ) {
   const originalData = JSON.parse(payload);
 
@@ -28,12 +31,5 @@ export function convertMeasurementToTelemetry(
       }
     : telemetryValues;
 
-  return [
-    {
-      topic: "tb/gateway/telemetry",
-      payload: JSON.stringify({
-        [deviceName]: [telemetryEntry],
-      }),
-    },
-  ];
+  return formatTelemetryMessage(deviceName, telemetryEntry, isMain);
 }

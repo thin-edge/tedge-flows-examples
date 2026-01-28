@@ -1,8 +1,11 @@
+import { formatTelemetryMessage } from "../utils";
+
 export function convertAlarmToTelemetry(
   payload: string,
   deviceName: string,
   type: string,
   alarmPrefix: string,
+  isMain: boolean,
 ) {
   let telemetryEntry: Record<string, any> = {};
 
@@ -34,12 +37,5 @@ export function convertAlarmToTelemetry(
         };
   }
 
-  return [
-    {
-      topic: "tb/gateway/telemetry",
-      payload: JSON.stringify({
-        [deviceName]: [telemetryEntry],
-      }),
-    },
-  ];
+  return formatTelemetryMessage(deviceName, telemetryEntry, isMain);
 }
