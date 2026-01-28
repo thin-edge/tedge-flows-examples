@@ -3,7 +3,7 @@ command = """sh -c \"tedge cert show | tr '\\n' '\\0'\""""
 interval = "600s"
 
 [[steps]]
-script = "dist/flow.mjs"
+script = "certificate-alert/dist/flow.mjs"
 
 # turn on additional debugging
 debug = false

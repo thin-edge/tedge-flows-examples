@@ -4,6 +4,6 @@ mqtt.topics = [
 ]
 
 [[steps]]
-script = "dist/main.mjs"
+script = "cloud-mapper-telemetry/dist/main.mjs"
 config.cloud_topic_prefix = "azeg/DDATA"
 config.pretty_print = false

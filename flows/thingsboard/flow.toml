@@ -7,7 +7,7 @@ config.format = "unix"
 config.reformat = true
 
 [[steps]]
-script = "dist/main.mjs"
+script = "thingsboard/dist/main.mjs"
 config.main_device_name = "{{MAIN_DEVICE_NAME}}"
 config.add_type_to_key = true
 config.alarm_prefix = "alarm::"

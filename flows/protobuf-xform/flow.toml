@@ -6,7 +6,7 @@ mqtt.topics = [
 ]
 
 [[steps]]
-script = "dist/main.mjs"
+script = "protobuf-xform/dist/main.mjs"
 # config.topic: Use the template variable, '{{type}}' if you wish to include the sensor data type within the topic
 config.topic = "c8y-mqtt/proto/sensor_data"
 config.cmdtopic = "te/device/main///sig/setpoint"
