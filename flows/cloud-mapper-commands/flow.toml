@@ -5,7 +5,7 @@ mqtt.topics = [
 ]
 
 [[steps]]
-script = "cloud-mapper-commands/dist/main.mjs"
+script = "cloud-mapper-commands/lib/main.js"
 config.cloud_prefix = "azeg"
 
 # List of commands which should be mapped from the cloud to tedge topics

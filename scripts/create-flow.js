@@ -16,11 +16,11 @@ const packageTemplate = {
   version: "0.0.1",
   description: "Flow description",
   source: "src/main.ts",
-  module: "dist/main.mjs",
+  module: "lib/main.js",
   type: "module",
   scripts: {
     build:
-      "esbuild src/main.ts --target=es2018 --bundle --outfile=dist/main.mjs --format=esm --drop-labels=DEV,TEST",
+      "esbuild src/main.ts --target=es2018 --bundle --outfile=lib/main.js --format=esm --drop-labels=DEV,TEST",
     test: "jest --coverageProvider=v8 --coverage",
   },
   author: "thin-edge.io",
@@ -43,7 +43,7 @@ mqtt.topics = [
 ]
 
 [[steps]]
-script = "${projectName}/dist/main.mjs"
+script = "${projectName}/lib/main.js"
 config.debug = 1440
 config.custom_prop = "my/prop"
 `.trimStart();

@@ -47,7 +47,7 @@ Build the package and pull in all the dependencies and transpile the JavaScript 
 npm run build
 ```
 
-The output package (which is a standalone JavaScript file) is under `./dist/main.mjs`.
+The output package (which is a standalone JavaScript file) is under `./lib/main.js`.
 
 ### Run test package
 

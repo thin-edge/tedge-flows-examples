@@ -4,7 +4,7 @@ mqtt.topics = [
 ]
 
 [[steps]]
-script = "jsonata-xform/dist/main.mjs"
+script = "jsonata-xform/lib/main.js"
 [[steps.config.substitutions]]
 pathSource = "$replace(dateTo,' ','T')"
 pathTarget = "dateTo"
