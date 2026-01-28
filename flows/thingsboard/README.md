@@ -4,7 +4,8 @@ This flow demonstrates how to map **thin-edge.io** data to **ThingsBoard**.
 
 ## Supported Mapping Features
 
-The flow supports mapping from Thin Edge JSON to the ThingsBoard Gateway API.
+The flow supports mapping from/to Thin Edge JSON to/from the ThingsBoard Device/Gateway API.
+For the main device, Device API is selected, whilst for child devices and services, Gateway API is used.
 
 - [x] Measurements -> Telemetry
 - [x] Twin -> Attributes
@@ -78,23 +79,23 @@ notification_topic te/device/main/service/mosquitto-things-bridge/status/health
 bridge_attempt_unsubscribe false
 
 ### Topics
+### ThingsBoard Device API topics (for the main device)
+topic telemetry out 1 tb/me/ v1/devices/me/
+topic attributes both 1 tb/me/ v1/devices/me/
+topic attributes/request/+ out 1 tb/me v1/devices/me/
+topic attributes/response/+ in 1 tb/me/ v1/devices/me/
+topic rpc/request/+ in 1 tb/me/ v1/devices/me/
+topic rpc/response/+ out 1 tb/me/ v1/devices/me/
+
 ### ThingsBoard Gateway API topics
 topic connect out 1 tb/gateway/ v1/gateway/
 topic disconnect out 1 tb/gateway/ v1/gateway/
 topic telemetry out 1 tb/gateway/ v1/gateway/
 topic attributes both 1 tb/gateway/ v1/gateway/
-topic attributes/request/# out 1 tb/gateway/ v1/gateway/
-topic attributes/response/# in 1 tb/gateway/ v1/gateway/
+topic attributes/request/+ out 1 tb/gateway/ v1/gateway/
+topic attributes/response/+ in 1 tb/gateway/ v1/gateway/
 topic rpc in 1 tb/gateway/ v1/gateway/
 topic claim out 1 tb/gateway/ v1/gateway/
-
-### ThingsBoard Device API topics
-topic telemetry out 1 tb/me/ v1/devices/me/
-topic attributes both 1 tb/me/ v1/devices/me/
-topic attributes/request/# out 1 tb/me v1/devices/me/
-topic attributes/response/# in 1 tb/me/ v1/devices/me/
-topic rpc/request/# in 1 tb/me/ v1/devices/me/
-topic rpc/response/# out 1 tb/me/ v1/devices/me/
 ```
 
 Note: After creating the bridge configuration file, you must restart the `mosquitto` service.
@@ -107,7 +108,7 @@ sudo systemctl restart mosquitto
 
 ### Measurements -> Telemetry
 
-#### thin-edge.io measurements
+#### thin-edge.io measurements (for main device)
 
 topic: `te/device/main///m/sensor`
 
@@ -118,13 +119,37 @@ topic: `te/device/main///m/sensor`
 }
 ```
 
-#### ThingsBoard telemetry
+#### --> ThingsBoard telemetry
+
+topic: `tb/me/telemetry`
+
+```json
+{
+  "ts": 1602739847000,
+  "values": {
+    "sensor::temperature": 10
+  }
+}
+```
+
+#### thin-edge.io measurements (for child device)
+
+topic: `te/device/child1///m/sensor`
+
+```json
+{
+  "temperature": 10,
+  "time": "2020-10-15T05:30:47+00:00"
+}
+```
+
+#### --> ThingsBoard telemetry
 
 topic: `tb/gateway/telemetry`
 
 ```json
 {
-  "MAIN": [
+  "MAIN:device:child1": [
     "ts": 1602739847000,
     "values": {
       "sensor::temperature": 10
@@ -135,7 +160,7 @@ topic: `tb/gateway/telemetry`
 
 ### Twin -> Attributes
 
-#### thin-edge.io twin
+#### thin-edge.io twin (for main device)
 
 topic: `te/device/main///twin/software`
 
@@ -145,13 +170,33 @@ topic: `te/device/main///twin/software`
 }
 ```
 
-#### ThingsBoard attributes
+#### --> ThingsBoard attributes
+
+topic: `tb/me/attributes`
+
+```json
+{
+  "software::os": "debian"
+}
+```
+
+#### thin-edge.io twin (for child device)
+
+topic: `te/device/child1///twin/software`
+
+```json
+{
+  "os": "debian"
+}
+```
+
+#### --> ThingsBoard attributes
 
 topic: `tb/gateway/attributes`
 
 ```json
 {
-  "MAIN": {
+  "MAIN:device:child1": {
     "software::os": "debian"
   }
 }
@@ -159,7 +204,7 @@ topic: `tb/gateway/attributes`
 
 ### Alarms -> Telemetry
 
-#### thin-edge.io active alarms
+#### thin-edge.io active alarms (for main device)
 
 topic: `te/device/main///a/temperature_high`
 
@@ -171,48 +216,44 @@ topic: `te/device/main///a/temperature_high`
 }
 ```
 
-#### ThingsBoard active alarms
+#### --> ThingsBoard active alarms
 
-topic: `tb/gateway/telemetry`
+topic: `tb/me/telemetry`
 
 ```json
 {
-  "MAIN": [
-    "ts": 1602739847000,
-    "values": {
-      "alarm::temperature_high": {
-        "status": "active",
-        "severity": "critical",
-        "text": "Temperature is very high"
-      }
+  "ts": 1602739847000,
+  "values": {
+    "alarm::temperature_high": {
+      "status": "active",
+      "severity": "critical",
+      "text": "Temperature is very high"
     }
-  ]
+  }
 }
 ```
 
-#### thin-edge.io cleared alarms
+#### thin-edge.io cleared alarms (for main device)
 
 topic: `te/device/main///a/temperature_high`
 
 empty payload
 
-#### ThingsBoard cleared alarms
+#### --> ThingsBoard cleared alarms
 
-topic: `tb/gateway/telemetry`
+topic: `tb/me/telemetry`
 
 ```json
 {
-  "MAIN": [
-    "alarm::temperature_high": {
-      "status": "cleared",
-    }
-  ]
+  "alarm::temperature_high": {
+    "status": "cleared"
+  }
 }
 ```
 
 ### Events -> Telemetry
 
-#### thin-edge.io active events
+#### thin-edge.io active events (for main device)
 
 topic: `te/device/main///e/login_event`
 
@@ -223,20 +264,18 @@ topic: `te/device/main///e/login_event`
 }
 ```
 
-#### ThingsBoard active events
+#### --> ThingsBoard active events
 
-topic: `tb/gateway/telemetry`
+topic: `tb/me/telemetry`
 
 ```json
 {
-  "MAIN": [
-    "ts": 1602739847000,
-    "values": {
-      "event::login_event": {
-        "text": "A user just logged in"
-      }
+  "ts": 1602739847000,
+  "values": {
+    "event::login_event": {
+      "text": "A user just logged in"
     }
-  ]
+  }
 }
 ```
 
