@@ -43,7 +43,7 @@ mqtt.topics = [
 ]
 
 [[steps]]
-script = "dist/main.mjs"
+script = "${projectName}/dist/main.mjs"
 config.debug = 1440
 config.custom_prop = "my/prop"
 `.trimStart();
