@@ -4,14 +4,15 @@ This flow demonstrates how to map **thin-edge.io** data to **ThingsBoard**.
 
 ## Supported Mapping Features
 
-The flow supports mapping from/to Thin Edge JSON to/from the ThingsBoard Device/Gateway API.
+The flow supports mapping from Thin Edge JSON to the ThingsBoard Device/Gateway API.
 For the main device, Device API is selected, whilst for child devices and services, Gateway API is used.
 
 - [x] Measurements -> Telemetry
 - [x] Twin -> Attributes
 - [x] Alarms -> Telemetry
 - [x] Events -> Telemetry
-- [ ] Commands -> RPC (todo)
+
+For the support of RPC/commands, use a dedicated flow [ThingsBoard RPC flow](thingsboard-rpc/README.md).
 
 ## Flow Custom Configuration
 
@@ -84,8 +85,12 @@ topic telemetry out 1 tb/me/ v1/devices/me/
 topic attributes both 1 tb/me/ v1/devices/me/
 topic attributes/request/+ out 1 tb/me v1/devices/me/
 topic attributes/response/+ in 1 tb/me/ v1/devices/me/
-topic rpc/request/+ in 1 tb/me/ v1/devices/me/
-topic rpc/response/+ out 1 tb/me/ v1/devices/me/
+# Server-side RPC
+topic rpc/request/+ in 1 tb/me/server/ v1/devices/me/
+topic rpc/response/+ out 1 tb/me/server/ v1/devices/me/
+# Client-side RPC
+topic rpc/request/+ out 1 tb/me/client/ v1/devices/me/
+topic rpc/response/+ in 1 tb/me/client/ v1/devices/me/
 
 ### ThingsBoard Gateway API topics
 topic connect out 1 tb/gateway/ v1/gateway/

@@ -1,0 +1,23 @@
+{
+  "name": "thingsboard-server-rpc",
+  "version": "0.0.1",
+  "description": "This flow demonstrates how to integrate ThingsBoard server-side RPC with thin-edge.io commands.",
+  "source": "src/main.ts",
+  "module": "lib/main.js",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.ts --target=es2018 --bundle --outfile=lib/main.js --format=esm --drop-labels=DEV,TEST",
+    "test": "jest --coverageProvider=v8 --coverage"
+  },
+  "author": "thin-edge.io",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "esbuild": "^0.25.5",
+    "esbuild-register": "^3.6.0",
+    "jest": "^30.0.4",
+    "jest-esbuild": "^0.4.0",
+    "prettier": "3.6.2",
+    "typescript": "^5.8.3"
+  }
+}
