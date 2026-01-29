@@ -3,6 +3,8 @@ import { convertMeasurementToTelemetry } from "./converters/measurement";
 import { convertTwinToAttribute } from "./converters/twin";
 import { convertAlarmToTelemetry } from "./converters/alarm";
 import { convertEventToTelemetry } from "./converters/event";
+import { convertCommandResponseToRpc } from "./converters/command";
+import { handleThingsBoardTopic } from "./converters/command";
 import { getDeviceName } from "./utils";
 
 export interface Config {
@@ -23,8 +25,15 @@ export function onMessage(message: Message, context: FlowContext) {
     event_prefix = "",
   } = context.config;
   const payload = message.payload;
-  const parts = message.topic.split("/");
-  const [root, seg1, seg2, seg3, seg4, channel, type] = parts;
+  const topic = message.topic;
+
+  // Check if it's a ThingsBoard topic
+  if (topic.startsWith("tb/")) {
+    return handleThingsBoardTopic(topic, payload, main_device_name);
+  }
+
+  const parts = topic.split("/");
+  const [root, seg1, seg2, seg3, seg4, channel, type, cmdId] = parts;
   const entityId = `${seg1}/${seg2}/${seg3}/${seg4}`;
 
   const deviceName = getDeviceName(entityId, main_device_name);
@@ -63,6 +72,13 @@ export function onMessage(message: Message, context: FlowContext) {
         type,
         event_prefix,
         isMain,
+      );
+    case "cmd":
+      return convertCommandResponseToRpc(
+        payload,
+        deviceName,
+        cmdId,
+        main_device_name,
       );
     default:
       return [];
