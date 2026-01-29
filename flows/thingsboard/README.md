@@ -11,7 +11,8 @@ For the main device, Device API is selected, whilst for child devices and servic
 - [x] Twin -> Attributes
 - [x] Alarms -> Telemetry
 - [x] Events -> Telemetry
-- [ ] Commands -> RPC (todo)
+- [x] Server-side RPC -> Commands
+- [ ] Commands -> Client-side RPC (todo)
 
 ## Flow Custom Configuration
 
@@ -274,6 +275,113 @@ topic: `tb/me/telemetry`
   "values": {
     "event::login_event": {
       "text": "A user just logged in"
+    }
+  }
+}
+```
+
+### Server-side RPC -> Commands
+
+#### [Request] ThingsBoard RPC for the main device
+
+topic : `tb/me/rpc/request/{{rpc-id}}`
+
+```json
+{
+  "method": "deviceRestart",
+  "params": {
+    "execute": "now"
+  }
+}
+```
+
+#### --> [Request] thin-edge.io command for the main device
+
+topic: `te/device/main///cmd/deviceRestart/tb-mapper-{{rpc-id}}`
+
+```json
+{
+  "status": "init",
+  "execute": "now"
+}
+```
+
+#### [Response] thin-edge.io command for the main device
+
+topic: `te/device/main///cmd/deviceRestart/tb-mapper-{{rpc-id}}`
+
+```json
+{
+  "status": "successful",
+  "execute": "now"
+}
+```
+
+#### --> [Response] ThingsBoard RPC for the main device
+
+topic: `tb/devices/me/rpc/response/{{rpc-id}}`
+
+```json
+{
+  "status": "successful",
+  "execute": "now"
+}
+```
+
+#### [Request] ThingsBoard RPC for child devices
+
+topic : `tb/gateway/rpc`
+
+```json
+{
+  "device":"MAIN:device:child1",
+  "data":{
+    "id": {{rpc-id}},
+    "method":"setConfig",
+      "params": {
+        "key": "temperature",
+        "value": 25
+    }
+  }
+}
+```
+
+#### --> [Request] thin-edge.io command for child devices
+
+topic: `te/device/child1///cmd/setConfig/tb-mapper-{{rpc-id}}`
+
+```json
+{
+  "status": "init",
+  "key": "temperature",
+  "value": 25
+}
+```
+
+#### [Response] thin-edge.io command for child devices
+
+topic: `te/device/child1///cmd/setConfig/tb-mapper-{{rpc-id}}`
+
+```json
+{
+  "status": "failed",
+  "reason": "Permission denied"
+}
+```
+
+#### --> [Response] ThingsBoard RPC for child devices
+
+topic : `tb/gateway/rpc`
+
+```json
+{
+  "device":"MAIN:device:child1",
+  "data":{
+    "id": {{rpc-id}},
+    "method":"setConfig",
+      "params": {
+        "status": "failed",
+        "reason": "Permission denied"
     }
   }
 }
