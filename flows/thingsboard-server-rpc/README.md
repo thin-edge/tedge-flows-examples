@@ -23,6 +23,8 @@ and the response comes onto:
 tb/me/client/rpc/response/{{rpc-id}}
 ```
 
+Refer to the [end-to-end guide](./e2e-guide.md) to get a step-by-step guide on how to use this flow.
+
 ## Setup
 
 See the setup of [ThingsBoard Flow](../thingsboard/README.md).
