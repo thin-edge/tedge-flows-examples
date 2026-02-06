@@ -34,7 +34,13 @@ export function onMessage(message: Message, context: FlowContext) {
 
   // Handle thin-edge command
   if (channel === "cmd") {
-    return handleThinEdgeCommand(payload, deviceName, cmdId, main_device_name);
+    return handleThinEdgeCommand(
+      topic,
+      payload,
+      deviceName,
+      cmdId,
+      main_device_name,
+    );
   }
 
   // Not an RPC or command message

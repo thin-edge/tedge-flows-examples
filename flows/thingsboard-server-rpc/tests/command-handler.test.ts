@@ -18,15 +18,19 @@ describe("Map thin-edge command to ThingsBoard RPC responses", () => {
       main_device_name: "MAIN",
     });
     const output = flow.onMessage(message, context);
-    expect(output).toHaveLength(1);
+    expect(output).toHaveLength(2);
 
     expect(output[0].topic).toBe("tb/me/server/rpc/response/15");
-
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
       status: "successful",
       execute: "now",
     });
+
+    expect(output[1].topic).toBe(
+      "te/device/main///cmd/deviceRestart/tb-mapper-15",
+    );
+    expect(output[1].payload).toBe("");
   });
 
   test("child device", () => {
@@ -44,10 +48,9 @@ describe("Map thin-edge command to ThingsBoard RPC responses", () => {
       main_device_name: "MAIN",
     });
     const output = flow.onMessage(message, context);
-    expect(output).toHaveLength(1);
+    expect(output).toHaveLength(2);
 
     expect(output[0].topic).toBe("tb/gateway/rpc");
-
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
       device: "MAIN:device:child1",
@@ -59,6 +62,11 @@ describe("Map thin-edge command to ThingsBoard RPC responses", () => {
         },
       },
     });
+
+    expect(output[1].topic).toBe(
+      "te/device/child1///cmd/getValue/tb-mapper-42",
+    );
+    expect(output[1].payload).toBe("");
   });
 
   test("service", () => {
@@ -76,10 +84,9 @@ describe("Map thin-edge command to ThingsBoard RPC responses", () => {
       main_device_name: "MAIN",
     });
     const output = flow.onMessage(message, context);
-    expect(output).toHaveLength(1);
+    expect(output).toHaveLength(2);
 
     expect(output[0].topic).toBe("tb/gateway/rpc");
-
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
       device: "MAIN:device:child1:service:app1",
@@ -91,6 +98,11 @@ describe("Map thin-edge command to ThingsBoard RPC responses", () => {
         },
       },
     });
+
+    expect(output[1].topic).toBe(
+      "te/device/child1/service/app1/cmd/getValue/tb-mapper-42",
+    );
+    expect(output[1].payload).toBe("");
   });
 
   test("should ignore command responses if it is not from ThingsBoard", () => {

@@ -1,4 +1,5 @@
 export function handleThinEdgeCommand(
+  teTopic: string,
   payload: string,
   deviceName: string,
   cmdId: string,
@@ -24,7 +25,7 @@ export function handleThinEdgeCommand(
 
   // Determine if this is for the main device or a child device
   const isMainDevice = deviceName === mainDeviceName;
-  const responseTopic = isMainDevice
+  const tbResponseTopic = isMainDevice
     ? `tb/me/server/rpc/response/${rpcId}`
     : `tb/gateway/rpc`;
 
@@ -37,10 +38,15 @@ export function handleThinEdgeCommand(
         data: responseData,
       };
 
+  // TODO: The second message, clearing the retained cmd message, must be retained.
   return [
     {
-      topic: responseTopic,
+      topic: tbResponseTopic,
       payload: JSON.stringify(responsePayload),
+    },
+    {
+      topic: teTopic,
+      payload: "",
     },
   ];
 }
