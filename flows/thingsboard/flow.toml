@@ -1,4 +1,9 @@
-input.mqtt.topics = ["te/device/+/+/+/m/+", "te/device/+/+/+/twin/+", "te/device/+/+/+/a/+",  "te/device/+/+/+/e/+"]
+input.mqtt.topics = [
+    "te/device/+/+/+/m/+",
+    "te/device/+/+/+/twin/+",
+    "te/device/+/+/+/a/+",
+    "te/device/+/+/+/e/+",
+]
 
 [[steps]]
 builtin = "add-timestamp"
@@ -8,6 +13,7 @@ config.reformat = true
 
 [[steps]]
 script = "thingsboard/lib/main.js"
+# TODO: remove `config.main_device_name` once it is able to access to the main device name
 config.main_device_name = "{{MAIN_DEVICE_NAME}}"
 config.add_type_to_key = true
 config.alarm_prefix = "alarm::"

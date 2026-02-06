@@ -6,6 +6,7 @@ import { convertEventToTelemetry } from "./converters/event";
 import { getDeviceName } from "./utils";
 
 export interface Config {
+  // TODO: remove `main_device_name` once it is able to access to the main device name
   main_device_name?: string;
   add_type_to_key?: boolean;
   alarm_prefix?: string;
