@@ -3,7 +3,7 @@ import { convertMeasurementToTelemetry } from "./converters/measurement";
 import { convertTwinToAttribute } from "./converters/twin";
 import { convertAlarmToTelemetry } from "./converters/alarm";
 import { convertEventToTelemetry } from "./converters/event";
-import { getDeviceName } from "./utils";
+import { getDeviceName, formatTelemetryMessage } from "./utils";
 
 export interface Config {
   // TODO: remove `main_device_name` once it is able to access to the main device name
@@ -11,6 +11,7 @@ export interface Config {
   add_type_to_key?: boolean;
   alarm_prefix?: string;
   event_prefix?: string;
+  enable_heartbeat?: boolean;
 }
 export interface FlowContext extends Context {
   config: Config;
@@ -68,4 +69,15 @@ export function onMessage(message: Message, context: FlowContext) {
     default:
       return [];
   }
+}
+
+// Sending a heartbeat with interval
+export function onInterval(time: Date, context: FlowContext) {
+  const { main_device_name = "MAIN", enable_heartbeat = true } = context.config;
+
+  if (enable_heartbeat) {
+    const telemetryEntry = { heartbeat: 1 };
+    return formatTelemetryMessage(main_device_name, telemetryEntry, true);
+  }
+  return [];
 }
