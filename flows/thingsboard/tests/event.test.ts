@@ -5,10 +5,23 @@ import * as flow from "../src/main";
 jest.useFakeTimers();
 
 describe("Map Main Device Events to Device Me Telemetry API", () => {
+  let context: tedge.Context;
+
+  beforeEach(() => {
+    context = tedge.createContext({
+      main_device_name: "PROD_GATEWAY",
+      add_type_to_key: true,
+      event_prefix: "event::",
+    });
+
+    // mapper KV store should know the main device's name
+    context.mapper.set("tb-entity-to-name:device/main//", "PROD_GATEWAY");
+  });
+
   test("input with timestamp", () => {
     const message: tedge.Message = {
       time: tedge.mockGetTime(),
-      topic: "te/device/main///e/login_event",
+      topic: "tbflow/device/main///e/login_event",
       payload: JSON.stringify({
         text: "A user just logged in",
         time: 1602739847.0,
@@ -19,11 +32,7 @@ describe("Map Main Device Events to Device Me Telemetry API", () => {
         },
       }),
     };
-    const context = tedge.createContext({
-      main_device_name: "PROD_GATEWAY",
-      add_type_to_key: true,
-      event_prefix: "event::",
-    });
+
     const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
 
@@ -48,15 +57,14 @@ describe("Map Main Device Events to Device Me Telemetry API", () => {
   test("Do not add timestamp when it is missing", () => {
     const message: tedge.Message = {
       time: tedge.mockGetTime(),
-      topic: "te/device/main///e/login_event",
+      topic: "tbflow/device/main///e/login_event",
       payload: JSON.stringify({
         text: "A user just logged in",
       }),
     };
-    const context = tedge.createContext({
-      main_device_name: "PROD_GATEWAY",
-      add_type_to_key: true,
-    });
+
+    context.config.event_prefix = "";
+
     const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
 
@@ -72,18 +80,29 @@ describe("Map Main Device Events to Device Me Telemetry API", () => {
 });
 
 describe("Map Child/Service Events to Gateway Telemetry API", () => {
+  let context: tedge.Context;
+
+  beforeEach(() => {
+    context = tedge.createContext({
+      main_device_name: "PROD_GATEWAY",
+      add_type_to_key: true,
+    });
+
+    // Preregister device name to mapper KV store
+    context.mapper.set("tb-entity-to-name:device/main//", "PROD_GATEWAY");
+    context.mapper.set("tb-entity-to-name:device/child0//", "CHILD_0");
+    context.mapper.set("tb-entity-to-name:device/main/service/app1", "APP_1");
+  });
+
   test("child device without timestamp", () => {
     const message: tedge.Message = {
       time: tedge.mockGetTime(),
-      topic: "te/device/child0///e/login_event",
+      topic: "tbflow/device/child0///e/login_event",
       payload: JSON.stringify({
         text: "A user just logged in",
       }),
     };
-    const context = tedge.createContext({
-      main_device_name: "PROD_GATEWAY",
-      add_type_to_key: true,
-    });
+
     const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
 
@@ -91,7 +110,7 @@ describe("Map Child/Service Events to Gateway Telemetry API", () => {
 
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
-      "PROD_GATEWAY:device:child0": [
+      CHILD_0: [
         {
           login_event: {
             text: "A user just logged in",
@@ -104,16 +123,13 @@ describe("Map Child/Service Events to Gateway Telemetry API", () => {
   test("child device with timestamp", () => {
     const message: tedge.Message = {
       time: tedge.mockGetTime(),
-      topic: "te/device/child0///e/login_event",
+      topic: "tbflow/device/child0///e/login_event",
       payload: JSON.stringify({
         text: "A user just logged in",
         time: 1602739847.0,
       }),
     };
-    const context = tedge.createContext({
-      main_device_name: "PROD_GATEWAY",
-      add_type_to_key: true,
-    });
+
     const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
 
@@ -121,7 +137,7 @@ describe("Map Child/Service Events to Gateway Telemetry API", () => {
 
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
-      "PROD_GATEWAY:device:child0": [
+      CHILD_0: [
         {
           ts: 1602739847000,
           values: {
@@ -137,15 +153,12 @@ describe("Map Child/Service Events to Gateway Telemetry API", () => {
   test("service", () => {
     const message: tedge.Message = {
       time: tedge.mockGetTime(),
-      topic: "te/device/main/service/app1/e/login_event",
+      topic: "tbflow/device/main/service/app1/e/login_event",
       payload: JSON.stringify({
         text: "A user just logged in",
       }),
     };
-    const context = tedge.createContext({
-      main_device_name: "PROD_GATEWAY",
-      add_type_to_key: true,
-    });
+
     const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
 
@@ -153,7 +166,7 @@ describe("Map Child/Service Events to Gateway Telemetry API", () => {
 
     const payload = JSON.parse(output[0].payload);
     expect(payload).toStrictEqual({
-      "PROD_GATEWAY:device:main:service:app1": [
+      APP_1: [
         {
           login_event: {
             text: "A user just logged in",
