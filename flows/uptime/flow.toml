@@ -5,7 +5,7 @@ mqtt.topics = [
 ]
 
 [[steps]]
-script = "uptime/lib/main.js"
+script = "lib/main.js"
 interval = "10s"
 config.window_size_minutes = 1440
 config.stats_topic = "twin/onlineTracker"

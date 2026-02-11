@@ -10,7 +10,7 @@ mqtt.topics = [
 ]
 
 [[steps]]
-script = "thingsboard-registration/lib/main.js"
+script = "lib/main.js"
 config.main_device_name = "{{MAIN_DEVICE_NAME}}"
 config.default_device_profile = "default"
 config.max_pending_messages = 100

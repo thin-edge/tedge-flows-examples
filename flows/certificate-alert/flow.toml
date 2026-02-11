@@ -3,7 +3,7 @@ command = """sh -c \"tedge cert show | tr '\\n' '\\0'\""""
 interval = "600s"
 
 [[steps]]
-script = "certificate-alert/lib/main.js"
+script = "lib/main.js"
 
 # turn on additional debugging
 config.debug = false

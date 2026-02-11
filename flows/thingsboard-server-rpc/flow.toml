@@ -8,4 +8,4 @@ mqtt.topics = [
 ]
 
 [[steps]]
-script = "thingsboard-server-rpc/lib/main.js"
+script = "lib/main.js"
