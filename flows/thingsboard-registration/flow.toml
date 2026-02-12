@@ -1,0 +1,16 @@
+[input]
+mqtt.topics = [
+    "te/device/+/+/+",
+    "te/device/+/+/+/m/+",
+    "te/device/+/+/+/a/+",
+    "te/device/+/+/+/e/+",
+    "te/device/+/+/+/status/health",
+    "te/device/+/+/+/twin/+",
+    "te/device/+/+/+/cmd/+/+",
+]
+
+[[steps]]
+script = "thingsboard-registration/lib/main.js"
+config.main_device_name = "{{MAIN_DEVICE_NAME}}"
+config.default_device_profile = "default"
+config.max_pending_messages = 100
