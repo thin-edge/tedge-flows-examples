@@ -5,6 +5,26 @@ import * as flow from "../src/main";
 jest.useFakeTimers();
 
 describe("Map ThingsBoard RPC to thin-edge command", () => {
+  let context: tedge.Context;
+
+  beforeEach(() => {
+    context = tedge.createContext();
+
+    // mapper KV store should know the main device's name
+    context.mapper.set("tb-entity-to-name:device/main//", "MAIN");
+    context.mapper.set("tb-name-to-entity:MAIN", "device/main//");
+    context.mapper.set("tb-entity-to-name:device/child1//", "CHILD1");
+    context.mapper.set("tb-name-to-entity:CHILD1", "device/child1//");
+    context.mapper.set(
+      "tb-entity-to-name:device/child1/service/app1",
+      "CHILD1 APP1",
+    );
+    context.mapper.set(
+      "tb-name-to-entity:CHILD1 APP1",
+      "device/child1/service/app1",
+    );
+  });
+
   test("params is string", () => {
     const message: tedge.Message = {
       time: tedge.mockGetTime(),
@@ -14,9 +34,7 @@ describe("Map ThingsBoard RPC to thin-edge command", () => {
         params: "do",
       }),
     };
-    const context = tedge.createContext({
-      main_device_name: "MAIN",
-    });
+
     const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
 
@@ -41,9 +59,7 @@ describe("Map ThingsBoard RPC to thin-edge command", () => {
         },
       }),
     };
-    const context = tedge.createContext({
-      main_device_name: "MAIN",
-    });
+
     const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
 
@@ -62,13 +78,11 @@ describe("Map ThingsBoard RPC to thin-edge command", () => {
       time: tedge.mockGetTime(),
       topic: "tb/gateway/rpc",
       payload: JSON.stringify({
-        device: "MAIN:device:child1",
+        device: "CHILD1",
         data: { id: 0, method: "myRemoteMethod1", params: "myText" },
       }),
     };
-    const context = tedge.createContext({
-      main_device_name: "MAIN",
-    });
+
     const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
 
@@ -88,18 +102,16 @@ describe("Map ThingsBoard RPC to thin-edge command", () => {
       time: tedge.mockGetTime(),
       topic: "tb/gateway/rpc",
       payload: JSON.stringify({
-        device: "child1:device:child11:service:app1",
+        device: "CHILD1 APP1",
         data: { id: 0, method: "myRemoteMethod1", params: "myText" },
       }),
     };
-    const context = tedge.createContext({
-      main_device_name: "MAIN",
-    });
+
     const output = flow.onMessage(message, context);
     expect(output).toHaveLength(1);
 
     expect(output[0].topic).toBe(
-      "te/device/child11/service/app1/cmd/myRemoteMethod1/tb-mapper-0",
+      "te/device/child1/service/app1/cmd/myRemoteMethod1/tb-mapper-0",
     );
 
     const payload = JSON.parse(output[0].payload);
@@ -115,14 +127,12 @@ describe("Map ThingsBoard RPC to thin-edge command", () => {
       time: tedge.mockGetTime(),
       topic: "tb/gateway/rpc",
       payload: JSON.stringify({
-        device: "MAIN:device:child1",
+        device: "CHILD1",
         id: 0,
         data: { method: "myRemoteMethod1", params: "myText" },
       }),
     };
-    const context = tedge.createContext({
-      main_device_name: "MAIN",
-    });
+
     const output = flow.onMessage(message, context);
     expect(output).toHaveLength(0);
   });
