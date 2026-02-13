@@ -1,13 +1,11 @@
+errors.mqtt.topic = "te/errors"
+
 [input]
 mqtt.topics = [
-    "te/device/+/+/+/cmd/+/+",
+    "tbflow/device/+/+/+/cmd/+/+",
     "tb/me/server/rpc/request/+",
     "tb/gateway/rpc"
 ]
 
 [[steps]]
 script = "thingsboard-rpc/lib/main.js"
-# TODO: remove `config.main_device_name` once it is able to access to the main device name
-config.main_device_name = "{{MAIN_DEVICE_NAME}}"
-
-errors.mqtt.topic = "te/errors"
