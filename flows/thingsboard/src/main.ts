@@ -17,6 +17,8 @@ export interface FlowContext extends Context {
 }
 
 const ENTITY_TO_NAME_PREFIX = "tb-entity-to-name:";
+// This prefix is used to store the service health status
+export const ENTITY_TO_HEALTH_STATUS_PREFIX = "tb-health:";
 
 export function onMessage(message: Message, context: FlowContext) {
   const {
@@ -26,7 +28,8 @@ export function onMessage(message: Message, context: FlowContext) {
   } = context.config;
   const payload = message.payload;
   const parts = message.topic.split("/");
-  const [root, device, deviceId, service, serviceName, channel, type] = parts;
+  const [root, device, deviceId, service, serviceName, channel, type = ""] =
+    parts;
   const entityId = `${device}/${deviceId}/${service}/${serviceName}`;
   const regKey = `${ENTITY_TO_NAME_PREFIX}${entityId}`;
 
@@ -77,7 +80,13 @@ export function onMessage(message: Message, context: FlowContext) {
       );
     case "status":
       if (type === "health") {
-        return convertHealthToTelemetry(payload, deviceName, isMain);
+        return convertHealthToTelemetry(
+          context,
+          payload,
+          deviceName,
+          entityId,
+          isMain,
+        );
       } else {
         return [];
       }
@@ -88,14 +97,41 @@ export function onMessage(message: Message, context: FlowContext) {
 
 // Sending a heartbeat with interval
 export function onInterval(time: Date, context: FlowContext) {
+  let output: Message[] = [];
+
   const { enable_heartbeat = true } = context.config;
-  const deviceName = context.mapper.get(
+  if (!enable_heartbeat) return [];
+
+  for (const maybeHealthEntityId of context.script.keys()) {
+    if (maybeHealthEntityId.startsWith(ENTITY_TO_HEALTH_STATUS_PREFIX)) {
+      // Periodically update the health status telemetry for each entity that has health status in script KV store
+      const entityId = maybeHealthEntityId.replace(
+        ENTITY_TO_HEALTH_STATUS_PREFIX,
+        "",
+      );
+      const healthStatus = context.script.get(maybeHealthEntityId);
+      const deviceName = context.mapper.get(
+        `${ENTITY_TO_NAME_PREFIX}${entityId}`,
+      );
+      const telemetryEntry = { "health::status": healthStatus };
+      output.push(
+        ...formatTelemetryMessage(
+          deviceName,
+          telemetryEntry,
+          entityId === "device/main//",
+          time,
+        ),
+      );
+    }
+  }
+
+  const mainDeviceName = context.mapper.get(
     `${ENTITY_TO_NAME_PREFIX}device/main//`,
   );
+  const mainTelemetryEntry = { heartbeat: 1 };
+  output.push(
+    ...formatTelemetryMessage(mainDeviceName, mainTelemetryEntry, true, time),
+  );
 
-  if (enable_heartbeat) {
-    const telemetryEntry = { heartbeat: 1 };
-    return formatTelemetryMessage(deviceName, telemetryEntry, true);
-  }
-  return [];
+  return output;
 }

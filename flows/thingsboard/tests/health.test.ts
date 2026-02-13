@@ -50,9 +50,11 @@ describe("Map Service Health Status to ThingsBoard Telemetry", () => {
     expect(payload).toStrictEqual({
       C8Y_FIRMWARE_PLUGIN: [
         {
-          "health::status": "up",
-          "health::pid": 128,
-          "health::timestamp": 1770717141539,
+          ts: 1770717141539,
+          values: {
+            "health::status": "up",
+            "health::pid": 128,
+          },
         },
       ],
     });
@@ -123,9 +125,11 @@ describe("Map Service Health Status to ThingsBoard Telemetry", () => {
     expect(payload).toStrictEqual({
       TELEMETRY_PLUGIN: [
         {
-          "health::status": "up",
-          "health::pid": 256,
-          "health::timestamp": 1770717200123,
+          ts: 1770717200123,
+          values: {
+            "health::status": "up",
+            "health::pid": 256,
+          },
         },
       ],
     });
@@ -151,12 +155,14 @@ describe("Map Service Health Status to ThingsBoard Telemetry", () => {
     expect(payload).toStrictEqual({
       C8Y_FIRMWARE_PLUGIN: [
         {
-          "health::status": "up",
-          "health::pid": 999,
-          "health::timestamp": 1770717141500,
-          "health::memory_usage": 45.6,
-          "health::cpu_usage": 12.3,
-          "health::uptime": 86400,
+          ts: 1770717141500,
+          values: {
+            "health::status": "up",
+            "health::pid": 999,
+            "health::memory_usage": 45.6,
+            "health::cpu_usage": 12.3,
+            "health::uptime": 86400,
+          },
         },
       ],
     });
@@ -265,9 +271,11 @@ describe("Health Status Edge Cases", () => {
     expect(payload).toStrictEqual({
       APP_1: [
         {
-          "health::pid": 100,
-          "health::status": "unknown",
-          "health::timestamp": 1770717141500,
+          ts: 1770717141500,
+          values: {
+            "health::pid": 100,
+            "health::status": "unknown",
+          },
         },
       ],
     });
