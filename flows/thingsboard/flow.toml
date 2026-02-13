@@ -1,8 +1,11 @@
+errors.mqtt.topic = "te/errors"
+
 input.mqtt.topics = [
-    "te/device/+/+/+/m/+",
-    "te/device/+/+/+/twin/+",
-    "te/device/+/+/+/a/+",
-    "te/device/+/+/+/e/+",
+    "tbflow/device/+/+/+/m/+",
+    "tbflow/device/+/+/+/twin/+",
+    "tbflow/device/+/+/+/a/+",
+    "tbflow/device/+/+/+/e/+",
+    "tbflow/device/+/+/+/status/health"
 ]
 
 [[steps]]
@@ -13,10 +16,10 @@ config.reformat = true
 
 [[steps]]
 script = "thingsboard/lib/main.js"
-# TODO: remove `config.main_device_name` once it is able to access to the main device name
-config.main_device_name = "{{MAIN_DEVICE_NAME}}"
+
+interval = "10m"
 config.add_type_to_key = true
 config.alarm_prefix = "alarm::"
 config.event_prefix = "event::"
+config.enable_heartbeat = true
 
-errors.mqtt.topic = "te/errors"

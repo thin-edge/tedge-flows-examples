@@ -1,45 +1,50 @@
 import { Message, Context } from "../../common/tedge";
 import { handleThinEdgeCommand } from "./thinedge-command-handler";
 import { handleThingsBoardTopic } from "./thingsboard-rpc-handler";
-import { getDeviceName } from "./utils";
 
-export interface Config {
-  // TODO: remove it once it is able to access to the main device name
-  main_device_name?: string;
-}
+export interface Config {}
 
 export interface FlowContext extends Context {
   config: Config;
 }
 
+const ENTITY_TO_NAME_PREFIX = "tb-entity-to-name:";
+
 export function onMessage(message: Message, context: FlowContext) {
-  const { main_device_name = "MAIN" } = context.config;
   const topic = message.topic;
   const payload = message.payload;
+  const mainDeviceName = context.mapper.get(
+    `${ENTITY_TO_NAME_PREFIX}device/main//`,
+  );
 
   // Ignore empty messages (cleared retained messages)
-  if (payload.length === 0) {
+  if (payload.length === 0) return [];
+
+  if (!mainDeviceName) {
+    console.error(
+      "Main device is not initialized. It should have been initialized by 'thingsboard-registration flow'.",
+    );
     return [];
   }
 
   // Handle ThingsBoard RPC requests
   if (topic.startsWith("tb/")) {
-    return handleThingsBoardTopic(topic, payload, main_device_name);
+    return handleThingsBoardTopic(context, topic, payload);
   }
 
   const parts = topic.split("/");
   const [root, seg1, seg2, seg3, seg4, channel, type, cmdId] = parts;
   const entityId = `${seg1}/${seg2}/${seg3}/${seg4}`;
-  const deviceName = getDeviceName(entityId, main_device_name);
+  const deviceName = context.mapper.get(`${ENTITY_TO_NAME_PREFIX}${entityId}`);
 
   // Handle thin-edge command
-  if (channel === "cmd") {
+  if (topic.startsWith("tbflow/") && channel === "cmd") {
     return handleThinEdgeCommand(
-      topic,
+      topic.replace("tbflow/", "te/"),
       payload,
       deviceName,
       cmdId,
-      main_device_name,
+      mainDeviceName,
     );
   }
 
