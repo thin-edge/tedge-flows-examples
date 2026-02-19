@@ -28,7 +28,7 @@ graph TD
     Dashboard -->|"1. Initiate RPC"| TB_MQTT
     TB_MQTT -->|"2. v1/devices/me/rpc/request/{id}"| Bridge
     Bridge -->|"3. tb/me/server/rpc/request/{id}"| Flows
-    Flows -->|"4. te/device/main///cmd/<method>/tb-mapper-{id} (status: init)"| Workflow
+    Flows -->|"4. te/device/main///cmd/{method}/tb-mapper-{id} (status: init)"| Workflow
 
     %% Communication Flow: Execution & Response
     Workflow -.->|"5. Processing"| Workflow
@@ -44,15 +44,15 @@ Before you begin, ensure you have the following:
 
 1.  **thin-edge.io** installed: If not, follow the [installation guide](https://thin-edge.github.io/thin-edge.io/install/).
 2.  **ThingsBoard Community Edition** running: You can run it locally using Docker or use a cloud instance.
-3.  **thingsboard-server-rpc** flow installed: If not, follow the installation guide using [`tedge-oscar`](https://github.com/thin-edge/tedge-oscar).
+3.  **thingsboard-registration** and **thingsboard-server-rpc** flows installed: If not, follow the installation guide using [`tedge-oscar`](https://github.com/thin-edge/tedge-oscar).
 
-### A. Update Flow Configuration
+### A. Configure Registration Flow
 
-Provide your main device (gateway device) name to the flow definition as described [here](../thingsboard/README.md#flow-configuration).
+Provide your main device (gateway device) name to the flow definition as described [here](../thingsboard-registration/README.md#flow-configuration).
 
 ### B. Create Mosquitto Bridge Configuration
 
-Create a configuration file to bridge ThingsBoard RPC topics to your local MQTT broker as described [here](../thingsboard/README.md#mosquitto-bridge-configuration).
+Create a configuration file to bridge ThingsBoard RPC topics to your local MQTT broker as described [here](../thingsboard-registration/README.md#mosquitto-bridge-configuration).
 After creating this file, restart the `mosquitto` service or reload the configuration.
 
 ### C. Create the Workflow Definition
@@ -109,13 +109,14 @@ chmod +x /etc/tedge/operations/getTedgeVersion.sh
    If it's `1`, the connection to ThingsBoard is up.
    If it's `0`, check your mosquitto bridge configuration is correct.
 
-2. Run `tedge flows list` to confirm if `thingsboard-rpc` flow is installed.
-   If the output is like below, it's installed.
+2. Run `tedge flows list` to confirm if `thingsboard-registration` flow and `thingsboard-server-rpc` flow are installed.
 
    ```sh
    $ tedge flows list
-   /etc/tedge/mappers/flows/flows/thingsboard-rpc.toml
-           /etc/tedge/mappers/flows/flows/thingsboard-rpc.js
+    /etc/tedge/mappers/flows/flows/thingsboard-server-rpc.toml
+            /etc/tedge/mappers/flows/flows/thingsboard-server-rpc.js
+    /etc/tedge/mappers/flows/flows/thingsboard-registration.toml
+            /etc/tedge/mappers/flows/flows/thingsboard-registration.js
    ```
 
 ## Detailed Execution Flow
@@ -128,7 +129,7 @@ While doing the steps, subscribing to local bus is recommended to monitor how MQ
 tedge mqtt sub "#"
 ```
 
-### Step 1 & 2: Initiate RPC from ThingsBoard
+### Initiate RPC from ThingsBoard
 
 When you trigger an RPC from the ThingsBoard Dashboard (Step 1), the platform publishes a message to the broker (Step 2).
 
@@ -142,37 +143,37 @@ The platform then publishes a message to the broker (Step 2).
 - Topic: `v1/devices/me/rpc/request/{id}`
 - Payload (Example): `{"method": "getTedgeVersion", "params": null}`
 
-### Step 3: Local Bridge Mapping
+### Local Bridge Mapping
 
 The pre-configured Mosquitto Bridge automatically intercepts the cloud message and maps it to a local topic.
 At this stage, the RPC request is available within the edge gateway's local MQTT bus.
 
 - Local Topic (Mapped): `tb/me/server/rpc/request/{id}`
 
-### Step 4: Transform to thin-edge.io Command (tedge-flows)
+### Transform to thin-edge.io Command (tedge-flows)
 
-The **tedge-flows** engine subscribes to the local bridged topic.
+The **thingsboard-servcer-rpc flow** subscribes to the local bridged topic.
 It extracts the `method` and `id` to create a thin-edge.io command with `init` state.
 
 - Output Topic: `te/device/main///cmd/getTedgeVersion/tb-mapper-{id}`
 - Payload: `{"status": "init"}`
 
-### Step 5 & 6: Workflow Execution
+### Workflow Execution
 
-The **tedge-workflow** engine detects the init status and starts the process (Step 5).
+The **thin-edge.io workflow** detects the command with init status and starts the process (Step 5).
 Once the operation is complete (Step 6), it updates the command status.
 
 - Example Workflow Logic: Executes `tedge --version` and captures the output.
 - Resulting Status: The message on `te/device/main///cmd/getTedgeVersion/tb-mapper-{id}` is updated to `"status": "successful"`.
 
-### Step 7: Convert Workflow Result to RPC Response
+### Convert Workflow Result to RPC Response
 
-**tedge-flows** subscribes to `te/device/main///cmd/+/+` and listens for the `successful` or `failed` final states and prepares the response payload for ThingsBoard.
+**thingsboard-server-rpc** subscribes to `tbflow/device/main///cmd/+/+` and listens for the `successful` or `failed` final states and prepares the response payload for ThingsBoard.
 
 - Output Topic: `tb/me/server/rpc/response/{id}`
 - Response Payload: `{"result": "thin-edge.io v1.2.3", "status": "successful"}`
 
-### Step 8 & 9: Complete the RPC Loop
+### Complete the RPC Loop
 
 The Mosquitto Bridge automatically pushes the local response back to the cloud (Step 8).
 
@@ -182,7 +183,7 @@ Finally, ThingsBoard receives the response, matching it with the original {id}, 
 
 ![RPC debug terminal with result](./images/debugterminal-2.png)
 
-## Handling RPC for Non-gateway Devices
+## Handling RPC for Child Devices / Services
 
 When an RPC is targeted at a non-gateway device connected via the Gateway, ThingsBoard uses a gateway-specific topic structure.
 
@@ -205,8 +206,3 @@ Unlike direct RPC, the payload includes the device's name:
   }
 }
 ```
-
-### Flow Adaptation
-
-In this scenario, tedge-flows subscribes to `tb/gateway/rpc` and parse the nested data object to trigger the workflow on the correct device
-(e.g., `te/device/child1///cmd/getTedgeVersion/tb-mapper-123`).

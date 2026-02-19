@@ -2,6 +2,11 @@
 
 This flow demonstrates how to integrate **ThingsBoard server-side RPC** with **thin-edge.io commands**.
 
+This RPC flow is designed to work in conjunction with the following components:
+
+- [ThingsBoard Registration flow](../thingsboard-registration/README.md): Handles device registration and message buffering.
+- [ThingsBoard Telemetry Flow](../thingsboard/README.md): Handles telemetry and attribute updates.
+
 ## Supported Mapping Features
 
 The flow supports mapping from the ThingsBoard Device/Gateway server-side RPC requests to the thin-edge.io commands,
@@ -25,9 +30,12 @@ tb/me/client/rpc/response/{{rpc-id}}
 
 Refer to the [end-to-end guide](./e2e-guide.md) to get a step-by-step guide on how to use this flow.
 
+On the top of top of this flow, [ThingsBoard Registration flow](../thingsboard-registration/README.md) is required.
+For the support of Telemetry/Attributes, use a dedicated flow [ThingsBoard Telemetry flow](../thingsboard/README.md).
+
 ## Setup
 
-See the setup of [ThingsBoard Flow](../thingsboard/README.md).
+See the setup of [ThingsBoard Registration Flow](../thingsboard-registration/README.md#setup).
 
 ## Example Conversion
 
@@ -59,7 +67,7 @@ topic: `te/device/main///cmd/restart/tb-mapper-{{rpc-id}}`
 
 #### [Response] thin-edge.io command for the main device
 
-topic: `te/device/main///cmd/restart/tb-mapper-{{rpc-id}}`
+topic: `tbflow/device/main///cmd/restart/tb-mapper-{{rpc-id}}`
 
 ```json
 {
@@ -111,7 +119,7 @@ topic: `te/device/child1///cmd/setConfig/tb-mapper-{{rpc-id}}`
 
 #### [Response] thin-edge.io command for child devices
 
-topic: `te/device/child1///cmd/setConfig/tb-mapper-{{rpc-id}}`
+topic: `tbflow/device/child1///cmd/setConfig/tb-mapper-{{rpc-id}}`
 
 ```json
 {
