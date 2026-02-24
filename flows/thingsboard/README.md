@@ -1,6 +1,11 @@
-# ThingsBoard Flow
+# ThingsBoard Telemetry Flow
 
-This flow demonstrates how to map **thin-edge.io** data to **ThingsBoard**.
+This flow demonstrates how to map **thin-edge.io** data to **ThingsBoard** telemetry/attribute.
+
+This telemetry flow is designed to work in conjunction with the following components:
+
+- [ThingsBoard Registration flow](../thingsboard-registration/README.md): Handles device registration and message buffering.
+- [ThingsBoard Server RPC Flow](../thingsboard-server-rpc/README.md): Manages remote procedure calls and command execution.
 
 ## Supported Mapping Features
 
@@ -11,15 +16,19 @@ For the main device, Device API is selected, whilst for child devices and servic
 - [x] Twin -> Attributes
 - [x] Alarms -> Telemetry
 - [x] Events -> Telemetry
+- [x] Health Statuses -> Telemetry
+- [x] Publishing heartbeats of the main device periodically
+- [x] Publishing health status of the registered services periodically
 
-For the support of RPC/commands, use a dedicated flow [ThingsBoard RPC flow](thingsboard-rpc/README.md).
+On the top of top of this flow, [ThingsBoard Registration flow](../thingsboard-registration/README.md) is required.
+For the support of RPC/commands, use a dedicated flow [ThingsBoard RPC flow](../thingsboard-server-rpc/README.md).
 
 ## Flow Custom Configuration
 
 - `add_type_to_key`: `<true|false>`
   - Determines whether the measurements/twin type is prefixed to the keys.
   - For example,
-    - topic: `te/device/main///m/sensor`
+    - input topic: `tbflow/device/main///m/sensor`
     - payload: `{"temperature: 10}`
     - If set to `true`, the converted payload becomes: `{"sensor::temperature": 10}`
 
@@ -28,94 +37,35 @@ For the support of RPC/commands, use a dedicated flow [ThingsBoard RPC flow](thi
   - To distinguish alarms and events from other data types, the step prepends these prefixes to the type from the MQTT topic to form the telemetry key used by ThingsBoard.
     Refer to the [alarm example](#alarms---telemetry) and [event example](#events---telemetry) to see how this works (`alarm::` and `event::` respectively).
 
+- `enable_heartbeat`: `<true|false>`
+- `interval`: `<time>`
+  - If enabled, a heartbeat message will be published in a specified interval to the gateway device.
+  - Also, status updates messages will be published for the registered services if their `status/health` are reported.
+
 - If you don't want to add timestamp to telemetry, remove the builtin `add-timestamp` step from `flow.toml`.
 
 ## Setup
 
-### ThingsBoard Setup
+1. ThingsBoard Setup
 
-Register the main device beforehand. It must be **gateway**.
-The device ID and access token will be used in the later mosquitto bridge setup.
+   Register the main device beforehand. It must be **gateway**.
+   The device ID and access token will be used in the later mosquitto bridge setup.
 
-### Flow Configuration
+2. Install [ThingsBoard Registration flow](../thingsboard-registration/README.md)
 
-Set `config.main_device_name` to your device's main name in `flow.toml`.
-
-```toml
-config.main_device_name = "{{MAIN_DEVICE_NAME}}"
-```
-
-If you are unsure which value to use, run the following command to get your device ID:
-
-```sh
-tedge config get device.id
-```
-
-**Note**: this settings is a workaround to tell the main device's name to the flow. Once the access to the entity store is implemented, this settings will be removed.
-
-### Mosquitto Bridge Configuration
-
-You must manually create a mosquitto bridge configuration.
-Replace `{{URL}}`, `{{DEVICE_ID}}`, and `{{ACCESS_TOKEN}}` for your tenant.
-
-File: `/etc/tedge/mosquitto-conf/thingsboard-bridge.conf`
-
-Content:
-
-```sh
-### Bridge
-connection edge_to_things
-address {{URL}}:8883
-bridge_capath /etc/ssl/certs
-remote_clientid {{DEVICE_ID}}
-local_clientid ThingsBoard
-remote_username {{ACCESS_TOKEN}}
-try_private false
-start_type automatic
-cleansession true
-local_cleansession false
-notifications true
-notifications_local_only true
-notification_topic te/device/main/service/mosquitto-things-bridge/status/health
-bridge_attempt_unsubscribe false
-
-### Topics
-### ThingsBoard Device API topics (for the main device)
-topic telemetry out 1 tb/me/ v1/devices/me/
-topic attributes both 1 tb/me/ v1/devices/me/
-topic attributes/request/+ out 1 tb/me v1/devices/me/
-topic attributes/response/+ in 1 tb/me/ v1/devices/me/
-# Server-side RPC
-topic rpc/request/+ in 1 tb/me/server/ v1/devices/me/
-topic rpc/response/+ out 1 tb/me/server/ v1/devices/me/
-# Client-side RPC
-topic rpc/request/+ out 1 tb/me/client/ v1/devices/me/
-topic rpc/response/+ in 1 tb/me/client/ v1/devices/me/
-
-### ThingsBoard Gateway API topics
-topic connect out 1 tb/gateway/ v1/gateway/
-topic disconnect out 1 tb/gateway/ v1/gateway/
-topic telemetry out 1 tb/gateway/ v1/gateway/
-topic attributes both 1 tb/gateway/ v1/gateway/
-topic attributes/request/+ out 1 tb/gateway/ v1/gateway/
-topic attributes/response/+ in 1 tb/gateway/ v1/gateway/
-topic rpc in 1 tb/gateway/ v1/gateway/
-topic claim out 1 tb/gateway/ v1/gateway/
-```
-
-Note: After creating the bridge configuration file, you must restart the `mosquitto` service.
-
-```sh
-sudo systemctl restart mosquitto
-```
+   Finish the [setup of ThingsBoard Registration flow](../thingsboard-registration/README.md#setup).
 
 ## Example Conversion
+
+**Note**:
+All input topics from thin-edge.io (`te/...`) are forwarded through the registration flow and the prefix is changed to `tbflow/`.
+This ensures that any message arriving at this flow belongs to a device that has already been successfully registered and validated.
 
 ### Measurements -> Telemetry
 
 #### thin-edge.io measurements (for main device)
 
-topic: `te/device/main///m/sensor`
+topic: `tbflow/device/main///m/sensor`
 
 ```json
 {
@@ -139,7 +89,7 @@ topic: `tb/me/telemetry`
 
 #### thin-edge.io measurements (for child device)
 
-topic: `te/device/child1///m/sensor`
+topic: `tbflow/device/child1///m/sensor`
 
 ```json
 {
@@ -167,7 +117,7 @@ topic: `tb/gateway/telemetry`
 
 #### thin-edge.io twin (for main device)
 
-topic: `te/device/main///twin/software`
+topic: `tbflow/device/main///twin/software`
 
 ```json
 {
@@ -187,7 +137,7 @@ topic: `tb/me/attributes`
 
 #### thin-edge.io twin (for child device)
 
-topic: `te/device/child1///twin/software`
+topic: `tbflow/device/child1///twin/software`
 
 ```json
 {
@@ -211,7 +161,7 @@ topic: `tb/gateway/attributes`
 
 #### thin-edge.io active alarms (for main device)
 
-topic: `te/device/main///a/temperature_high`
+topic: `tbflow/device/main///a/temperature_high`
 
 ```json
 {
@@ -240,7 +190,7 @@ topic: `tb/me/telemetry`
 
 #### thin-edge.io cleared alarms (for main device)
 
-topic: `te/device/main///a/temperature_high`
+topic: `tbflow/device/main///a/temperature_high`
 
 empty payload
 
@@ -260,7 +210,7 @@ topic: `tb/me/telemetry`
 
 #### thin-edge.io active events (for main device)
 
-topic: `te/device/main///e/login_event`
+topic: `tbflow/device/main///e/login_event`
 
 ```json
 {
@@ -284,20 +234,42 @@ topic: `tb/me/telemetry`
 }
 ```
 
-## Device Name Mapping Rules
+### Health Status -> Telemetry
 
-This flow uses predefined transformation rules to derive ThingsBoard device names from thin-edge.io entity IDs.
+#### thin-edge.io health status (for services)
 
-Device names are generated by filtering out empty path segments and joining the remaining parts with colons (`:`).
-The only exception is the main device, which defaults to a configurable alias defined in `config.main_device_name`.
+topic: `tbflow/device/main/service/foo/status/health`
 
-Example: (Assuming `config.main_device_name` is set to **MAIN**)
+```json
+{
+  "pid": 133,
+  "status": "up",
+  "time": 1771494587.4724746
+}
+```
 
-| thin-edge.io Topic Pattern         | ThingsBoard Name                |
-| :--------------------------------- | :------------------------------ |
-| `te/device/main///m/`              | MAIN                            |
-| `te/device/child1///m/`            | MAIN:device:child1              |
-| `te/device/main/service/app1/m/`   | MAIN:device:main:service:app1   |
-| `te/device/child1/service/app2/m/` | MAIN:device:child1:service:app2 |
+#### --> ThingsBoard Telemetry
 
-If you want a custom logic for naming, update `getDeviceName()` in `src/main.ts`.
+topic: `tb/gateway/telemetry`
+
+```json
+{
+  "MAIN:device:main:service:foo": [
+    "ts": 1771494587472,
+    "values": {
+      "health::status": "up",
+      "health::pid": 133
+    }
+  ]
+}
+```
+
+### Periodic heartbeat to main device
+
+topic: `tb/me/telemetry`
+
+```json
+{
+  "heartbeat": 1
+}
+```

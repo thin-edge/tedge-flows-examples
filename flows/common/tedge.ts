@@ -6,6 +6,7 @@ export interface Flow {
 interface StateInterface {
   get(key: string): any;
   set(key: string, value: any): void;
+  keys(): string[];
 }
 
 export interface ContextInterface {
@@ -24,6 +25,9 @@ class ContextObject {
   }
   public set(key: string, value: any): void {
     return (this._state[key] = value);
+  }
+  public keys(): string[] {
+    return Object.keys(this._state);
   }
 }
 
