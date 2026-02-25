@@ -94,6 +94,10 @@ export function encodePayload(payload?: string): Uint8Array {
   return new TextEncoder().encode(payload);
 }
 
+export function encodeJsonPayload(payload?: any): Uint8Array {
+  return encodePayload(JSON.stringify(payload));
+}
+
 export function decodePayload(payload?: Uint8Array | string): string {
   if (typeof payload === "string") return payload;
   return new TextDecoder().decode(payload);
