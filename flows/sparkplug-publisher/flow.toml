@@ -26,6 +26,11 @@ mqtt.topics = [
     "te/device/+///e/+",
     # Alarms — te/device/{id}///a/{alarmType}  (raised or cleared)
     "te/device/+///a/+",
+    # Sparkplug B NCMD rebirth command from a Host Application
+    # Topic: spBv1.0/{groupId}/NCMD/{edgeNodeId}
+    # Wildcards used because groupId/edgeNodeId are runtime config values;
+    # the handler validates they match the configured values before acting.
+    "spBv1.0/+/NCMD/+",
 ]
 
 [[steps]]
