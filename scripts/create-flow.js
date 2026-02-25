@@ -18,6 +18,9 @@ const packageTemplate = {
   source: "src/main.ts",
   module: "lib/main.js",
   type: "module",
+  tedge: {
+    mapper: "local",
+  },
   scripts: {
     build:
       "esbuild src/main.ts --target=es2018 --bundle --outfile=lib/main.js --format=esm --drop-labels=DEV,TEST",
