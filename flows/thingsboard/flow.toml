@@ -15,7 +15,7 @@ config.format = "unix"
 config.reformat = true
 
 [[steps]]
-script = "thingsboard/lib/main.js"
+script = "lib/main.js"
 
 interval = "10m"
 config.add_type_to_key = true
