@@ -1,4 +1,4 @@
-import { Message, Context } from "../../common/tedge";
+import { Message, Context, decodePayload } from "../../common/tedge";
 import { convertDeviceRegistration } from "./registration";
 
 export interface Config {
@@ -163,7 +163,7 @@ function storePendingMessage(
 
 // Helper function to safely parse payload
 function parsePayload(message: Message): any {
-  const payload = message.payload.trim();
+  const payload = decodePayload(message.payload).trim();
 
   // Handle empty payload (retained message cleared)
   if (payload.length === 0) return {};

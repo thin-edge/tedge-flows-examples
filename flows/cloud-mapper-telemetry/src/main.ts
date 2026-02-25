@@ -1,4 +1,9 @@
-import { Message, Context, isMainDevice } from "../../common/tedge";
+import {
+  Message,
+  Context,
+  isMainDevice,
+  decodeJsonPayload,
+} from "../../common/tedge";
 
 export interface Config {
   cloud_topic_prefix?: string;
@@ -27,7 +32,7 @@ function convertToMetrics(payload: object, timestamp = "", prefix = ""): any {
   return metrics;
 }
 
-export function onMessage(message: Message, context: FlowContext) {
+export function onMessage(message: Message, context: FlowContext): Message[] {
   const { cloud_topic_prefix = "azeg/DDATA", pretty_print = false } =
     context.config || {};
   if (isMainDevice(message.topic)) {
@@ -37,7 +42,7 @@ export function onMessage(message: Message, context: FlowContext) {
     return [];
   }
 
-  const payload = JSON.parse(`${message.payload}`);
+  const payload = decodeJsonPayload(message.payload);
   const receivedAt = message.time?.toISOString();
   const timestamp = payload.time || receivedAt;
 
@@ -48,6 +53,7 @@ export function onMessage(message: Message, context: FlowContext) {
     return [];
   }
   output.push({
+    time: new Date(),
     topic: [cloud_topic_prefix, cloudID].join("/"),
     payload: JSON.stringify(
       {

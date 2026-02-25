@@ -1,7 +1,7 @@
 /*
   Calculate the total of the input values
 */
-import { Message, Context } from "../../common/tedge";
+import { Message, Context, decodePayload } from "../../common/tedge";
 import {
   build,
   Substitution,
@@ -24,7 +24,10 @@ function buildTopic(externalID: string, ...paths: string[]): string {
   return ["te", "device", externalID, "", "", ...paths].join("/");
 }
 
-export async function onMessage(message: Message, context: FlowContext) {
+export async function onMessage(
+  message: Message,
+  context: FlowContext,
+): Promise<Message[]> {
   const { config } = context;
   const rule: DynamicMappingRule = {
     targetTopic: config.targetTopic,
@@ -38,7 +41,7 @@ export async function onMessage(message: Message, context: FlowContext) {
 
   if (rule.targetTopic) {
     topic = await evaluate(
-      message.payload,
+      decodePayload(message.payload),
       rule.targetTopic,
       message.topic.split("/"),
     );
@@ -72,8 +75,11 @@ export async function onMessage(message: Message, context: FlowContext) {
     }
   }
 
-  return {
-    topic,
-    payload: JSON.stringify(output),
-  };
+  return [
+    {
+      time: new Date(),
+      topic,
+      payload: JSON.stringify(output),
+    },
+  ];
 }

@@ -1,4 +1,4 @@
-import { Message, Context } from "../../common/tedge";
+import { Message, Context, decodePayload } from "../../common/tedge";
 import { convertMeasurementToTelemetry } from "./converters/measurement";
 import { convertTwinToAttribute } from "./converters/twin";
 import { convertAlarmToTelemetry } from "./converters/alarm";
@@ -20,13 +20,13 @@ const ENTITY_TO_NAME_PREFIX = "tb-entity-to-name:";
 // This prefix is used to store the service health status
 export const ENTITY_TO_HEALTH_STATUS_PREFIX = "tb-health:";
 
-export function onMessage(message: Message, context: FlowContext) {
+export function onMessage(message: Message, context: FlowContext): Message[] {
   const {
     add_type_to_key = true,
     alarm_prefix = "",
     event_prefix = "",
   } = context.config;
-  const payload = message.payload;
+  const payload = decodePayload(message.payload);
   const parts = message.topic.split("/");
   const [root, device, deviceId, service, serviceName, channel, type = ""] =
     parts;

@@ -38,7 +38,7 @@ describe("Map Main Device Events to Device Me Telemetry API", () => {
 
     expect(output[0].topic).toBe("tb/me/telemetry");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       ts: 1602739847000,
       values: {
@@ -70,7 +70,7 @@ describe("Map Main Device Events to Device Me Telemetry API", () => {
 
     expect(output[0].topic).toBe("tb/me/telemetry");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       login_event: {
         text: "A user just logged in",
@@ -108,7 +108,7 @@ describe("Map Child/Service Events to Gateway Telemetry API", () => {
 
     expect(output[0].topic).toBe("tb/gateway/telemetry");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       CHILD_0: [
         {
@@ -135,7 +135,7 @@ describe("Map Child/Service Events to Gateway Telemetry API", () => {
 
     expect(output[0].topic).toBe("tb/gateway/telemetry");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       CHILD_0: [
         {
@@ -164,7 +164,7 @@ describe("Map Child/Service Events to Gateway Telemetry API", () => {
 
     expect(output[0].topic).toBe("tb/gateway/telemetry");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       APP_1: [
         {

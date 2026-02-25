@@ -2,7 +2,13 @@
   Serialize json messages into protobuf
 */
 // import * as proto from 'protobufjs';
-import { Message, Context } from "../../common/tedge";
+import {
+  Message,
+  Context,
+  decodePayload,
+  decodeJsonPayload,
+  encodePayload,
+} from "../../common/tedge";
 import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
 import { base64Decode, base64Encode } from "@bufbuild/protobuf/wire";
 import {
@@ -25,11 +31,11 @@ function onSetpoint(
   message: Message,
   { topic = "out/proto/actuator", base64 = false },
 ): Message[] {
-  let binPayload;
+  let binPayload: Uint8Array;
   if (base64) {
-    binPayload = base64Decode(message.payload);
+    binPayload = base64Decode(decodePayload(message.payload));
   } else {
-    binPayload = message.raw_payload;
+    binPayload = message.payload as Uint8Array;
   }
 
   let setPoint = fromBinary(SensorMessageSchema, binPayload);
@@ -53,9 +59,9 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
 
   let data;
   if (payloadType == "environment") {
-    const payload = JSON.parse(message.payload);
+    const payload = decodeJsonPayload(message.payload);
     data = {
-      case: "environment",
+      case: "environment" as const,
       value: create(EnvironmentSensorSchema, {
         ...payload,
         temperature: payload.temperature,
@@ -63,9 +69,9 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
       }),
     };
   } else if (payloadType == "location") {
-    const payload = JSON.parse(message.payload);
+    const payload = decodeJsonPayload(message.payload);
     data = {
-      case: "location",
+      case: "location" as const,
       value: create(LocationSensorSchema, {
         location: {
           latitude: payload.latitude,
@@ -88,9 +94,6 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   const outputTopic = topic.replaceAll("{{type}}", payloadType);
 
   let binPayload = toBinary(SensorMessageSchema, sensor);
-  if (base64) {
-    binPayload = base64Encode(binPayload);
-  }
 
   return [
     {

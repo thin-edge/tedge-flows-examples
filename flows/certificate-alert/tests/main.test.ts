@@ -59,75 +59,71 @@ describe("flow tests", () => {
     flow = require("../src/main");
   });
 
+  let context = tedge.createContext();
+
   test("Publish certificate meta information to json - c8y-ca", () => {
+    context.config.disable_alarms = true;
     const output = flow.onMessage(
       {
         time: tedge.mockGetTime(),
         topic: "",
         payload: inputCumulocityCA,
       },
-      {
-        config: {
-          disable_alarms: true,
-        },
-      },
+      context,
     );
     expect(output).toHaveLength(1);
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(output[0].topic).toBe("te/device/main///twin/tedge_Certificate");
-    expect(output[0].retain).toBe(true);
+    expect(output[0].mqtt?.retain).toBe(true);
     expect(payload).toStrictEqual(expectedCumulocityCAOutput);
   });
 
   test("Publish certificate meta information to json - self signed", () => {
+    context.config.disable_alarms = true;
     const output = flow.onMessage(
       {
         time: tedge.mockGetTime(),
         topic: "",
         payload: inputSelfSigned,
       },
-      {
-        config: {
-          disable_alarms: true,
-        },
-      },
+      context,
     );
     expect(output).toHaveLength(1);
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(output[0].topic).toBe("te/device/main///twin/tedge_Certificate");
-    expect(output[0].retain).toBe(true);
+    expect(output[0].mqtt?.retain).toBe(true);
     expect(payload).toStrictEqual(expectedSelfSigned);
   });
 
   test("Publish a warning when certificate crosses threshold", () => {
+    context.config = {
+      disable_alarms: false,
+      warning: "300d",
+      alarm: "60d",
+    };
+
     const output = flow.onMessage(
       {
         time: tedge.mockGetTime(),
         topic: "",
         payload: inputCumulocityCA,
       },
-      {
-        config: {
-          disable_alarms: false,
-          warning: "300d",
-          alarm: "60d",
-        },
-      },
+      context,
     );
     expect(output).toHaveLength(3);
 
     // meta message
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(output[0].topic).toBe("te/device/main///twin/tedge_Certificate");
-    expect(output[0].retain).toBe(true);
+    expect(output[0].mqtt?.retain).toBe(true);
     expect(payload).toStrictEqual(expectedCumulocityCAOutput);
 
     // alarm
     expect(output[1].topic).toBe(
       "te/device/main///a/certificateExpiresSoon_warn",
     );
-    expect(output[2].retain).toBe(true);
-    const warning = JSON.parse(output[1].payload);
+    expect(output[2].mqtt?.retain).toBe(true);
+    const warning = tedge.decodeJsonPayload(output[1].payload);
     expect(warning).toStrictEqual({
       text: "Certificate will expire within 300d",
       severity: "warning",
@@ -139,38 +135,37 @@ describe("flow tests", () => {
       "te/device/main///a/certificateExpiresSoon_alarm",
     );
     expect(output[2].payload).toBe("");
-    expect(output[2].retain).toBe(true);
+    expect(output[2].mqtt?.retain).toBe(true);
   });
 
   test("Publish an alarm when certificate will expire less than given threshold", () => {
+    context.config = {
+      disable_alarms: false,
+      warning: "365d",
+      alarm: "300d",
+    };
     const output = flow.onMessage(
       {
         time: tedge.mockGetTime(),
         topic: "",
         payload: inputCumulocityCA,
       },
-      {
-        config: {
-          disable_alarms: false,
-          warning: "365d",
-          alarm: "300d",
-        },
-      },
+      context,
     );
     expect(output).toHaveLength(3);
 
     // meta message
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(output[0].topic).toBe("te/device/main///twin/tedge_Certificate");
-    expect(output[0].retain).toBe(true);
+    expect(output[0].mqtt?.retain).toBe(true);
     expect(payload).toStrictEqual(expectedCumulocityCAOutput);
 
     // alarm
     expect(output[1].topic).toBe(
       "te/device/main///a/certificateExpiresSoon_alarm",
     );
-    expect(output[2].retain).toBe(true);
-    const warning = JSON.parse(output[1].payload);
+    expect(output[2].mqtt?.retain).toBe(true);
+    const warning = tedge.decodeJsonPayload(output[1].payload);
     expect(warning).toStrictEqual({
       text: "Certificate will expire within 300d",
       severity: "major",
@@ -182,23 +177,22 @@ describe("flow tests", () => {
       "te/device/main///a/certificateExpiresSoon_warn",
     );
     expect(output[2].payload).toBe("");
-    expect(output[2].retain).toBe(true);
+    expect(output[2].mqtt?.retain).toBe(true);
   });
 
   test("De-duplication of output", () => {
+    context.config = {
+      disable_alarms: false,
+      warning: "365d",
+      alarm: "300d",
+    };
     const output = flow.onMessage(
       {
         time: tedge.mockGetTime(),
         topic: "",
         payload: inputCumulocityCA,
       },
-      {
-        config: {
-          disable_alarms: false,
-          warning: "365d",
-          alarm: "300d",
-        },
-      },
+      context,
     );
     expect(output).toHaveLength(3);
 
@@ -207,46 +201,39 @@ describe("flow tests", () => {
       {
         time: tedge.mockGetTime(),
         topic: "",
-        payload: inputCumulocityCA,
+        payload: tedge.encodePayload(inputCumulocityCA),
       },
-      {
-        config: {
-          disable_alarms: false,
-          warning: "365d",
-          alarm: "300d",
-        },
-      },
+      context,
     );
     expect(output2).toHaveLength(0);
   });
 
   test("Only publish alarms", () => {
+    context.config = {
+      disable_alarms: false,
+      disable_twin: true,
+      warning: "365d",
+      alarm: "300d",
+    };
     const output = flow.onMessage(
       {
         time: tedge.mockGetTime(),
         topic: "",
         payload: inputCumulocityCA,
       },
-      {
-        config: {
-          disable_alarms: false,
-          disable_twin: true,
-          warning: "365d",
-          alarm: "300d",
-        },
-      },
+      context,
     );
     expect(output).toHaveLength(2);
 
     expect(output[0].topic).toBe(
       "te/device/main///a/certificateExpiresSoon_alarm",
     );
-    expect(output[0].retain).toBe(true);
+    expect(output[0].mqtt?.retain).toBe(true);
     expect(output[0].payload).toMatch(/.+/);
     expect(output[1].topic).toBe(
       "te/device/main///a/certificateExpiresSoon_warn",
     );
-    expect(output[1].retain).toBe(true);
+    expect(output[1].mqtt?.retain).toBe(true);
     expect(output[1].payload).toBe("");
   });
 });

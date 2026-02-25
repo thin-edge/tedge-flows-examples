@@ -39,7 +39,7 @@ describe("Map thin-edge command to ThingsBoard RPC responses", () => {
     expect(output).toHaveLength(2);
 
     expect(output[0].topic).toBe("tb/me/server/rpc/response/15");
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       status: "successful",
       execute: "now",
@@ -49,6 +49,7 @@ describe("Map thin-edge command to ThingsBoard RPC responses", () => {
       "te/device/main///cmd/deviceRestart/tb-mapper-15",
     );
     expect(output[1].payload).toBe("");
+    expect(output[1].mqtt?.retain).toBe(true);
   });
 
   test("child device", () => {
@@ -67,7 +68,7 @@ describe("Map thin-edge command to ThingsBoard RPC responses", () => {
     expect(output).toHaveLength(2);
 
     expect(output[0].topic).toBe("tb/gateway/rpc");
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       device: "CHILD1",
       id: 42,
@@ -83,6 +84,7 @@ describe("Map thin-edge command to ThingsBoard RPC responses", () => {
       "te/device/child1///cmd/getValue/tb-mapper-42",
     );
     expect(output[1].payload).toBe("");
+    expect(output[1].mqtt?.retain).toBe(true);
   });
 
   test("service", () => {
@@ -101,7 +103,7 @@ describe("Map thin-edge command to ThingsBoard RPC responses", () => {
     expect(output).toHaveLength(2);
 
     expect(output[0].topic).toBe("tb/gateway/rpc");
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       device: "CHILD1 APP1",
       id: 42,
@@ -117,6 +119,7 @@ describe("Map thin-edge command to ThingsBoard RPC responses", () => {
       "te/device/child1/service/app1/cmd/getValue/tb-mapper-42",
     );
     expect(output[1].payload).toBe("");
+    expect(output[1].mqtt?.retain).toBe(true);
   });
 
   test("should ignore command responses if it is not from ThingsBoard", () => {

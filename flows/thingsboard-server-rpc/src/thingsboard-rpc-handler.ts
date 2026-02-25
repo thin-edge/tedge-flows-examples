@@ -1,3 +1,4 @@
+import { Message } from "../../common/tedge";
 import { FlowContext } from "./main";
 
 const NAME_TO_ENTITY_PREFIX = "tb-name-to-entity:";
@@ -6,7 +7,7 @@ export function handleThingsBoardTopic(
   context: FlowContext,
   topic: string,
   payload: string,
-) {
+): Message[] {
   const parts = topic.split("/");
   const parsedValue = JSON.parse(payload);
   const { time, ...parsedValueWithoutTime } = parsedValue;
@@ -30,7 +31,7 @@ export function handleThingsBoardTopic(
   return [];
 }
 
-function handleMainDeviceRpc(payload: any, rpcId: string) {
+function handleMainDeviceRpc(payload: any, rpcId: string): Message[] {
   // payload: {"method":"myRemoteMethod1","params":"myText"}
   const { method, params } = payload;
 
@@ -42,16 +43,17 @@ function handleMainDeviceRpc(payload: any, rpcId: string) {
     ...teObject,
   };
 
-  // TODO: this message should be retained
   return [
     {
+      time: new Date(),
       topic: teTopic,
       payload: JSON.stringify(tePayload),
+      mqtt: { retain: true },
     },
   ];
 }
 
-function handleGatewayRpc(context: FlowContext, payload: any) {
+function handleGatewayRpc(context: FlowContext, payload: any): Message[] {
   // payload: {"device":"MyChildDevice","data":{"id":0,"method":"myRemoteMethod1","params":"myText"}}
   const { device, data, id } = payload;
 
@@ -76,11 +78,12 @@ function handleGatewayRpc(context: FlowContext, payload: any) {
     ...teObject,
   };
 
-  // TODO: this message should be retained
   return [
     {
       topic: teTopic,
       payload: JSON.stringify(tePayload),
+      time: new Date(),
+      mqtt: { retain: true },
     },
   ];
 }

@@ -1,10 +1,12 @@
+import { Message } from "../../../common/tedge";
+
 export function convertTwinToAttribute(
   shouldTransform: boolean,
   payload: string,
   deviceName: string,
   type: string,
   isMain: boolean,
-) {
+): Message[] {
   let attributesData: Record<string, any> = {};
 
   try {
@@ -36,6 +38,7 @@ export function convertTwinToAttribute(
   if (isMain) {
     return [
       {
+        time: new Date(),
         topic: "tb/me/attributes",
         payload: JSON.stringify(attributesData),
       },
@@ -43,6 +46,7 @@ export function convertTwinToAttribute(
   } else {
     return [
       {
+        time: new Date(),
         topic: "tb/gateway/attributes",
         payload: JSON.stringify({
           [deviceName]: attributesData,

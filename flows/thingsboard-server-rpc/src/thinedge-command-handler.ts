@@ -1,10 +1,12 @@
+import { Message } from "../../common/tedge";
+
 export function handleThinEdgeCommand(
   teTopic: string,
   payload: string,
   deviceName: string,
   cmdId: string,
   mainDeviceName: string,
-) {
+): Message[] {
   // Check if this is a ThingsBoard-originated command (starts with tb-mapper-)
   if (!cmdId || !cmdId.startsWith("tb-mapper-")) {
     return [];
@@ -38,15 +40,18 @@ export function handleThinEdgeCommand(
         data: responseData,
       };
 
-  // TODO: The second message, clearing the retained cmd message, must be retained.
+  // The second message, clearing the retained cmd message, must be retained.
   return [
     {
+      time: new Date(),
       topic: tbResponseTopic,
       payload: JSON.stringify(responsePayload),
     },
     {
+      time: new Date(),
       topic: teTopic,
       payload: "",
+      mqtt: { retain: true },
     },
   ];
 }

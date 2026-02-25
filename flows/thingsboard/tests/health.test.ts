@@ -45,7 +45,7 @@ describe("Map Service Health Status to ThingsBoard Telemetry", () => {
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("tb/gateway/telemetry");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
 
     expect(payload).toStrictEqual({
       C8Y_FIRMWARE_PLUGIN: [
@@ -65,7 +65,6 @@ describe("Map Service Health Status to ThingsBoard Telemetry", () => {
       time: tedge.mockGetTime(),
       topic: "tbflow/device/main/service/mosquitto-things-bridge/status/health",
       payload: "1",
-      raw_payload: new Uint8Array([1]),
     };
 
     const output = flow.onMessage(message, context);
@@ -73,7 +72,7 @@ describe("Map Service Health Status to ThingsBoard Telemetry", () => {
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("tb/gateway/telemetry");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       MOSQUITTO_THINGS_BRIDGE: [
         {
@@ -88,14 +87,13 @@ describe("Map Service Health Status to ThingsBoard Telemetry", () => {
       time: tedge.mockGetTime(),
       topic: "tbflow/device/main/service/mosquitto-things-bridge/status/health",
       payload: "0",
-      raw_payload: new Uint8Array([0]),
     };
 
     const output = flow.onMessage(message, context);
 
     expect(output).toHaveLength(1);
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       MOSQUITTO_THINGS_BRIDGE: [
         {
@@ -121,7 +119,7 @@ describe("Map Service Health Status to ThingsBoard Telemetry", () => {
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("tb/gateway/telemetry");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       TELEMETRY_PLUGIN: [
         {
@@ -151,7 +149,7 @@ describe("Map Service Health Status to ThingsBoard Telemetry", () => {
 
     const output = flow.onMessage(message, context);
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       C8Y_FIRMWARE_PLUGIN: [
         {
@@ -180,7 +178,7 @@ describe("Map Service Health Status to ThingsBoard Telemetry", () => {
 
     const output = flow.onMessage(message, context);
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       APP_1: [
         {
@@ -209,7 +207,6 @@ describe("Map Service Health Status to ThingsBoard Telemetry", () => {
       time: tedge.mockGetTime(),
       topic: "tbflow/device/main/service/test/status/health",
       payload: "5", // invalid, only 0 or 1
-      raw_payload: new Uint8Array([5]),
     };
 
     const output = flow.onMessage(message, context);
@@ -229,11 +226,11 @@ describe("Map Service Health Status to ThingsBoard Telemetry", () => {
     expect(output).toEqual([]);
   });
 
-  test("returns empty array for null payload", () => {
+  test("returns empty array for empty payload", () => {
     const message: tedge.Message = {
       time: tedge.mockGetTime(),
       topic: "tbflow/device/main/service/test/status/health",
-      payload: null as any,
+      payload: "",
     };
 
     const output = flow.onMessage(message, context);
@@ -267,7 +264,7 @@ describe("Health Status Edge Cases", () => {
 
     const output = flow.onMessage(message, context);
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       APP_1: [
         {
@@ -293,7 +290,7 @@ describe("Health Status Edge Cases", () => {
 
     const output = flow.onMessage(message, context);
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       APP_1: [
         {

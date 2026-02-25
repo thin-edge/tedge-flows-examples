@@ -28,7 +28,7 @@ describe("ThingsBoard Registration Flow", () => {
 
       // Check connect message
       expect(result[0].topic).toBe("tb/gateway/connect");
-      const connectPayload = JSON.parse(result[0].payload);
+      const connectPayload = tedge.decodeJsonPayload(result[0].payload);
       expect(connectPayload).toStrictEqual({
         device: "Child Device 0",
         type: "sensor",
@@ -36,7 +36,7 @@ describe("ThingsBoard Registration Flow", () => {
 
       // Check attributes message
       expect(result[1].topic).toBe("tb/gateway/attributes");
-      const attributesPayload = JSON.parse(result[1].payload);
+      const attributesPayload = tedge.decodeJsonPayload(result[1].payload);
       expect(attributesPayload).toStrictEqual({
         "Child Device 0": {
           parent_device: "device/main//",
@@ -71,7 +71,7 @@ describe("ThingsBoard Registration Flow", () => {
       const result = flow.onMessage(message, context);
 
       expect(result[0].topic).toBe("tb/gateway/connect");
-      const connectPayload = JSON.parse(result[0].payload);
+      const connectPayload = tedge.decodeJsonPayload(result[0].payload);
       expect(connectPayload.type).toBe("default");
     });
 
@@ -94,7 +94,7 @@ describe("ThingsBoard Registration Flow", () => {
       const result = flow.onMessage(message, context);
 
       expect(result[0].topic).toBe("tb/gateway/connect");
-      const connectPayload = JSON.parse(result[0].payload);
+      const connectPayload = tedge.decodeJsonPayload(result[0].payload);
       expect(connectPayload.device).toBe("MAIN:device:child2");
     });
 
@@ -118,7 +118,7 @@ describe("ThingsBoard Registration Flow", () => {
       expect(result).toHaveLength(1);
 
       expect(result[0].topic).toBe("tbflow/device/main//");
-      const connectPayload = JSON.parse(result[0].payload);
+      const connectPayload = tedge.decodeJsonPayload(result[0].payload);
       expect(connectPayload).toStrictEqual({
         "@type": "device",
         type: "main-profile",
@@ -149,7 +149,7 @@ describe("ThingsBoard Registration Flow", () => {
 
       expect(result).toHaveLength(2);
 
-      const connectPayload = JSON.parse(result[0].payload);
+      const connectPayload = tedge.decodeJsonPayload(result[0].payload);
       expect(connectPayload).toStrictEqual({
         device: "Tedge Mapper C8y",
         type: "service",
@@ -214,9 +214,15 @@ describe("ThingsBoard Registration Flow", () => {
       expect(pendingMessages).toHaveLength(3);
 
       // Should keep the last 3 messages (temperature: 2, 3, 4)
-      expect(JSON.parse(pendingMessages[0].payload).temperature).toBe(2);
-      expect(JSON.parse(pendingMessages[1].payload).temperature).toBe(3);
-      expect(JSON.parse(pendingMessages[2].payload).temperature).toBe(4);
+      expect(
+        tedge.decodeJsonPayload(pendingMessages[0].payload).temperature,
+      ).toBe(2);
+      expect(
+        tedge.decodeJsonPayload(pendingMessages[1].payload).temperature,
+      ).toBe(3);
+      expect(
+        tedge.decodeJsonPayload(pendingMessages[2].payload).temperature,
+      ).toBe(4);
     });
 
     test("should replay pending messages after registration", () => {
@@ -539,7 +545,7 @@ describe("ThingsBoard Registration Flow", () => {
       const result = flow.onMessage(message, context);
 
       expect(result).toHaveLength(2);
-      const attributesPayload = JSON.parse(result[1].payload);
+      const attributesPayload = tedge.decodeJsonPayload(result[1].payload);
       expect(attributesPayload["MAIN:device:child0"].parent_device).toBe(
         "unknown_parent",
       );
@@ -635,7 +641,7 @@ describe("ThingsBoard Registration Flow", () => {
         "tb-msg:device/main/service/my-service",
       );
       expect(pendingMessages).toHaveLength(1);
-      const healthPayload = JSON.parse(pendingMessages[0].payload);
+      const healthPayload = tedge.decodeJsonPayload(pendingMessages[0].payload);
       expect(healthPayload).toStrictEqual({ status: "up", uptime: 1000 });
     });
 
@@ -656,7 +662,7 @@ describe("ThingsBoard Registration Flow", () => {
 
       const pendingMessages = context.mapper.get("tb-msg:device/child0//");
       expect(pendingMessages).toHaveLength(1);
-      const payload = JSON.parse(pendingMessages[0].payload);
+      const payload = tedge.decodeJsonPayload(pendingMessages[0].payload);
       expect(payload).toStrictEqual({ temperature: 25 });
     });
 

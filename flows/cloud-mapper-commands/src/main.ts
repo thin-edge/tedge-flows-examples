@@ -1,4 +1,4 @@
-import { Message, Context } from "../../common/tedge";
+import { Message, Context, decodeJsonPayload } from "../../common/tedge";
 import * as utils from "./utils";
 
 export interface Config {
@@ -26,7 +26,7 @@ function handleCommandUpdate(message: Message): any[] {
     // clear message
     output.push({
       topic: message.topic,
-      retained: true,
+      mqtt: { retain: true },
       payload: "",
     });
   } else {
@@ -77,7 +77,7 @@ function buildCommandID(cloudPrefix: string, message: Message): string {
   return [cloudPrefix, message.time.getTime()].join("-");
 }
 
-export function onMessage(message: Message, context: FlowContext) {
+export function onMessage(message: Message, context: FlowContext): Message[] {
   const { cloud_prefix = "azeg", commands = ["writeSetpoint"] } =
     context.config;
   if (isTedgeCommandStatus(cloud_prefix, message.topic)) {
@@ -86,7 +86,7 @@ export function onMessage(message: Message, context: FlowContext) {
 
   // map a cloud message to a local tedge command based on the .type
   const output = [];
-  const payload = JSON.parse(message.payload);
+  const payload = decodeJsonPayload(message.payload);
   if (commands.includes(payload.type)) {
     output.push(...createCommand(message, payload, context));
   }

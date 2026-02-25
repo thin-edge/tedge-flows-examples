@@ -3,7 +3,7 @@
 */
 
 import * as model from "../../common/model";
-import { Message, Context } from "./../../common/tedge";
+import { Message, Context, decodeJsonPayload } from "./../../common/tedge";
 import * as journald from "./journald";
 
 export interface Config {
@@ -91,7 +91,7 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     debug = false,
     text_filter = [],
   } = context.config || {};
-  let payload = JSON.parse(message.payload);
+  let payload = decodeJsonPayload(message.payload);
   const output = journald.transform(payload);
 
   // Check data transform and reject invalid data
@@ -197,7 +197,7 @@ export function onInterval(time: Date, context: FlowContext) {
     output.push({
       time,
       topic: `te/device/main///a/log_surge`,
-      retain: true,
+      mqtt: { retain: true },
       payload: ``,
     });
   }

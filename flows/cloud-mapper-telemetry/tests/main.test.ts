@@ -17,7 +17,7 @@ describe("measurement conversions", () => {
     );
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("azeg/DDATA/device_child1");
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toEqual({
       timestamp: "2025-01-01T00:00:00.000Z",
       uuid: "device_child1",
@@ -47,7 +47,7 @@ describe("measurement conversions", () => {
     );
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("azeg/DDATA/device_child-other-2");
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toEqual({
       timestamp: "2025-01-01T00:00:00.000Z",
       uuid: "device_child-other-2",
@@ -81,7 +81,7 @@ describe("tedge-flows tests", () => {
       }),
     });
 
-    let payload = JSON.parse(output.payload);
+    let payload = tedge.decodeJsonPayload(output.payload);
     // TODO: replace this once the tedge-flows test command allows the user to provide a fixed timestamp
     payload = testing.replaceTimestamps(
       payload,

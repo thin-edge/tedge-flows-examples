@@ -1,4 +1,4 @@
-import { Message, Context } from "./../../common/tedge";
+import { Message, Context, decodePayload } from "./../../common/tedge";
 
 interface Config {
   disable_twin?: boolean;
@@ -122,7 +122,7 @@ const checkThresholds = deduplicateCalls(function (
   if (expiresIn <= alarm_threshold) {
     messages.push({
       topic: topicAlarm,
-      retain: true,
+      mqtt: { retain: true },
       payload: JSON.stringify({
         text: `Certificate will expire within ${alarm}`,
         severity: "major",
@@ -131,13 +131,13 @@ const checkThresholds = deduplicateCalls(function (
     });
     messages.push({
       topic: topicWarning,
-      retain: true,
+      mqtt: { retain: true },
       payload: "",
     });
   } else if (expiresIn <= warning_threshold) {
     messages.push({
       topic: topicWarning,
-      retain: true,
+      mqtt: { retain: true },
       payload: JSON.stringify({
         text: `Certificate will expire within ${warning}`,
         severity: "warning",
@@ -146,19 +146,19 @@ const checkThresholds = deduplicateCalls(function (
     });
     messages.push({
       topic: topicAlarm,
-      retain: true,
+      mqtt: { retain: true },
       payload: "",
     });
   } else {
     // Clear alarms
     messages.push({
       topic: topicAlarm,
-      retain: true,
+      mqtt: { retain: true },
       payload: "",
     });
     messages.push({
       topic: topicWarning,
-      retain: true,
+      mqtt: { retain: true },
       payload: "",
     });
   }
@@ -179,18 +179,19 @@ const publishTwinMessage = deduplicateCalls(function (
   return [
     {
       topic: `te/device/main///twin/${config?.twin_property || "tedge_Certificate"}`,
-      retain: true,
+      mqtt: { retain: true },
       payload: toJSON(output, config?.debug),
     },
   ];
 });
 
 export function onMessage(message: Message, context: FlowContext): Message[] {
+  let decodedPayload = decodePayload(message.payload);
   console.debug("Input", {
     topic: message.topic,
-    payload: message.payload,
+    payload: decodedPayload,
   });
-  const fragment = parseInputMessage(message.payload);
+  const fragment = parseInputMessage(decodedPayload);
 
   const expiresAt = new Date(fragment.validUntil);
   let signedBy = "-";

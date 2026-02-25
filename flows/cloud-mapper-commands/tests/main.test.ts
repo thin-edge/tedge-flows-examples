@@ -36,7 +36,7 @@ describe("Cloud to device", () => {
     expect(output[0].topic).toMatch(
       RegExp(`^te/device/child-1///cmd/writeSetpoint/azeg-[0-9]+`),
     );
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       status: "init",
       type: "writeSetpoint",
@@ -74,7 +74,7 @@ describe("Device to cloud mappings", () => {
         const output = flow.onMessage(input, tedge.createContext());
         expect(output).toHaveLength(expectedCount);
         if (expectedCount > 0) {
-          expect(output[0].retained).toBe(true);
+          expect(output[0].mqtt?.retain).toBe(true);
           expect(output[0].payload).toBe(expectedPayload);
           expect(output[0].topic).toBe(input.topic);
         }
@@ -87,7 +87,7 @@ describe("Device to cloud mappings", () => {
       {
         time: tedge.mockGetTime(new Date("2025-01-01")),
         topic: "te/device/child-1///cmd/writeSetpoint/azeg-123456",
-        retain: true,
+        mqtt: { retain: true },
         payload: "",
       },
       tedge.createContext(),
