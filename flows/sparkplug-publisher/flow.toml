@@ -20,7 +20,12 @@
 
 [input]
 mqtt.topics = [
+    # Measurements (only the "raw" type to avoid feedback loop with sparkplug-telemetry)
     "te/device/+///m/raw",
+    # Events — te/device/{id}///e/{eventType}
+    "te/device/+///e/+",
+    # Alarms — te/device/{id}///a/{alarmType}  (raised or cleared)
+    "te/device/+///a/+",
 ]
 
 [[steps]]
