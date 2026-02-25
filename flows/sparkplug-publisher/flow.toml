@@ -1,0 +1,32 @@
+# The output Sparkplug B topic is:  spBv1.0/{groupId}/{DDATA|NDATA}/{edgeNodeId}/{deviceId}
+#
+# Round-trip test pipeline (publish thin-edge.io first):
+#
+#   te/device/...///m/raw   ──► sparkplug-publisher ──► spBv1.0/tedge/DDATA/...
+#                                                                   │
+#   te/device/...///m/      ◄── sparkplug-telemetry ◄───────────────┘
+#
+# The loop is broken on both sides:
+#   - This flow subscribes only to the "raw" measurement type, so it never
+#     picks up the generic "m/" output produced by sparkplug-telemetry.
+#   - sparkplug-telemetry subscribes to the "tedge" Sparkplug B group, which
+#     is the group this flow outputs to.
+#
+# To test: publish a measurement to te/device/<name>///m/raw and observe
+# the round-tripped result on te/device/<name>///m/.
+#
+# For standalone production use (no telemetry flow), change the topic to
+# "te/device/+///m/" and "te/device/+///m/+" to capture all measurements.
+
+[input]
+mqtt.topics = [
+    "te/device/+///m/raw",
+]
+
+[[steps]]
+script = "lib/main.js"
+# groupId: Sparkplug B group used in the output topic.
+# sparkplug-telemetry must subscribe to this same group.
+config.groupId = "tedge"
+config.edgeNodeId = "gateway01"
+config.debug = false
