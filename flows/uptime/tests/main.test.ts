@@ -44,6 +44,7 @@ describe("process", () => {
       );
       expect(twinMessage).toBeDefined();
       if (twinMessage) {
+        expect(twinMessage.mqtt?.retain).toBe(true);
         const payload = tedge.decodeJsonPayload(twinMessage.payload);
         expect(payload.online).toBeCloseTo(100, 1);
         expect(payload).toHaveProperty("currentStatus", "online");

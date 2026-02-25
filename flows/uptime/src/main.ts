@@ -70,6 +70,7 @@ export function onInterval(time: Date, context: FlowContext) {
     {
       time: time,
       topic: `te/device/main///${stats_topic}`,
+      mqtt: { retain: true },
       payload: JSON.stringify({
         online,
         offline,
