@@ -1,9 +1,6 @@
 import { Message, Context, decodeJsonPayload } from "../../common/tedge";
 import { create, toBinary } from "@bufbuild/protobuf";
-import {
-  PayloadSchema,
-  Payload_MetricSchema,
-} from "./gen/sparkplug_b_pb";
+import { PayloadSchema, Payload_MetricSchema } from "./gen/sparkplug_b_pb";
 
 // Sparkplug B datatype constants
 const DataType = {
@@ -43,7 +40,10 @@ function parseTedgeMeasurementTopic(
 export function onMessage(message: Message, context: FlowContext): Message[] {
   const { groupId, edgeNodeId, debug = false } = context.config;
   if (!groupId || !edgeNodeId) {
-    if (debug) console.error("sparkplug-publisher: groupId and edgeNodeId must be configured");
+    if (debug)
+      console.error(
+        "sparkplug-publisher: groupId and edgeNodeId must be configured",
+      );
     return [];
   }
 
@@ -56,7 +56,8 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   try {
     tedgePayload = decodeJsonPayload(message.payload);
   } catch (e) {
-    if (debug) console.error("sparkplug-publisher: failed to parse JSON payload", e);
+    if (debug)
+      console.error("sparkplug-publisher: failed to parse JSON payload", e);
     return [];
   }
 

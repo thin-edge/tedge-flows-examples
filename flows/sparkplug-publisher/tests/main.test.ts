@@ -30,9 +30,7 @@ describe("sparkplug-publisher", () => {
     );
 
     expect(output).toHaveLength(1);
-    expect(output[0].topic).toBe(
-      "spBv1.0/my-factory/DDATA/gateway01/sensor01",
-    );
+    expect(output[0].topic).toBe("spBv1.0/my-factory/DDATA/gateway01/sensor01");
 
     const spPayload = fromBinary(
       PayloadSchema,
@@ -55,7 +53,10 @@ describe("sparkplug-publisher", () => {
   });
 
   test("edge node device maps to NDATA topic", () => {
-    const ctx = tedge.createContext({ ...BASE_CONFIG, edgeNodeId: "gateway01" });
+    const ctx = tedge.createContext({
+      ...BASE_CONFIG,
+      edgeNodeId: "gateway01",
+    });
     const output = flow.onMessage(
       makeMessage("te/device/gateway01///m/", { temperature: 22.0 }),
       ctx,
@@ -76,10 +77,11 @@ describe("sparkplug-publisher", () => {
     );
 
     expect(output).toHaveLength(1);
-    expect(output[0].topic).toBe(
-      "spBv1.0/my-factory/DDATA/gateway01/plc01",
+    expect(output[0].topic).toBe("spBv1.0/my-factory/DDATA/gateway01/plc01");
+    const spPayload = fromBinary(
+      PayloadSchema,
+      output[0].payload as Uint8Array,
     );
-    const spPayload = fromBinary(PayloadSchema, output[0].payload as Uint8Array);
     expect(spPayload.metrics[0].name).toBe("co2");
   });
 
@@ -93,7 +95,10 @@ describe("sparkplug-publisher", () => {
       ctx,
     );
 
-    const spPayload = fromBinary(PayloadSchema, output[0].payload as Uint8Array);
+    const spPayload = fromBinary(
+      PayloadSchema,
+      output[0].payload as Uint8Array,
+    );
     const activeMetric = spPayload.metrics.find((m) => m.name === "active")!;
     expect(activeMetric.value.case).toBe("booleanValue");
     expect(activeMetric.datatype).toBe(11); // Boolean
@@ -114,7 +119,10 @@ describe("sparkplug-publisher", () => {
       ctx,
     );
 
-    const spPayload = fromBinary(PayloadSchema, output[0].payload as Uint8Array);
+    const spPayload = fromBinary(
+      PayloadSchema,
+      output[0].payload as Uint8Array,
+    );
     expect(Number(spPayload.timestamp)).toBe(
       new Date("2026-01-15T08:30:00.000Z").getTime(),
     );
@@ -125,8 +133,7 @@ describe("sparkplug-publisher", () => {
 
   test("sequence number increments and wraps at 256", () => {
     const ctx = tedge.createContext(BASE_CONFIG);
-    const msg = () =>
-      makeMessage("te/device/sensor01///m/", { value: 1.0 });
+    const msg = () => makeMessage("te/device/sensor01///m/", { value: 1.0 });
 
     // Advance to seq 255
     for (let i = 0; i < 255; i++) {
@@ -154,10 +161,11 @@ describe("sparkplug-publisher", () => {
   test("empty payload with no measurements returns no output", () => {
     const ctx = tedge.createContext(BASE_CONFIG);
     const output = flow.onMessage(
-      makeMessage("te/device/sensor01///m/", { time: "2026-02-25T10:00:00.000Z" }),
+      makeMessage("te/device/sensor01///m/", {
+        time: "2026-02-25T10:00:00.000Z",
+      }),
       ctx,
     );
     expect(output).toHaveLength(0);
   });
 });
-
