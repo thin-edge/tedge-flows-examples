@@ -40,7 +40,7 @@ export function handleThinEdgeCommand(
         data: responseData,
       };
 
-  // TODO: The second message, clearing the retained cmd message, must be retained.
+  // The second message, clearing the retained cmd message, must be retained.
   return [
     {
       time: new Date(),
@@ -51,6 +51,7 @@ export function handleThinEdgeCommand(
       time: new Date(),
       topic: teTopic,
       payload: "",
+      mqtt: { retain: true },
     },
   ];
 }

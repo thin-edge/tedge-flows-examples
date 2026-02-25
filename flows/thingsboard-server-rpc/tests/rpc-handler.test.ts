@@ -45,6 +45,7 @@ describe("Map ThingsBoard RPC to thin-edge command", () => {
       status: "init",
       value: "do",
     });
+    expect(output[0].mqtt?.retain).toBe(true);
   });
 
   test("params is object", () => {
@@ -71,6 +72,7 @@ describe("Map ThingsBoard RPC to thin-edge command", () => {
       key: "control1",
       value: "on",
     });
+    expect(output[0].mqtt?.retain).toBe(true);
   });
 
   test("child device", () => {
@@ -95,6 +97,7 @@ describe("Map ThingsBoard RPC to thin-edge command", () => {
       value: "myText",
       status: "init",
     });
+    expect(output[0].mqtt?.retain).toBe(true);
   });
 
   test("service", () => {
@@ -119,6 +122,7 @@ describe("Map ThingsBoard RPC to thin-edge command", () => {
       value: "myText",
       status: "init",
     });
+    expect(output[0].mqtt?.retain).toBe(true);
   });
 
   test("should ignore response rpc for child device", () => {

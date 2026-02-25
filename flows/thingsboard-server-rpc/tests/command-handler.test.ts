@@ -49,6 +49,7 @@ describe("Map thin-edge command to ThingsBoard RPC responses", () => {
       "te/device/main///cmd/deviceRestart/tb-mapper-15",
     );
     expect(output[1].payload).toBe("");
+    expect(output[1].mqtt?.retain).toBe(true);
   });
 
   test("child device", () => {
@@ -83,6 +84,7 @@ describe("Map thin-edge command to ThingsBoard RPC responses", () => {
       "te/device/child1///cmd/getValue/tb-mapper-42",
     );
     expect(output[1].payload).toBe("");
+    expect(output[1].mqtt?.retain).toBe(true);
   });
 
   test("service", () => {
@@ -117,6 +119,7 @@ describe("Map thin-edge command to ThingsBoard RPC responses", () => {
       "te/device/child1/service/app1/cmd/getValue/tb-mapper-42",
     );
     expect(output[1].payload).toBe("");
+    expect(output[1].mqtt?.retain).toBe(true);
   });
 
   test("should ignore command responses if it is not from ThingsBoard", () => {

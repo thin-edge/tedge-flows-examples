@@ -43,12 +43,12 @@ function handleMainDeviceRpc(payload: any, rpcId: string): Message[] {
     ...teObject,
   };
 
-  // TODO: this message should be retained
   return [
     {
       time: new Date(),
       topic: teTopic,
       payload: JSON.stringify(tePayload),
+      mqtt: { retain: true },
     },
   ];
 }
@@ -78,12 +78,12 @@ function handleGatewayRpc(context: FlowContext, payload: any): Message[] {
     ...teObject,
   };
 
-  // TODO: this message should be retained
   return [
     {
       topic: teTopic,
       payload: JSON.stringify(tePayload),
       time: new Date(),
+      mqtt: { retain: true },
     },
   ];
 }
