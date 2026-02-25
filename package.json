@@ -10,6 +10,7 @@
     "test": "jest --coverageProvider=v8 --coverage",
     "build-all": "npm run build --workspaces",
     "update-deps": "npx npm-check-updates -u --workspaces",
+    "sbom": "node ./scripts/sbom.js",
     "publish": "node ./scripts/publish-images.js",
     "generate-flow": "node ./scripts/create-flow.js"
   },
