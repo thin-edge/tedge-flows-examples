@@ -5,7 +5,7 @@ import * as dm from "../src/dynamicmapper";
 test("Converts string to a timestamp", async () => {
   const output = await dm.build(
     {
-      timestamp: tedge.mockGetTime(),
+      time: tedge.mockGetTime(),
       topic: "/plant1/line1/device1_measure1_Type",
       payload: JSON.stringify({
         time: 1.1234,

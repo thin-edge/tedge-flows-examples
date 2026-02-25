@@ -98,7 +98,7 @@ describe.each([
       context,
     );
     expect(output).toHaveLength(1);
-    const message = JSON.parse(output[0].payload);
+    const message = tedge.decodeJsonPayload(output[0].payload);
     expect(message).toHaveProperty("text", expected);
     expect(message).toHaveProperty("time", 1751468051.367349);
   });
@@ -287,7 +287,9 @@ describe.each([
       });
       const output = flow.onInterval(tedge.mockGetTime(), context);
       expect(output).toHaveLength(expectedLength);
-      const lastMessage = JSON.parse(output[output.length - 1].payload);
+      const lastMessage = tedge.decodeJsonPayload(
+        output[output.length - 1].payload,
+      );
       expect(lastMessage).toHaveProperty("text");
       expect(lastMessage).toHaveProperty("severity");
       expect(lastMessage).toHaveProperty("time");
@@ -315,7 +317,7 @@ describe("log statistics", () => {
     const output = flow.onInterval(tedge.mockGetTime(), context);
     expect(output.length).toBeGreaterThanOrEqual(1);
     expect(output[0].topic).toStrictEqual(expectedTopic);
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toHaveProperty("total", 13);
     expect(payload).toHaveProperty("info", 10);
     expect(payload).toHaveProperty("warn", 2);
@@ -355,6 +357,6 @@ describe("log statistics", () => {
     expect(output2).toHaveLength(1);
     expect(output2[0].payload).toBeFalsy();
     expect(output2[0].topic).toEqual(`te/device/main///a/log_surge`);
-    expect(output2[0].retain).toStrictEqual(true);
+    expect(output2[0].mqtt?.retain).toStrictEqual(true);
   });
 });

@@ -43,7 +43,9 @@ describe("onInterval - Send Heartbeat and Health Status", () => {
 
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("tb/me/telemetry");
-    expect(JSON.parse(output[0].payload)).toEqual({ heartbeat: 1 });
+    expect(tedge.decodeJsonPayload(output[0].payload)).toEqual({
+      heartbeat: 1,
+    });
   });
 
   test("should send health status telemetry for each entity with health status", () => {
@@ -62,44 +64,46 @@ describe("onInterval - Send Heartbeat and Health Status", () => {
 
     // Check main device service health
     const firmwareMsg = output.find((msg) => {
-      const payload = JSON.parse(msg.payload);
+      const payload = tedge.decodeJsonPayload(msg.payload);
       return payload.C8Y_FIRMWARE_PLUGIN !== undefined;
     });
     expect(firmwareMsg).toBeDefined();
     expect(firmwareMsg!.topic).toBe("tb/gateway/telemetry");
-    expect(JSON.parse(firmwareMsg!.payload)).toEqual({
+    expect(tedge.decodeJsonPayload(firmwareMsg!.payload)).toEqual({
       C8Y_FIRMWARE_PLUGIN: [{ "health::status": "up" }],
     });
 
     // Check another service health
     const mosquittoMsg = output.find((msg) => {
-      const payload = JSON.parse(msg.payload);
+      const payload = tedge.decodeJsonPayload(msg.payload);
       return payload.MOSQUITTO_SERVICE !== undefined;
     });
     expect(mosquittoMsg).toBeDefined();
     expect(mosquittoMsg!.topic).toBe("tb/gateway/telemetry");
-    expect(JSON.parse(mosquittoMsg!.payload)).toEqual({
+    expect(tedge.decodeJsonPayload(mosquittoMsg!.payload)).toEqual({
       MOSQUITTO_SERVICE: [{ "health::status": "degraded" }],
     });
 
     // Check child device service health
     const sensorMsg = output.find((msg) => {
-      const payload = JSON.parse(msg.payload);
+      const payload = tedge.decodeJsonPayload(msg.payload);
       return payload.SENSOR_TELEMETRY !== undefined;
     });
     expect(sensorMsg).toBeDefined();
     expect(sensorMsg!.topic).toBe("tb/gateway/telemetry");
-    expect(JSON.parse(sensorMsg!.payload)).toEqual({
+    expect(tedge.decodeJsonPayload(sensorMsg!.payload)).toEqual({
       SENSOR_TELEMETRY: [{ "health::status": "down" }],
     });
 
     // Check main device heartbeat is still sent
     const heartbeatMsg = output.find((msg) => {
-      const payload = JSON.parse(msg.payload);
+      const payload = tedge.decodeJsonPayload(msg.payload);
       return payload.heartbeat !== undefined;
     });
     expect(heartbeatMsg).toBeDefined();
-    expect(JSON.parse(heartbeatMsg!.payload)).toEqual({ heartbeat: 1 });
+    expect(tedge.decodeJsonPayload(heartbeatMsg!.payload)).toEqual({
+      heartbeat: 1,
+    });
   });
 
   test("should set correct isMain flag for main device vs child devices", () => {
@@ -111,17 +115,17 @@ describe("onInterval - Send Heartbeat and Health Status", () => {
 
     // Main device (device/main//) message should use tb/me/telemetry (isMain=true)
     const mainDeviceMsg = output.find((msg) => {
-      const payload = JSON.parse(msg.payload);
+      const payload = tedge.decodeJsonPayload(msg.payload);
       return payload["health::status"] !== undefined;
     });
     expect(mainDeviceMsg?.topic).toBe("tb/me/telemetry");
-    expect(JSON.parse(mainDeviceMsg!.payload)).toEqual({
+    expect(tedge.decodeJsonPayload(mainDeviceMsg!.payload)).toEqual({
       "health::status": "up",
     });
 
     // Child device message should use tb/gateway/telemetry (isMain=false)
     const childDeviceMsg = output.find((msg) => {
-      const payload = JSON.parse(msg.payload);
+      const payload = tedge.decodeJsonPayload(msg.payload);
       return payload.SENSOR_TELEMETRY !== undefined;
     });
     expect(childDeviceMsg?.topic).toBe("tb/gateway/telemetry");
@@ -159,7 +163,7 @@ describe("onInterval - Send Heartbeat and Health Status", () => {
 
     // All should have valid payloads
     output.forEach((msg) => {
-      const payload = JSON.parse(msg.payload);
+      const payload = tedge.decodeJsonPayload(msg.payload);
       expect(payload).toBeDefined();
       expect(payload).not.toEqual({});
     });
@@ -186,22 +190,26 @@ describe("onInterval - Send Heartbeat and Health Status", () => {
     const output = flow.onInterval(new Date(), context);
 
     const healthMsg = output.find((msg) => {
-      const payload = JSON.parse(msg.payload);
+      const payload = tedge.decodeJsonPayload(msg.payload);
       return payload["health::status"] !== undefined;
     });
     expect(healthMsg).toBeDefined();
-    expect(JSON.parse(healthMsg!.payload)).toEqual({ "health::status": "up" });
+    expect(tedge.decodeJsonPayload(healthMsg!.payload)).toEqual({
+      "health::status": "up",
+    });
   });
 
   test("should send correct payload structure for heartbeat", () => {
     const output = flow.onInterval(new Date(), context);
 
     const heartbeatMsg = output.find((msg) => {
-      const payload = JSON.parse(msg.payload);
+      const payload = tedge.decodeJsonPayload(msg.payload);
       return payload.heartbeat !== undefined;
     });
     expect(heartbeatMsg).toBeDefined();
-    expect(JSON.parse(heartbeatMsg!.payload)).toEqual({ heartbeat: 1 });
+    expect(tedge.decodeJsonPayload(heartbeatMsg!.payload)).toEqual({
+      heartbeat: 1,
+    });
   });
 
   test("should handle missing device names in mapper gracefully", () => {

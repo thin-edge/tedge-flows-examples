@@ -63,7 +63,7 @@ The flow processes messages as follows:
 `.trimStart();
 
 const templateMainTS = `
-import { Message, Context } from "../../common/tedge";
+import { Message, Context, decodeJsonPayload } from "../../common/tedge";
 
 export interface Config {
   debug?: boolean;
@@ -79,7 +79,7 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
 
   // TODO: append any messages you want to the output array.
   const topicSegments = message.topic.split("/");
-  const payload = JSON.parse(message.payload);
+  const payload = decodeJsonPayload(message.payload);
   const receivedAt = message.time;
   output.push({
     time: receivedAt,
@@ -110,7 +110,7 @@ describe("map messages", () => {
     }, tedge.createContext({}));
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("te/device/foo///m/bar");
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toEqual({
       time: "2025-01-01T00:00:00.000Z",
       temperature: 23.0,

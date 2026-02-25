@@ -40,7 +40,7 @@ describe("Map ThingsBoard RPC to thin-edge command", () => {
 
     expect(output[0].topic).toBe("te/device/main///cmd/myMethod/tb-mapper-15");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       status: "init",
       value: "do",
@@ -65,7 +65,7 @@ describe("Map ThingsBoard RPC to thin-edge command", () => {
 
     expect(output[0].topic).toBe("te/device/main///cmd/myMethod/tb-mapper-15");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       status: "init",
       key: "control1",
@@ -90,7 +90,7 @@ describe("Map ThingsBoard RPC to thin-edge command", () => {
       "te/device/child1///cmd/myRemoteMethod1/tb-mapper-0",
     );
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       value: "myText",
       status: "init",
@@ -114,7 +114,7 @@ describe("Map ThingsBoard RPC to thin-edge command", () => {
       "te/device/child1/service/app1/cmd/myRemoteMethod1/tb-mapper-0",
     );
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       value: "myText",
       status: "init",

@@ -31,7 +31,7 @@ describe("Map Main Device Measurements to Device Me Telemetry API", () => {
 
     expect(output[0].topic).toBe("tb/me/telemetry");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       "sensor::temperature": 10,
     });
@@ -51,7 +51,7 @@ describe("Map Main Device Measurements to Device Me Telemetry API", () => {
 
     expect(output[0].topic).toBe("tb/me/telemetry");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       temperature: 10,
     });
@@ -71,7 +71,7 @@ describe("Map Main Device Measurements to Device Me Telemetry API", () => {
 
     expect(output[0].topic).toBe("tb/me/telemetry");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       temperature: 10,
     });
@@ -92,7 +92,7 @@ describe("Map Main Device Measurements to Device Me Telemetry API", () => {
 
     expect(output[0].topic).toBe("tb/me/telemetry");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       ts: 1602739847000,
       values: {
@@ -132,7 +132,7 @@ describe("Map Child/Service Measurements to Gateway Telemetry API", () => {
 
     expect(output[0].topic).toBe("tb/gateway/telemetry");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       CHILD_1: [
         {
@@ -158,7 +158,7 @@ describe("Map Child/Service Measurements to Gateway Telemetry API", () => {
 
     expect(output[0].topic).toBe("tb/gateway/telemetry");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       CHILD_1: [
         {
@@ -185,7 +185,7 @@ describe("Map Child/Service Measurements to Gateway Telemetry API", () => {
 
     expect(output[0].topic).toBe("tb/gateway/telemetry");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       APP_1: [
         {

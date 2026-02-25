@@ -33,7 +33,7 @@ describe("Map Main Device Twin to Device Me Attributes API", () => {
 
     expect(output[0].topic).toBe("tb/me/attributes");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       "software::os": "debian",
       "software::version": "bullseye",
@@ -55,7 +55,7 @@ describe("Map Main Device Twin to Device Me Attributes API", () => {
 
     expect(output[0].topic).toBe("tb/me/attributes");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       "software::os": "debian",
       "software::version": "bullseye",
@@ -79,7 +79,7 @@ describe("Map Main Device Twin to Device Me Attributes API", () => {
 
     expect(output[0].topic).toBe("tb/me/attributes");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       os: "debian",
       version: "bullseye",
@@ -101,7 +101,7 @@ describe("Map Main Device Twin to Device Me Attributes API", () => {
 
     expect(output[0].topic).toBe("tb/me/attributes");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       os: "debian",
       version: "bullseye",
@@ -120,7 +120,7 @@ describe("Map Main Device Twin to Device Me Attributes API", () => {
 
     expect(output[0].topic).toBe("tb/me/attributes");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       os: "debian",
     });
@@ -138,7 +138,7 @@ describe("Map Main Device Twin to Device Me Attributes API", () => {
 
     expect(output[0].topic).toBe("tb/me/attributes");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       isActive: true,
     });
@@ -175,7 +175,7 @@ describe("Map Child/Service Device Twin to GatewayAttributes API", () => {
 
     expect(output[0].topic).toBe("tb/gateway/attributes");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       CHILD_1: {
         os: "debian",
@@ -196,7 +196,7 @@ describe("Map Child/Service Device Twin to GatewayAttributes API", () => {
 
     expect(output[0].topic).toBe("tb/gateway/attributes");
 
-    const payload = JSON.parse(output[0].payload);
+    const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload).toStrictEqual({
       APP_1: {
         isActive: true,

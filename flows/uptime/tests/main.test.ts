@@ -44,7 +44,7 @@ describe("process", () => {
       );
       expect(twinMessage).toBeDefined();
       if (twinMessage) {
-        const payload = JSON.parse(twinMessage.payload);
+        const payload = tedge.decodeJsonPayload(twinMessage.payload);
         expect(payload.online).toBeCloseTo(100, 1);
         expect(payload).toHaveProperty("currentStatus", "online");
       }
@@ -62,7 +62,7 @@ describe("process", () => {
     );
     expect(twinMessage).toBeDefined();
     if (twinMessage) {
-      const payload = JSON.parse(twinMessage.payload);
+      const payload = tedge.decodeJsonPayload(twinMessage.payload);
       expect(payload.offline).toBeCloseTo(100, 1);
       expect(payload).toHaveProperty("currentStatus", "offline");
     }
@@ -125,7 +125,7 @@ describe("UptimeTracker process payload variants", () => {
     );
     expect(twinMessage).toBeDefined();
     if (twinMessage) {
-      const payload = JSON.parse(twinMessage.payload);
+      const payload = tedge.decodeJsonPayload(twinMessage.payload);
       expect(payload.online).toBeCloseTo(100, 1);
     }
   });
@@ -141,7 +141,7 @@ describe("UptimeTracker process payload variants", () => {
     );
     expect(twinMessage).toBeDefined();
     if (twinMessage) {
-      const payload = JSON.parse(twinMessage.payload);
+      const payload = tedge.decodeJsonPayload(twinMessage.payload);
       expect(payload.offline).toBeCloseTo(100, 1);
     }
   });
@@ -161,7 +161,7 @@ describe("UptimeTracker process payload variants", () => {
     );
     expect(twinMessage).toBeDefined();
     if (twinMessage) {
-      const payload = JSON.parse(twinMessage.payload);
+      const payload = tedge.decodeJsonPayload(twinMessage.payload);
       expect(payload.online).toBeCloseTo(100, 1);
     }
   });
@@ -181,7 +181,7 @@ describe("UptimeTracker process payload variants", () => {
     );
     expect(twinMessage).toBeDefined();
     if (twinMessage) {
-      const payload = JSON.parse(twinMessage.payload);
+      const payload = tedge.decodeJsonPayload(twinMessage.payload);
       expect(payload.offline).toBeCloseTo(100, 1);
     }
   });

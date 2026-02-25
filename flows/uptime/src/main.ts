@@ -1,7 +1,7 @@
 /*
   Calculate the 
 */
-import { Message, Context } from "../../common/tedge";
+import { Message, Context, decodeJsonPayload } from "../../common/tedge";
 import { UptimeTracker, Status, StatusChange } from "./uptime";
 
 export interface Config {
@@ -17,7 +17,7 @@ function getHistory(context: FlowContext): StatusChange[] {
   return context.flow.get("history") || [];
 }
 
-export function onMessage(message: Message, context: FlowContext) {
+export function onMessage(message: Message, context: FlowContext): Message[] {
   const { window_size_minutes = 1440 } = context.config || {};
 
   const history = getHistory(context);
@@ -29,7 +29,7 @@ export function onMessage(message: Message, context: FlowContext) {
   } else if (message.payload === "1") {
     status = "online";
   } else {
-    let payload = JSON.parse(message.payload);
+    let payload = decodeJsonPayload(message.payload);
     const serviceStatus = payload["status"];
     if (serviceStatus === "up") {
       status = "online";

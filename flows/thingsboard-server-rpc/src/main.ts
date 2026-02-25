@@ -1,4 +1,4 @@
-import { Message, Context } from "../../common/tedge";
+import { Message, Context, decodePayload } from "../../common/tedge";
 import { handleThinEdgeCommand } from "./thinedge-command-handler";
 import { handleThingsBoardTopic } from "./thingsboard-rpc-handler";
 
@@ -10,9 +10,9 @@ export interface FlowContext extends Context {
 
 const ENTITY_TO_NAME_PREFIX = "tb-entity-to-name:";
 
-export function onMessage(message: Message, context: FlowContext) {
+export function onMessage(message: Message, context: FlowContext): Message[] {
   const topic = message.topic;
-  const payload = message.payload;
+  const payload = decodePayload(message.payload);
   const mainDeviceName = context.mapper.get(
     `${ENTITY_TO_NAME_PREFIX}device/main//`,
   );

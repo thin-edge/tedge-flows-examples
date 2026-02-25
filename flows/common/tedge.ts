@@ -45,10 +45,14 @@ export class Context implements ContextInterface {
 export interface Message {
   time: Date;
   topic: string;
-  payload: string;
-  raw_payload?: Uint8Array<ArrayBufferLike>;
-  retain?: boolean;
+  payload: Uint8Array<ArrayBufferLike> | string;
+  mqtt?: MqttInfo;
 }
+
+type MqttInfo = {
+  qos?: 0 | 1 | 2;
+  retain?: boolean;
+};
 
 export function createContext(config: any = {}): Context {
   return new Context(config);
@@ -84,4 +88,17 @@ export function Run(
 // Check if the topic references the main device
 export function isMainDevice(topic: string): boolean {
   return !!topic.match(/^.+\/device\/main\/.*\/.*\//);
+}
+
+export function encodePayload(payload?: string): Uint8Array {
+  return new TextEncoder().encode(payload);
+}
+
+export function decodePayload(payload?: Uint8Array | string): string {
+  if (typeof payload === "string") return payload;
+  return new TextDecoder().decode(payload);
+}
+
+export function decodeJsonPayload(payload?: Uint8Array | string): any {
+  return JSON.parse(decodePayload(payload));
 }
