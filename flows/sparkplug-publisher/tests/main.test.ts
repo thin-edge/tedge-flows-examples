@@ -1,8 +1,8 @@
 import { expect, test, describe } from "@jest/globals";
 import * as tedge from "../../common/tedge";
 import * as flow from "../src/main";
-import { fromBinary } from "@bufbuild/protobuf";
-import { PayloadSchema } from "../src/gen/sparkplug_b_pb";
+import { fromBinary, create, toBinary } from "@bufbuild/protobuf";
+import { PayloadSchema, Payload_MetricSchema } from "../src/gen/sparkplug_b_pb";
 
 const BASE_CONFIG = {
   groupId: "my-factory",
@@ -711,5 +711,195 @@ describe("sparkplug-publisher — alarms", () => {
     )!;
     expect(coolantActive).toBeDefined();
     expect((coolantActive.value as { value: boolean }).value).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NCMD rebirth command
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Build a minimal Sparkplug B NCMD payload with Node Control/Rebirth = true. */
+function makeRebirthMessage(
+  groupId: string,
+  edgeNodeId: string,
+  rebirthValue = true,
+) {
+  const payload = create(PayloadSchema, {
+    timestamp: BigInt(Date.now()),
+    metrics: [
+      create(Payload_MetricSchema, {
+        name: "Node Control/Rebirth",
+        datatype: 11, // Boolean
+        value: { case: "booleanValue", value: rebirthValue },
+      }),
+    ],
+  });
+  return {
+    time: new Date(),
+    topic: `spBv1.0/${groupId}/NCMD/${edgeNodeId}`,
+    payload: toBinary(PayloadSchema, payload),
+  };
+}
+
+describe("sparkplug-publisher \u2014 NCMD rebirth", () => {
+  test("rebirth command re-issues DBIRTH for all known devices", () => {
+    const ctx = tedge.createContext(BASE_CONFIG);
+
+    // Register two child devices by sending them a measurement each.
+    flow.onMessage(
+      makeMessage("te/device/press01///m/raw", { "temp": 42.0 }),
+      ctx,
+    );
+    flow.onMessage(
+      makeMessage("te/device/pump02///m/raw", { "rpm": 1200 }),
+      ctx,
+    );
+
+    // Send NCMD rebirth.
+    const out = flow.onMessage(
+      makeRebirthMessage(BASE_CONFIG.groupId, BASE_CONFIG.edgeNodeId),
+      ctx,
+    );
+
+    // Expect one DBIRTH per device.
+    expect(out.filter((m) => m.topic.includes("/DBIRTH/"))).toHaveLength(2);
+    expect(out.find((m) => m.topic.includes("/press01"))).toBeDefined();
+    expect(out.find((m) => m.topic.includes("/pump02"))).toBeDefined();
+
+    // All BIRTH messages must be retained.
+    out.forEach((m) => expect((m.mqtt as { retain: boolean }).retain).toBe(true));
+  });
+
+  test("rebirth command re-issues NBIRTH for edge node", () => {
+    const ctx = tedge.createContext(BASE_CONFIG);
+
+    // Register the edge node.
+    flow.onMessage(
+      makeMessage(`te/device/${BASE_CONFIG.edgeNodeId}///m/raw`, { "cpu": 12 }),
+      ctx,
+    );
+
+    const out = flow.onMessage(
+      makeRebirthMessage(BASE_CONFIG.groupId, BASE_CONFIG.edgeNodeId),
+      ctx,
+    );
+
+    const nbirth = out.find((m) => m.topic.includes("/NBIRTH/"));
+    expect(nbirth).toBeDefined();
+    expect(nbirth!.topic).toBe(
+      `spBv1.0/${BASE_CONFIG.groupId}/NBIRTH/${BASE_CONFIG.edgeNodeId}`,
+    );
+  });
+
+  test("NBIRTH is emitted before DBIRTH messages in rebirth output", () => {
+    const ctx = tedge.createContext(BASE_CONFIG);
+
+    // Register a child device first, then the edge node.
+    flow.onMessage(
+      makeMessage("te/device/press01///m/raw", { "temp": 55 }),
+      ctx,
+    );
+    flow.onMessage(
+      makeMessage(`te/device/${BASE_CONFIG.edgeNodeId}///m/raw`, { "cpu": 8 }),
+      ctx,
+    );
+
+    const out = flow.onMessage(
+      makeRebirthMessage(BASE_CONFIG.groupId, BASE_CONFIG.edgeNodeId),
+      ctx,
+    );
+
+    const firstTopic = out[0].topic;
+    expect(firstTopic).toContain("/NBIRTH/");
+  });
+
+  test("rebirth resets seq counter to 0 on NBIRTH", () => {
+    const ctx = tedge.createContext(BASE_CONFIG);
+
+    // Burn a few seq numbers.
+    flow.onMessage(
+      makeMessage(`te/device/${BASE_CONFIG.edgeNodeId}///m/raw`, { "x": 1 }),
+      ctx,
+    );
+    flow.onMessage(
+      makeMessage(`te/device/${BASE_CONFIG.edgeNodeId}///m/raw`, { "x": 2 }),
+      ctx,
+    );
+
+    const out = flow.onMessage(
+      makeRebirthMessage(BASE_CONFIG.groupId, BASE_CONFIG.edgeNodeId),
+      ctx,
+    );
+
+    const nbirth = out.find((m) => m.topic.includes("/NBIRTH/"))!;
+    const decoded = fromBinary(PayloadSchema, nbirth.payload as Uint8Array);
+    expect(decoded.seq).toBe(BigInt(0));
+  });
+
+  test("rebirth includes last-known metric values", () => {
+    const ctx = tedge.createContext(BASE_CONFIG);
+
+    flow.onMessage(
+      makeMessage("te/device/press01///m/raw", { "temp": 99.5, "rpm": 3000 }),
+      ctx,
+    );
+
+    const out = flow.onMessage(
+      makeRebirthMessage(BASE_CONFIG.groupId, BASE_CONFIG.edgeNodeId),
+      ctx,
+    );
+
+    const dbirth = out.find((m) => m.topic.includes("/DBIRTH/") && m.topic.endsWith("/press01"))!;
+    const decoded = fromBinary(PayloadSchema, dbirth.payload as Uint8Array);
+    const temps = decoded.metrics.find((m) => m.name === "temp");
+    expect(temps).toBeDefined();
+    expect((temps!.value as { value: number }).value).toBe(99.5);
+  });
+
+  test("NCMD for wrong groupId or edgeNodeId is ignored", () => {
+    const ctx = tedge.createContext(BASE_CONFIG);
+    flow.onMessage(
+      makeMessage("te/device/press01///m/raw", { "temp": 42 }),
+      ctx,
+    );
+
+    // Wrong groupId
+    expect(
+      flow.onMessage(
+        makeRebirthMessage("wrong-group", BASE_CONFIG.edgeNodeId),
+        ctx,
+      ),
+    ).toHaveLength(0);
+
+    // Wrong edgeNodeId
+    expect(
+      flow.onMessage(
+        makeRebirthMessage(BASE_CONFIG.groupId, "wrong-node"),
+        ctx,
+      ),
+    ).toHaveLength(0);
+  });
+
+  test("NCMD with Node Control/Rebirth=false is ignored", () => {
+    const ctx = tedge.createContext(BASE_CONFIG);
+    flow.onMessage(
+      makeMessage("te/device/press01///m/raw", { "temp": 42 }),
+      ctx,
+    );
+
+    const out = flow.onMessage(
+      makeRebirthMessage(BASE_CONFIG.groupId, BASE_CONFIG.edgeNodeId, false),
+      ctx,
+    );
+    expect(out).toHaveLength(0);
+  });
+
+  test("NCMD rebirth with no known devices returns empty", () => {
+    const ctx = tedge.createContext(BASE_CONFIG);
+    const out = flow.onMessage(
+      makeRebirthMessage(BASE_CONFIG.groupId, BASE_CONFIG.edgeNodeId),
+      ctx,
+    );
+    expect(out).toHaveLength(0);
   });
 });
