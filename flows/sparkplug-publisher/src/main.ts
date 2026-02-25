@@ -17,17 +17,36 @@ export interface Config {
   debug?: boolean;
 }
 
+export interface FlowContext extends Context {
+  config: Config;
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type MetricValue = ReturnType<
+  typeof create<typeof Payload_MetricSchema>
+>["value"];
+
+type TypedMetric = {
+  name: string;
+  datatype: number;
+  value: MetricValue;
+};
+
 /**
- * Per-metric alias record stored in flow state.
- * Aliases are assigned at BIRTH time and reused in every subsequent DATA message,
- * saving the full metric name string from being retransmitted on the wire.
+ * Per-metric registry entry stored in flow state.
+ * Aliases are assigned at BIRTH time and reused in every subsequent DATA message.
+ * lastValue is stored as a JSON-serializable primitive so complete re-BIRTH
+ * messages can include all declared metrics, not just incoming ones.
  */
 interface MetricMeta {
   alias: number;
   datatype: number;
+  lastValue?: string | number | boolean;
 }
 
-/** Load the alias registry for a device from persistent flow state. */
+// ── Flow state helpers ────────────────────────────────────────────────────────
+
 function getDeviceRegistry(
   context: FlowContext,
   deviceId: string,
@@ -41,70 +60,21 @@ function getDeviceRegistry(
   }
 }
 
-/** Save the alias registry for a device back to flow state. */
 function saveDeviceRegistry(
   context: FlowContext,
   deviceId: string,
   registry: Record<string, MetricMeta>,
 ): void {
   context.flow.set(`alias:${deviceId}`, JSON.stringify(registry));
-  // Track the next free alias number alongside the registry.
   const highest =
     Object.values(registry).reduce((max, m) => Math.max(max, m.alias), -1) + 1;
   context.flow.set(`nextAlias:${deviceId}`, highest);
 }
 
-/** Return the next free alias integer for a device. */
 function getNextAlias(context: FlowContext, deviceId: string): number {
   return (context.flow.get(`nextAlias:${deviceId}`) as number | undefined) ?? 0;
 }
 
-export interface FlowContext extends Context {
-  config: Config;
-}
-
-// thin-edge.io measurement topic: te/device/{name}///m/{type}
-// Returns null if the topic does not match.
-function parseTedgeMeasurementTopic(
-  topic: string,
-): { deviceId: string; measurementType: string } | null {
-  const parts = topic.split("/");
-  // Expected: ["te", "device", "{name}", "", "", "m", "{type?}"]
-  if (parts.length < 6 || parts[0] !== "te" || parts[5] !== "m") {
-    return null;
-  }
-  return {
-    deviceId: parts[2],
-    measurementType: parts[6] ?? "",
-  };
-}
-
-/** Classify a raw payload value into a Sparkplug B typed metric value + datatype. */
-function classifyValue(rawValue: unknown): {
-  value: ReturnType<typeof create<typeof Payload_MetricSchema>>["value"];
-  datatype: number;
-} | null {
-  if (typeof rawValue === "number") {
-    return {
-      value: { case: "doubleValue" as const, value: rawValue },
-      datatype: DataType.Double,
-    };
-  } else if (typeof rawValue === "boolean") {
-    return {
-      value: { case: "booleanValue" as const, value: rawValue },
-      datatype: DataType.Boolean,
-    };
-  } else if (typeof rawValue === "string") {
-    return {
-      value: { case: "stringValue" as const, value: rawValue },
-      datatype: DataType.String,
-    };
-  }
-  // Skip complex types (objects, arrays) that have no direct Sparkplug B scalar mapping.
-  return null;
-}
-
-/** Advance the rolling 0-255 Sparkplug B sequence number and return it. */
 function nextSeq(context: FlowContext): bigint {
   const prev = (context.flow.get("seq") as number | undefined) ?? -1;
   const seq = (prev + 1) % 256;
@@ -112,73 +82,129 @@ function nextSeq(context: FlowContext): bigint {
   return BigInt(seq);
 }
 
-export function onMessage(message: Message, context: FlowContext): Message[] {
-  const { groupId, edgeNodeId, debug = false } = context.config;
-  if (!groupId || !edgeNodeId) {
-    if (debug)
-      console.error(
-        "sparkplug-publisher: groupId and edgeNodeId must be configured",
-      );
-    return [];
+// ── Topic parsing ─────────────────────────────────────────────────────────────
+
+type TedgeChannel = "m" | "e" | "a";
+
+type ParsedTopic = {
+  deviceId: string;
+  channel: TedgeChannel;
+  subtype: string;
+};
+
+/**
+ * Parse any thin-edge.io entity topic.
+ * Format: te/device/{id}///{channel}/{subtype?}
+ */
+function parseTedgeTopic(topic: string): ParsedTopic | null {
+  const parts = topic.split("/");
+  // ["te", "device", "{id}", "", "", "{channel}", "{subtype?}"]
+  if (parts.length < 6 || parts[0] !== "te" || parts[1] !== "device") {
+    return null;
   }
+  const channel = parts[5];
+  if (channel !== "m" && channel !== "e" && channel !== "a") return null;
+  return { deviceId: parts[2], channel, subtype: parts[6] ?? "" };
+}
 
-  const parsed = parseTedgeMeasurementTopic(message.topic);
-  if (!parsed) return [];
+// ── Value conversion helpers ──────────────────────────────────────────────────
 
-  const { deviceId } = parsed;
-
-  let tedgePayload: Record<string, unknown>;
-  try {
-    tedgePayload = decodeJsonPayload(message.payload);
-  } catch (e) {
-    if (debug)
-      console.error("sparkplug-publisher: failed to parse JSON payload", e);
-    return [];
+function classifyValue(rawValue: unknown): TypedMetric | null {
+  if (typeof rawValue === "number") {
+    return {
+      name: "",
+      datatype: DataType.Double,
+      value: { case: "doubleValue" as const, value: rawValue },
+    };
+  } else if (typeof rawValue === "boolean") {
+    return {
+      name: "",
+      datatype: DataType.Boolean,
+      value: { case: "booleanValue" as const, value: rawValue },
+    };
+  } else if (typeof rawValue === "string") {
+    return {
+      name: "",
+      datatype: DataType.String,
+      value: { case: "stringValue" as const, value: rawValue },
+    };
   }
+  return null;
+}
 
-  // Resolve the measurement timestamp; fall back to message receive time.
-  const timeField = tedgePayload["time"];
-  const timestamp =
-    typeof timeField === "string" ? new Date(timeField) : message.time;
-  const timestampMs = BigInt(timestamp.getTime());
-
-  // Classify each incoming metric value (skip "time" and complex types).
-  type TypedMetric = {
-    name: string;
-    datatype: number;
-    value: ReturnType<typeof create<typeof Payload_MetricSchema>>["value"];
-  };
-  const incoming: TypedMetric[] = [];
-  for (const [key, rawValue] of Object.entries(tedgePayload)) {
-    if (key === "time") continue;
-    const typed = classifyValue(rawValue);
-    if (!typed) continue;
-    incoming.push({ name: key, ...typed });
+/** Extract a JSON-serializable primitive from a protobuf metric value for registry storage. */
+function extractPrimitive(
+  v: MetricValue,
+): string | number | boolean | undefined {
+  if (
+    v.case === "doubleValue" ||
+    v.case === "booleanValue" ||
+    v.case === "stringValue"
+  ) {
+    return v.value as string | number | boolean;
   }
+  return undefined;
+}
 
+/** Reconstruct a protobuf metric value from a stored primitive + datatype. */
+function primitiveToValue(
+  v: string | number | boolean,
+  datatype: number,
+): MetricValue {
+  if (datatype === DataType.Boolean)
+    return { case: "booleanValue" as const, value: v as boolean };
+  if (datatype === DataType.Double)
+    return { case: "doubleValue" as const, value: v as number };
+  return { case: "stringValue" as const, value: String(v) };
+}
+
+// ── Core message builder ──────────────────────────────────────────────────────
+
+/**
+ * Shared logic for producing Sparkplug B BIRTH + DATA messages.
+ *
+ * BIRTH is emitted (retained) when either:
+ *   - this is the first message from the device (registry is empty), or
+ *   - a metric name not previously seen appears in incoming.
+ *
+ * Re-issued BIRTH always contains ALL metrics in the device registry so that
+ * a host application joining late receives the complete schema from the retained
+ * message. Metrics not present in incoming use their last-known stored value;
+ * brand-new metrics that have never had a value are declared with isNull=true.
+ *
+ * DATA carries alias-only metrics (no names on the wire) — Report by Exception.
+ */
+function buildSparkplugMessages(
+  context: FlowContext,
+  groupId: string,
+  edgeNodeId: string,
+  deviceId: string,
+  timestamp: Date,
+  incoming: TypedMetric[],
+): Message[] {
   if (incoming.length === 0) return [];
 
-  // ── Alias registry ────────────────────────────────────────────────────────
-  // Each device's metric names are mapped to stable integer aliases once in a
-  // BIRTH message. Subsequent DATA messages carry only the alias, not the name,
-  // saving bandwidth on every measurement update.
+  const timestampMs = BigInt(timestamp.getTime());
+  const isEdgeNode = deviceId === edgeNodeId;
+
   let registry = getDeviceRegistry(context, deviceId);
-  let needsBirth = Object.keys(registry).length === 0; // first time we see this device
+  let needsBirth = Object.keys(registry).length === 0;
   let nextAlias = getNextAlias(context, deviceId);
 
+  // Register new metrics and update last-known values.
   for (const metric of incoming) {
     if (!(metric.name in registry)) {
       registry[metric.name] = { alias: nextAlias++, datatype: metric.datatype };
-      needsBirth = true; // new metric appeared → must re-issue BIRTH
+      needsBirth = true;
     }
+    registry[metric.name].lastValue = extractPrimitive(metric.value);
   }
 
-  if (needsBirth) {
-    saveDeviceRegistry(context, deviceId, registry);
-  }
+  // Always persist updated lastValues so re-BIRTH after a DATA-only update
+  // (e.g. alarm clear) reflects the current state.
+  saveDeviceRegistry(context, deviceId, registry);
 
-  // ── Topic construction ────────────────────────────────────────────────────
-  const isEdgeNode = deviceId === edgeNodeId;
+  // Topic construction
   const birthCmd = isEdgeNode ? "NBIRTH" : "DBIRTH";
   const dataCmd = isEdgeNode ? "NDATA" : "DDATA";
   const birthTopic = isEdgeNode
@@ -188,26 +214,43 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     ? `spBv1.0/${groupId}/${dataCmd}/${edgeNodeId}`
     : `spBv1.0/${groupId}/${dataCmd}/${edgeNodeId}/${deviceId}`;
 
+  const incomingByName = new Map(incoming.map((m) => [m.name, m]));
   const output: Message[] = [];
 
-  // ── BIRTH message (retained, full names + aliases, current values) ────────
-  // The Sparkplug B spec requires BIRTH to be published as a retained MQTT
-  // message so that any host application joining later can reconstruct the
-  // alias→name mapping without waiting for the next DATA.
-  //
-  // Note: NDEATH should be configured as the MQTT Will with the bdSeq counter
-  // at connection time — that happens outside the flow (in the MQTT client
-  // configuration), not here.
+  // ── BIRTH ─────────────────────────────────────────────────────────────────
   if (needsBirth) {
-    const birthMetrics = incoming.map((m) => {
-      const { alias, datatype } = registry[m.name];
-      return create(Payload_MetricSchema, {
-        name: m.name, // full name only in BIRTH
-        alias: BigInt(alias), // alias defined here, reused in all DATA
-        timestamp: timestampMs,
-        datatype,
-        value: m.value,
-      });
+    // Include every metric in the registry so the BIRTH is a complete schema
+    // declaration, not just the metrics present in this particular message.
+    const birthMetrics = Object.entries(registry).map(([name, meta]) => {
+      const current = incomingByName.get(name);
+      if (current) {
+        // New or updated metric — use the live value.
+        return create(Payload_MetricSchema, {
+          name,
+          alias: BigInt(meta.alias),
+          timestamp: timestampMs,
+          datatype: meta.datatype,
+          value: current.value,
+        });
+      } else if (meta.lastValue !== undefined) {
+        // Previously seen metric — replay last known value.
+        return create(Payload_MetricSchema, {
+          name,
+          alias: BigInt(meta.alias),
+          timestamp: timestampMs,
+          datatype: meta.datatype,
+          value: primitiveToValue(meta.lastValue, meta.datatype),
+        });
+      } else {
+        // Declared but never had a value (shouldn't occur in practice).
+        return create(Payload_MetricSchema, {
+          name,
+          alias: BigInt(meta.alias),
+          timestamp: timestampMs,
+          datatype: meta.datatype,
+          isNull: true,
+        });
+      }
     });
 
     output.push({
@@ -225,11 +268,12 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     });
   }
 
-  // ── DATA message (alias only — no metric names on the wire) ───────────────
+  // ── DATA ──────────────────────────────────────────────────────────────────
+  // RbE: only the metrics that changed are included in DATA. Each carries its
+  // alias only — no name is transmitted after BIRTH.
   const dataMetrics = incoming.map((m) => {
     const { alias, datatype } = registry[m.name];
     return create(Payload_MetricSchema, {
-      // name intentionally omitted — consumers resolve via the BIRTH alias map
       alias: BigInt(alias),
       timestamp: timestampMs,
       datatype,
@@ -251,4 +295,158 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   });
 
   return output;
+}
+
+// ── Per-channel handlers ──────────────────────────────────────────────────────
+
+/**
+ * Measurements: each key in the JSON payload (excluding "time") becomes a
+ * metric with the same name, preserving its native datatype (Double / Boolean / String).
+ *
+ * Topic: te/device/{id}///m/{measurementType?}
+ */
+function handleMeasurement(
+  _message: Message,
+  _context: FlowContext,
+  _deviceId: string,
+  tedgePayload: Record<string, unknown>,
+): TypedMetric[] {
+  const metrics: TypedMetric[] = [];
+  for (const [key, rawValue] of Object.entries(tedgePayload)) {
+    if (key === "time") continue;
+    const typed = classifyValue(rawValue);
+    if (!typed) continue;
+    metrics.push({ ...typed, name: key });
+  }
+  return metrics;
+}
+
+/**
+ * Events: the event text becomes a single String metric named `Event/{type}`.
+ *
+ * RbE: a DDATA is only published when an event fires. Events are ephemeral
+ * (fire-and-forget), so there is no "clear" concept — the last emitted BIRTH
+ * value is whatever the previous event text was.
+ *
+ * Topic: te/device/{id}///e/{eventType}
+ */
+function handleEvent(
+  _message: Message,
+  _context: FlowContext,
+  _deviceId: string,
+  eventType: string,
+  tedgePayload: Record<string, unknown>,
+): TypedMetric[] {
+  const text =
+    typeof tedgePayload["text"] === "string" ? tedgePayload["text"] : "";
+  return [
+    {
+      name: `Event/${eventType || "default"}`,
+      datatype: DataType.String,
+      value: { case: "stringValue" as const, value: text },
+    },
+  ];
+}
+
+/**
+ * Alarms: modelled as two metrics per alarm type:
+ *   Alarm/{type}/Active  — Boolean  (true = raised, false = cleared)
+ *   Alarm/{type}/Text    — String   (alarm message; empty string when cleared)
+ *
+ * RbE: a DDATA is only published when the alarm state changes — either the
+ * thin-edge.io runtime raising it (payload with "text") or clearing it
+ * (empty payload {}).
+ *
+ * Topic: te/device/{id}///a/{alarmType}
+ */
+function handleAlarm(
+  _message: Message,
+  _context: FlowContext,
+  _deviceId: string,
+  alarmType: string,
+  tedgePayload: Record<string, unknown>,
+): TypedMetric[] {
+  const text =
+    typeof tedgePayload["text"] === "string" ? tedgePayload["text"] : "";
+  const active = text.length > 0;
+  const prefix = `Alarm/${alarmType || "default"}`;
+  return [
+    {
+      name: `${prefix}/Active`,
+      datatype: DataType.Boolean,
+      value: { case: "booleanValue" as const, value: active },
+    },
+    {
+      name: `${prefix}/Text`,
+      datatype: DataType.String,
+      value: { case: "stringValue" as const, value: text },
+    },
+  ];
+}
+
+// ── Entry point ───────────────────────────────────────────────────────────────
+
+export function onMessage(message: Message, context: FlowContext): Message[] {
+  const { groupId, edgeNodeId, debug = false } = context.config;
+  if (!groupId || !edgeNodeId) {
+    if (debug)
+      console.error(
+        "sparkplug-publisher: groupId and edgeNodeId must be configured",
+      );
+    return [];
+  }
+
+  const parsed = parseTedgeTopic(message.topic);
+  if (!parsed) return [];
+
+  const { deviceId, channel, subtype } = parsed;
+
+  // thin-edge.io clears alarms by publishing an empty retained message (''),
+  // which is not valid JSON. Treat any empty payload on an alarm topic as a
+  // clear signal (equivalent to { text: "" }).
+  const rawPayload =
+    typeof message.payload === "string"
+      ? message.payload
+      : new TextDecoder().decode(message.payload);
+  const isEmpty = rawPayload.trim() === "";
+
+  if (isEmpty && channel !== "a") return [];
+
+  let tedgePayload: Record<string, unknown>;
+  if (isEmpty) {
+    tedgePayload = {}; // alarm clear
+  } else {
+    try {
+      tedgePayload = decodeJsonPayload(message.payload);
+    } catch (e) {
+      if (debug)
+        console.error("sparkplug-publisher: failed to parse JSON payload", e);
+      return [];
+    }
+  }
+
+  // Resolve timestamp from payload "time" field, fall back to message receive time.
+  const timeField = tedgePayload["time"];
+  const timestamp =
+    typeof timeField === "string" ? new Date(timeField) : message.time;
+
+  let incoming: TypedMetric[];
+  if (channel === "m") {
+    incoming = handleMeasurement(message, context, deviceId, tedgePayload);
+  } else if (channel === "e") {
+    incoming = handleEvent(message, context, deviceId, subtype, tedgePayload);
+  } else if (channel === "a") {
+    incoming = handleAlarm(message, context, deviceId, subtype, tedgePayload);
+  } else {
+    return [];
+  }
+
+  return buildSparkplugMessages(
+    context,
+    groupId,
+    edgeNodeId,
+    deviceId,
+    timestamp,
+    incoming,
+  );
 }
