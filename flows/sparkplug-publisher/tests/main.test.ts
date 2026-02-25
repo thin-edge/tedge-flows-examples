@@ -747,13 +747,10 @@ describe("sparkplug-publisher \u2014 NCMD rebirth", () => {
 
     // Register two child devices by sending them a measurement each.
     flow.onMessage(
-      makeMessage("te/device/press01///m/raw", { "temp": 42.0 }),
+      makeMessage("te/device/press01///m/raw", { temp: 42.0 }),
       ctx,
     );
-    flow.onMessage(
-      makeMessage("te/device/pump02///m/raw", { "rpm": 1200 }),
-      ctx,
-    );
+    flow.onMessage(makeMessage("te/device/pump02///m/raw", { rpm: 1200 }), ctx);
 
     // Send NCMD rebirth.
     const out = flow.onMessage(
@@ -767,7 +764,9 @@ describe("sparkplug-publisher \u2014 NCMD rebirth", () => {
     expect(out.find((m) => m.topic.includes("/pump02"))).toBeDefined();
 
     // All BIRTH messages must be retained.
-    out.forEach((m) => expect((m.mqtt as { retain: boolean }).retain).toBe(true));
+    out.forEach((m) =>
+      expect((m.mqtt as { retain: boolean }).retain).toBe(true),
+    );
   });
 
   test("rebirth command re-issues NBIRTH for edge node", () => {
@@ -775,7 +774,7 @@ describe("sparkplug-publisher \u2014 NCMD rebirth", () => {
 
     // Register the edge node.
     flow.onMessage(
-      makeMessage(`te/device/${BASE_CONFIG.edgeNodeId}///m/raw`, { "cpu": 12 }),
+      makeMessage(`te/device/${BASE_CONFIG.edgeNodeId}///m/raw`, { cpu: 12 }),
       ctx,
     );
 
@@ -795,12 +794,9 @@ describe("sparkplug-publisher \u2014 NCMD rebirth", () => {
     const ctx = tedge.createContext(BASE_CONFIG);
 
     // Register a child device first, then the edge node.
+    flow.onMessage(makeMessage("te/device/press01///m/raw", { temp: 55 }), ctx);
     flow.onMessage(
-      makeMessage("te/device/press01///m/raw", { "temp": 55 }),
-      ctx,
-    );
-    flow.onMessage(
-      makeMessage(`te/device/${BASE_CONFIG.edgeNodeId}///m/raw`, { "cpu": 8 }),
+      makeMessage(`te/device/${BASE_CONFIG.edgeNodeId}///m/raw`, { cpu: 8 }),
       ctx,
     );
 
@@ -818,11 +814,11 @@ describe("sparkplug-publisher \u2014 NCMD rebirth", () => {
 
     // Burn a few seq numbers.
     flow.onMessage(
-      makeMessage(`te/device/${BASE_CONFIG.edgeNodeId}///m/raw`, { "x": 1 }),
+      makeMessage(`te/device/${BASE_CONFIG.edgeNodeId}///m/raw`, { x: 1 }),
       ctx,
     );
     flow.onMessage(
-      makeMessage(`te/device/${BASE_CONFIG.edgeNodeId}///m/raw`, { "x": 2 }),
+      makeMessage(`te/device/${BASE_CONFIG.edgeNodeId}///m/raw`, { x: 2 }),
       ctx,
     );
 
@@ -840,7 +836,7 @@ describe("sparkplug-publisher \u2014 NCMD rebirth", () => {
     const ctx = tedge.createContext(BASE_CONFIG);
 
     flow.onMessage(
-      makeMessage("te/device/press01///m/raw", { "temp": 99.5, "rpm": 3000 }),
+      makeMessage("te/device/press01///m/raw", { temp: 99.5, rpm: 3000 }),
       ctx,
     );
 
@@ -849,7 +845,9 @@ describe("sparkplug-publisher \u2014 NCMD rebirth", () => {
       ctx,
     );
 
-    const dbirth = out.find((m) => m.topic.includes("/DBIRTH/") && m.topic.endsWith("/press01"))!;
+    const dbirth = out.find(
+      (m) => m.topic.includes("/DBIRTH/") && m.topic.endsWith("/press01"),
+    )!;
     const decoded = fromBinary(PayloadSchema, dbirth.payload as Uint8Array);
     const temps = decoded.metrics.find((m) => m.name === "temp");
     expect(temps).toBeDefined();
@@ -858,10 +856,7 @@ describe("sparkplug-publisher \u2014 NCMD rebirth", () => {
 
   test("NCMD for wrong groupId or edgeNodeId is ignored", () => {
     const ctx = tedge.createContext(BASE_CONFIG);
-    flow.onMessage(
-      makeMessage("te/device/press01///m/raw", { "temp": 42 }),
-      ctx,
-    );
+    flow.onMessage(makeMessage("te/device/press01///m/raw", { temp: 42 }), ctx);
 
     // Wrong groupId
     expect(
@@ -882,10 +877,7 @@ describe("sparkplug-publisher \u2014 NCMD rebirth", () => {
 
   test("NCMD with Node Control/Rebirth=false is ignored", () => {
     const ctx = tedge.createContext(BASE_CONFIG);
-    flow.onMessage(
-      makeMessage("te/device/press01///m/raw", { "temp": 42 }),
-      ctx,
-    );
+    flow.onMessage(makeMessage("te/device/press01///m/raw", { temp: 42 }), ctx);
 
     const out = flow.onMessage(
       makeRebirthMessage(BASE_CONFIG.groupId, BASE_CONFIG.edgeNodeId, false),
