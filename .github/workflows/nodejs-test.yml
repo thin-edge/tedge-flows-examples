@@ -75,4 +75,10 @@ jobs:
         run: go install github.com/thin-edge/tedge-oscar@latest
 
       - name: Publish
-        run: npm run publish
+        run: npm run publish -- --target registry
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: flows
+          path: ./dist/*.tar.gz
