@@ -94,8 +94,12 @@ from `tedge mqtt sub`. Use [spmon](../../tools/spmon) to inspect them:
 
 ```sh
 cd tools/spmon
-./spmon --broker localhost
+./spmon --broker localhost --group tedge --node gateway01
 ```
+
+Press `R` inside spmon to send a Sparkplug B NCMD rebirth command to the flow,
+which will immediately re-publish retained BIRTH messages for every known device
+with their current last-known metric values.
 
 Or decode a single message with `mosquitto_sub` + a protobuf decoder of your
 choice. The Sparkplug B topic layout is:

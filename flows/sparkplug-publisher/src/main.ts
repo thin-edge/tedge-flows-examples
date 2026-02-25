@@ -1,5 +1,5 @@
 import { Message, Context, decodeJsonPayload } from "../../common/tedge";
-import { create, toBinary } from "@bufbuild/protobuf";
+import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
 import { PayloadSchema, Payload_MetricSchema } from "./gen/sparkplug_b_pb";
 
 // Sparkplug B datatype constants
@@ -73,6 +73,28 @@ function saveDeviceRegistry(
 
 function getNextAlias(context: FlowContext, deviceId: string): number {
   return (context.flow.get(`nextAlias:${deviceId}`) as number | undefined) ?? 0;
+}
+
+/**
+ * Maintain a list of all device IDs that have ever sent a message so that a
+ * rebirth command can re-issue BIRTH for every known device.
+ */
+function getKnownDevices(context: FlowContext): string[] {
+  const raw = context.flow.get("devices") as string | undefined;
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as string[];
+  } catch {
+    return [];
+  }
+}
+
+function addKnownDevice(context: FlowContext, deviceId: string): void {
+  const devices = getKnownDevices(context);
+  if (!devices.includes(deviceId)) {
+    devices.push(deviceId);
+    context.flow.set("devices", JSON.stringify(devices));
+  }
 }
 
 function nextSeq(context: FlowContext): bigint {
@@ -183,6 +205,9 @@ function buildSparkplugMessages(
   incoming: TypedMetric[],
 ): Message[] {
   if (incoming.length === 0) return [];
+
+  // Track this device so rebirth can enumerate all known devices.
+  addKnownDevice(context, deviceId);
 
   const timestampMs = BigInt(timestamp.getTime());
   const isEdgeNode = deviceId === edgeNodeId;
@@ -297,6 +322,106 @@ function buildSparkplugMessages(
   return output;
 }
 
+// ── NCMD rebirth ─────────────────────────────────────────────────────────────
+
+/**
+ * Check whether an inbound Sparkplug B NCMD payload contains the
+ * `Node Control/Rebirth` metric set to `true`.
+ */
+function isRebirthCommand(message: Message): boolean {
+  try {
+    const bytes =
+      typeof message.payload === "string"
+        ? new TextEncoder().encode(message.payload)
+        : (message.payload as Uint8Array);
+    const payload = fromBinary(PayloadSchema, bytes);
+    return payload.metrics.some(
+      (m) =>
+        m.name === "Node Control/Rebirth" &&
+        m.value?.case === "booleanValue" &&
+        m.value.value === true,
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Re-issue retained BIRTH messages for every known device.
+ *
+ * Called when the flow receives a Sparkplug B NCMD rebirth command from a
+ * Host Application. Per the Sparkplug B specification the seq counter MUST
+ * reset to 0 before the first NBIRTH in a rebirth sequence. NBIRTH is always
+ * emitted before any DBIRTH messages.
+ */
+function handleRebirth(
+  context: FlowContext,
+  groupId: string,
+  edgeNodeId: string,
+): Message[] {
+  // Reset seq per Sparkplug B spec (seq resets on every NBIRTH).
+  context.flow.set("seq", -1);
+
+  const deviceIds = getKnownDevices(context);
+  if (deviceIds.length === 0) return [];
+
+  const timestamp = new Date();
+  const timestampMs = BigInt(timestamp.getTime());
+  const output: Message[] = [];
+
+  // NBIRTH must precede all DBIRTH messages — sort edge node to the front.
+  const sorted = [
+    ...deviceIds.filter((id) => id === edgeNodeId),
+    ...deviceIds.filter((id) => id !== edgeNodeId),
+  ];
+
+  for (const deviceId of sorted) {
+    const registry = getDeviceRegistry(context, deviceId);
+    if (Object.keys(registry).length === 0) continue;
+
+    const isEdgeNode = deviceId === edgeNodeId;
+    const birthCmd = isEdgeNode ? "NBIRTH" : "DBIRTH";
+    const birthTopic = isEdgeNode
+      ? `spBv1.0/${groupId}/${birthCmd}/${edgeNodeId}`
+      : `spBv1.0/${groupId}/${birthCmd}/${edgeNodeId}/${deviceId}`;
+
+    const birthMetrics = Object.entries(registry).map(([name, meta]) => {
+      if (meta.lastValue !== undefined) {
+        return create(Payload_MetricSchema, {
+          name,
+          alias: BigInt(meta.alias),
+          timestamp: timestampMs,
+          datatype: meta.datatype,
+          value: primitiveToValue(meta.lastValue, meta.datatype),
+        });
+      }
+      return create(Payload_MetricSchema, {
+        name,
+        alias: BigInt(meta.alias),
+        timestamp: timestampMs,
+        datatype: meta.datatype,
+        isNull: true,
+      });
+    });
+
+    output.push({
+      time: timestamp,
+      topic: birthTopic,
+      payload: toBinary(
+        PayloadSchema,
+        create(PayloadSchema, {
+          timestamp: timestampMs,
+          seq: nextSeq(context),
+          metrics: birthMetrics,
+        }),
+      ),
+      mqtt: { retain: true, qos: 1 },
+    });
+  }
+
+  return output;
+}
+
 // ── Per-channel handlers ──────────────────────────────────────────────────────
 
 /**
@@ -393,6 +518,16 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
       console.error(
         "sparkplug-publisher: groupId and edgeNodeId must be configured",
       );
+    return [];
+  }
+
+  // Handle Sparkplug B NCMD rebirth command from a Host Application.
+  // Topic: spBv1.0/{groupId}/NCMD/{edgeNodeId}
+  if (message.topic.startsWith("spBv1.0/")) {
+    const ncmdTopic = `spBv1.0/${groupId}/NCMD/${edgeNodeId}`;
+    if (message.topic === ncmdTopic && isRebirthCommand(message)) {
+      return handleRebirth(context, groupId, edgeNodeId);
+    }
     return [];
   }
 
