@@ -1,7 +1,7 @@
 /*
   Calculate the 
 */
-import { Message, Context, decodeJsonPayload } from "../../common/tedge";
+import { Message, Context, decodePayload } from "../../common/tedge";
 import { UptimeTracker, Status, StatusChange } from "./uptime";
 
 export interface Config {
@@ -22,19 +22,23 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
 
   const history = getHistory(context);
   const state = new UptimeTracker(window_size_minutes, history);
+  const payload = decodePayload(message.payload);
 
   let status: Status = "online";
-  if (message.payload === "0") {
+  if (payload === "0") {
     status = "offline";
-  } else if (message.payload === "1") {
+  } else if (payload === "1") {
     status = "online";
   } else {
-    let payload = decodeJsonPayload(message.payload);
-    const serviceStatus = payload["status"];
-    if (serviceStatus === "up") {
-      status = "online";
-    } else if (serviceStatus === "down") {
-      status = "offline";
+    try {
+      const heathStatus = JSON.parse(payload)["status"];
+      if (heathStatus === "up") {
+        status = "online";
+      } else if (heathStatus === "down") {
+        status = "offline";
+      }
+    } catch (err) {
+      console.warn(`Failed to parse json message. error=${err}`);
     }
   }
   context.flow.set(
@@ -70,6 +74,7 @@ export function onInterval(time: Date, context: FlowContext) {
     {
       time: time,
       topic: `te/device/main///${stats_topic}`,
+      mqtt: { retain: true },
       payload: JSON.stringify({
         online,
         offline,

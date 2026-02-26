@@ -9,7 +9,7 @@ test("Converts string to a timestamp", () => {
     {
       time: tedge.mockGetTime(),
       topic: "example",
-      payload: "1",
+      payload: tedge.encodePayload("1"),
     },
     tedge.createContext(),
   );
@@ -35,7 +35,11 @@ describe("process", () => {
 
     test('should update status to online when payload is "1"', () => {
       const time = now;
-      const message = { time, topic: "test", payload: "1" };
+      const message = {
+        time,
+        topic: "test",
+        payload: tedge.encodePayload("1"),
+      };
       const context = tedge.createContext({ window_size_minutes: 600 });
       flow.onMessage(message, context);
       const output = flow.onInterval(time, context);
@@ -44,6 +48,7 @@ describe("process", () => {
       );
       expect(twinMessage).toBeDefined();
       if (twinMessage) {
+        expect(twinMessage.mqtt?.retain).toBe(true);
         const payload = tedge.decodeJsonPayload(twinMessage.payload);
         expect(payload.online).toBeCloseTo(100, 1);
         expect(payload).toHaveProperty("currentStatus", "online");
@@ -53,7 +58,7 @@ describe("process", () => {
 
   test('should update status to offline when payload is "0"', () => {
     const time = new Date();
-    const message = { time, topic: "test", payload: "0" };
+    const message = { time, topic: "test", payload: tedge.encodePayload("0") };
     const context = tedge.createContext({ window_size_minutes: 600 });
     flow.onMessage(message, context);
     const output = flow.onInterval(time, context);
@@ -116,7 +121,7 @@ describe("UptimeTracker process payload variants", () => {
 
   test('payload "1" sets status to online', () => {
     const time = new Date(now);
-    const message = { time, topic: "test", payload: "1" };
+    const message = { time, topic: "test", payload: tedge.encodePayload("1") };
     const context = tedge.createContext({});
     flow.onMessage(message, context);
     const output = flow.onInterval(time, context);
@@ -132,7 +137,7 @@ describe("UptimeTracker process payload variants", () => {
 
   test('payload "0" sets status to offline', () => {
     const time = new Date(now);
-    const message = { time, topic: "test", payload: "0" };
+    const message = { time, topic: "test", payload: tedge.encodePayload("0") };
     const context = tedge.createContext({});
     flow.onMessage(message, context);
     const output = flow.onInterval(time, context);
@@ -151,7 +156,7 @@ describe("UptimeTracker process payload variants", () => {
     const message = {
       time,
       topic: "test",
-      payload: JSON.stringify({ status: "up" }),
+      payload: tedge.encodeJsonPayload({ status: "up" }),
     };
     const context = tedge.createContext({});
     flow.onMessage(message, context);
@@ -171,7 +176,7 @@ describe("UptimeTracker process payload variants", () => {
     const message = {
       time,
       topic: "test",
-      payload: JSON.stringify({ status: "down" }),
+      payload: tedge.encodeJsonPayload({ status: "down" }),
     };
     const context = tedge.createContext({});
     flow.onMessage(message, context);
@@ -191,7 +196,7 @@ describe("UptimeTracker process payload variants", () => {
     const message = {
       time,
       topic: "test",
-      payload: JSON.stringify({ status: "unknown" }),
+      payload: tedge.encodeJsonPayload({ status: "unknown" }),
     };
     const context = tedge.createContext({});
     expect(() => flow.onMessage(message, context)).not.toThrow();
