@@ -10,6 +10,9 @@
     "build": "esbuild src/main.ts --target=es2018 --bundle --outfile=lib/main.js --format=esm --drop-labels=DEV,TEST",
     "test": "jest --coverageProvider=v8 --coverage"
   },
+  "tedge": {
+    "mapper": "local"
+  },
   "author": "thin-edge.io",
   "license": "Apache-2.0",
   "devDependencies": {
