@@ -40,3 +40,4 @@ script = "lib/main.js"
 config.groupId = "tedge"
 config.edgeNodeId = "gateway01"
 config.debug = false
+config.disableAliases = false

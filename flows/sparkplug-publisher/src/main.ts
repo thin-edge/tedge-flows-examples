@@ -14,6 +14,14 @@ export interface Config {
   groupId: string;
   /** Sparkplug B Edge Node ID - required */
   edgeNodeId: string;
+  /**
+   * When true, metric aliases are omitted from all published messages.
+   * BIRTH and DATA each carry the full metric name on every message, making
+   * the stream self-describing without needing to track BIRTH payloads.
+   * Useful for debugging or interoperability with clients that don't support
+   * alias-based decoding.  Default: false (aliases enabled).
+   */
+  disableAliases?: boolean;
   debug?: boolean;
 }
 
@@ -203,6 +211,7 @@ function buildSparkplugMessages(
   deviceId: string,
   timestamp: Date,
   incoming: TypedMetric[],
+  disableAliases = false,
 ): Message[] {
   if (incoming.length === 0) return [];
 
@@ -247,12 +256,13 @@ function buildSparkplugMessages(
     // Include every metric in the registry so the BIRTH is a complete schema
     // declaration, not just the metrics present in this particular message.
     const birthMetrics = Object.entries(registry).map(([name, meta]) => {
+      const aliasField = disableAliases ? {} : { alias: BigInt(meta.alias) };
       const current = incomingByName.get(name);
       if (current) {
         // New or updated metric — use the live value.
         return create(Payload_MetricSchema, {
           name,
-          alias: BigInt(meta.alias),
+          ...aliasField,
           timestamp: timestampMs,
           datatype: meta.datatype,
           value: current.value,
@@ -261,7 +271,7 @@ function buildSparkplugMessages(
         // Previously seen metric — replay last known value.
         return create(Payload_MetricSchema, {
           name,
-          alias: BigInt(meta.alias),
+          ...aliasField,
           timestamp: timestampMs,
           datatype: meta.datatype,
           value: primitiveToValue(meta.lastValue, meta.datatype),
@@ -270,7 +280,7 @@ function buildSparkplugMessages(
         // Declared but never had a value (shouldn't occur in practice).
         return create(Payload_MetricSchema, {
           name,
-          alias: BigInt(meta.alias),
+          ...aliasField,
           timestamp: timestampMs,
           datatype: meta.datatype,
           isNull: true,
@@ -294,12 +304,13 @@ function buildSparkplugMessages(
   }
 
   // ── DATA ──────────────────────────────────────────────────────────────────
-  // RbE: only the metrics that changed are included in DATA. Each carries its
-  // alias only — no name is transmitted after BIRTH.
+  // RbE: only the metrics that changed are included in DATA.
+  // Normally each metric carries its alias only (no name after BIRTH).
+  // When disableAliases is true, each metric carries its full name instead.
   const dataMetrics = incoming.map((m) => {
     const { alias, datatype } = registry[m.name];
     return create(Payload_MetricSchema, {
-      alias: BigInt(alias),
+      ...(disableAliases ? { name: m.name } : { alias: BigInt(alias) }),
       timestamp: timestampMs,
       datatype,
       value: m.value,
@@ -358,6 +369,7 @@ function handleRebirth(
   context: FlowContext,
   groupId: string,
   edgeNodeId: string,
+  disableAliases = false,
 ): Message[] {
   // Reset seq per Sparkplug B spec (seq resets on every NBIRTH).
   context.flow.set("seq", -1);
@@ -385,11 +397,13 @@ function handleRebirth(
       ? `spBv1.0/${groupId}/${birthCmd}/${edgeNodeId}`
       : `spBv1.0/${groupId}/${birthCmd}/${edgeNodeId}/${deviceId}`;
 
+    const aliasFor = (meta: MetricMeta) =>
+      disableAliases ? {} : { alias: BigInt(meta.alias) };
     const birthMetrics = Object.entries(registry).map(([name, meta]) => {
       if (meta.lastValue !== undefined) {
         return create(Payload_MetricSchema, {
           name,
-          alias: BigInt(meta.alias),
+          ...aliasFor(meta),
           timestamp: timestampMs,
           datatype: meta.datatype,
           value: primitiveToValue(meta.lastValue, meta.datatype),
@@ -397,7 +411,7 @@ function handleRebirth(
       }
       return create(Payload_MetricSchema, {
         name,
-        alias: BigInt(meta.alias),
+        ...aliasFor(meta),
         timestamp: timestampMs,
         datatype: meta.datatype,
         isNull: true,
@@ -521,12 +535,14 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     return [];
   }
 
+  const disableAliases = context.config.disableAliases ?? false;
+
   // Handle Sparkplug B NCMD rebirth command from a Host Application.
   // Topic: spBv1.0/{groupId}/NCMD/{edgeNodeId}
   if (message.topic.startsWith("spBv1.0/")) {
     const ncmdTopic = `spBv1.0/${groupId}/NCMD/${edgeNodeId}`;
     if (message.topic === ncmdTopic && isRebirthCommand(message)) {
-      return handleRebirth(context, groupId, edgeNodeId);
+      return handleRebirth(context, groupId, edgeNodeId, disableAliases);
     }
     return [];
   }
@@ -583,5 +599,6 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     deviceId,
     timestamp,
     incoming,
+    disableAliases,
   );
 }
