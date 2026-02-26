@@ -894,4 +894,85 @@ describe("sparkplug-publisher \u2014 NCMD rebirth", () => {
     );
     expect(out).toHaveLength(0);
   });
+
+  // ── disableAliases option ─────────────────────────────────────────────────
+
+  describe("disableAliases", () => {
+    const NO_ALIAS_CONFIG = { ...BASE_CONFIG, disableAliases: true };
+
+    test("BIRTH metrics carry name but no alias when disableAliases=true", () => {
+      const ctx = tedge.createContext(NO_ALIAS_CONFIG);
+      const output = flow.onMessage(
+        makeMessage("te/device/sensor01///m/raw", { temperature: 23.5 }),
+        ctx,
+      );
+      const birth = findMsg(output, "DBIRTH")!;
+      const birthPayload = fromBinary(
+        PayloadSchema,
+        birth.payload as Uint8Array,
+      );
+      expect(birthPayload.metrics[0].name).toBe("temperature");
+      // alias field should be 0n (default/unset) when disableAliases is true
+      expect(birthPayload.metrics[0].alias).toBe(0n);
+    });
+
+    test("DATA metrics carry name but no alias when disableAliases=true", () => {
+      const ctx = tedge.createContext(NO_ALIAS_CONFIG);
+      // First message → BIRTH + DATA
+      flow.onMessage(
+        makeMessage("te/device/sensor01///m/raw", { temperature: 23.5 }),
+        ctx,
+      );
+      // Second message → DATA only
+      const output = flow.onMessage(
+        makeMessage("te/device/sensor01///m/raw", { temperature: 24.0 }),
+        ctx,
+      );
+      expect(output).toHaveLength(1);
+      const dataPayload = fromBinary(
+        PayloadSchema,
+        output[0].payload as Uint8Array,
+      );
+      expect(dataPayload.metrics[0].name).toBe("temperature");
+      expect(dataPayload.metrics[0].alias).toBe(0n);
+    });
+
+    test("DATA metrics carry alias and no name when disableAliases=false (default)", () => {
+      const ctx = tedge.createContext(BASE_CONFIG);
+      flow.onMessage(
+        makeMessage("te/device/sensor01///m/raw", { temperature: 23.5 }),
+        ctx,
+      );
+      const output = flow.onMessage(
+        makeMessage("te/device/sensor01///m/raw", { temperature: 24.0 }),
+        ctx,
+      );
+      expect(output).toHaveLength(1);
+      const dataPayload = fromBinary(
+        PayloadSchema,
+        output[0].payload as Uint8Array,
+      );
+      expect(dataPayload.metrics[0].name).toBe("");
+      expect(typeof dataPayload.metrics[0].alias).toBe("bigint");
+      expect(dataPayload.metrics[0].alias).toBeGreaterThan(0n - 1n);
+    });
+
+    test("rebirth with disableAliases=true emits metrics with names but no aliases", () => {
+      const ctx = tedge.createContext(NO_ALIAS_CONFIG);
+      flow.onMessage(
+        makeMessage("te/device/sensor01///m/raw", { temperature: 23.5 }),
+        ctx,
+      );
+      const rebirthOut = flow.onMessage(
+        makeRebirthMessage(BASE_CONFIG.groupId, BASE_CONFIG.edgeNodeId),
+        ctx,
+      );
+      // NBIRTH (edge node has no prior data, so only sensor01's DBIRTH)
+      expect(rebirthOut.length).toBeGreaterThan(0);
+      const birth = rebirthOut[0];
+      const payload = fromBinary(PayloadSchema, birth.payload as Uint8Array);
+      expect(payload.metrics[0].name).toBe("temperature");
+      expect(payload.metrics[0].alias).toBe(0n);
+    });
+  });
 });
