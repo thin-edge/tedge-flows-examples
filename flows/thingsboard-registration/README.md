@@ -82,7 +82,7 @@ bridge_attempt_unsubscribe false
 ### ThingsBoard Device API topics (for the main device)
 topic telemetry out 1 tb/me/ v1/devices/me/
 topic attributes both 1 tb/me/ v1/devices/me/
-topic attributes/request/+ out 1 tb/me v1/devices/me/
+topic attributes/request/+ out 1 tb/me/ v1/devices/me/
 topic attributes/response/+ in 1 tb/me/ v1/devices/me/
 # Server-side RPC
 topic rpc/request/+ in 1 tb/me/server/ v1/devices/me/
@@ -96,8 +96,8 @@ topic connect out 1 tb/gateway/ v1/gateway/
 topic disconnect out 1 tb/gateway/ v1/gateway/
 topic telemetry out 1 tb/gateway/ v1/gateway/
 topic attributes both 1 tb/gateway/ v1/gateway/
-topic attributes/request/+ out 1 tb/gateway/ v1/gateway/
-topic attributes/response/+ in 1 tb/gateway/ v1/gateway/
+topic attributes/request out 1 tb/gateway/ v1/gateway/
+topic attributes/response in 1 tb/gateway/ v1/gateway/
 topic rpc in 1 tb/gateway/ v1/gateway/
 topic claim out 1 tb/gateway/ v1/gateway/
 ```
