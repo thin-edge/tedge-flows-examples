@@ -33,11 +33,13 @@ mqtt.topics = [
     "spBv1.0/+/NCMD/+",
 ]
 
-[[steps]]
-script = "lib/main.js"
+[config]
 # groupId: Sparkplug B group used in the output topic.
 # sparkplug-telemetry must subscribe to this same group.
-config.groupId = "tedge"
-config.edgeNodeId = "gateway01"
-config.debug = false
-config.disableAliases = false
+groupId = "${.params.groupId}"
+edgeNodeId = "${.params.edgeNodeId}"
+disableAliases = "${.params.disableAliases}"
+debug = "${.params.debug}"
+
+[[steps]]
+script = "lib/main.js"
