@@ -1,0 +1,2 @@
+# outbound topic to publish the protobuf messages to. Use the template variable, '{{type}}' if you wish to include the sensor data type within the topic
+outbound_topic = "c8y/mqtt/out/proto/sensor"
