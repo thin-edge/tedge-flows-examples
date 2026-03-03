@@ -1,0 +1,26 @@
+# Subscribe to the Sparkplug B group and convert temperature metrics to
+# Cumulocity measurement format.
+#
+# The flow decodes Sparkplug B protobuf payloads, extracts the "Temperature"
+# metric, and emits a Cumulocity measurement message to be forwarded to
+# the Cumulocity IoT platform.
+#
+# Round-trip test pipeline (publish thin-edge.io first):
+#
+#   te/device/...///m/raw   ──► sparkplug-publisher ──► spBv1.0/tedge/DDATA/...
+#                                                                   │
+#   c8y/measurement/...     ◄── sparkplug-c8y-telemetry ◄───────────┘
+#
+# For standalone production use (no publisher flow), replace "tedge" with "+"
+# to receive messages from all Sparkplug B groups.
+
+[input]
+mqtt.topics = [
+    "spBv1.0/tedge/DDATA/+/+",
+    "spBv1.0/tedge/NDATA/+",
+    "spBv1.0/tedge/DBIRTH/+/+",
+    "spBv1.0/tedge/NBIRTH/+",
+]
+
+[[steps]]
+script = "lib/main.js"
