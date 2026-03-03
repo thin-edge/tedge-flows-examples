@@ -111,7 +111,8 @@ for (const [_, project] of Object.entries(projects)) {
       (p) => fs.existsSync(path.join(projectDir, p)),
     );
 
-    execSync(`tar -czf ${tarFilePath} -C ${projectDir} ${files.join(" ")}`, {
+    const fileArgs = files.map((p) => `'${p}'`).join(" ");
+    execSync(`tar -czf ${tarFilePath} -C ${projectDir} ${fileArgs}`, {
       stdio: "inherit",
       env: { COPYFILE_DISABLE: 1 },
     });
@@ -123,7 +124,9 @@ for (const [_, project] of Object.entries(projects)) {
       console.log(
         `\nPublishing flow. image=${image}, project=${project.name}, version=${project.version}, module=${project.module}`,
       );
-      const pushArgs = files.map((p) => `--file ${path.join(projectDir, p)}`);
+      const pushArgs = files
+        .map((p) => `--file '${path.join(projectDir, p)}'`)
+        .join(" ");
       execSync(
         `tedge-oscar flows images push ${image} --root ${projectDir} ${pushArgs}`,
       );
