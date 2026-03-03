@@ -1,0 +1,4 @@
+groupId = "tedge"
+edgeNodeId = "gateway01"
+disableAliases = false
+debug = false
