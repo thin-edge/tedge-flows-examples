@@ -106,10 +106,15 @@ for (const [_, project] of Object.entries(projects)) {
     const tarFilePath = path.join(outputDir, tarFileName);
     console.log(`Creating tar file: ${tarFileName}`);
 
-    execSync(
-      `tar -czf ${tarFilePath} -C ${projectDir} ${flowFilename} ${project.module}`,
-      { stdio: "inherit", env: { COPYFILE_DISABLE: 1 } },
+    // Gather flow files (relative to flow directory)
+    const files = [flowFilename, project.module, "params.toml.template"].filter(
+      (p) => fs.existsSync(path.join(projectDir, p)),
     );
+
+    execSync(`tar -czf ${tarFilePath} -C ${projectDir} ${files.join(" ")}`, {
+      stdio: "inherit",
+      env: { COPYFILE_DISABLE: 1 },
+    });
 
     console.log(`Created tar file at: ${tarFilePath}`);
 
@@ -118,8 +123,9 @@ for (const [_, project] of Object.entries(projects)) {
       console.log(
         `\nPublishing flow. image=${image}, project=${project.name}, version=${project.version}, module=${project.module}`,
       );
+      const pushArgs = files.map((p) => `--file ${path.join(projectDir, p)}`);
       execSync(
-        `tedge-oscar flows images push ${image} --file ${projectDir}/${project.module} --file ${projectDir}/${flowFilename} --root ${projectDir}`,
+        `tedge-oscar flows images push ${image} --root ${projectDir} ${pushArgs}`,
       );
     }
   }
