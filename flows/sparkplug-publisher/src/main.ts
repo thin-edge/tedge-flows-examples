@@ -526,7 +526,11 @@ function handleAlarm(
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 export function onMessage(message: Message, context: FlowContext): Message[] {
-  const { groupId, edgeNodeId, debug = false } = context.config;
+  const {
+    groupId = "tedge",
+    edgeNodeId = "gateway01",
+    debug = false,
+  } = context.config;
   if (!groupId || !edgeNodeId) {
     if (debug)
       console.error(
