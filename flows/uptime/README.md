@@ -24,3 +24,37 @@ The flow expects the thin-edge.io service status message to be one of the follow
 ```
 1 or 0
 ```
+
+### Device Parameter Schema
+
+1. Create the DTM definition to control the parameters in Cumulocity
+
+   ```sh
+   c8y api --raw POST /service/dtm/definitions/properties --template '{
+       "identifier": "flow_params_c8y_uptime",
+       "jsonSchema": {
+           "title": "Flow Parameters - Cumulocity Uptime",
+           "description": "Track the uptime",
+           "properties": {
+           "window_size_minutes": {
+               "type": "integer",
+               "default": 1000,
+               "title": "Window Size (Minutes)",
+               "order": 1
+           },
+           "stats_topic": {
+               "type": "string",
+               "title": "Statistics Topic",
+               "order": 2
+           }
+           },
+           "type": "object"
+       },
+       "contexts": [
+           "asset",
+           "event",
+           "operation"
+       ]
+   }
+   '
+   ```

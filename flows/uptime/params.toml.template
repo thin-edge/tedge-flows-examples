@@ -1,0 +1,2 @@
+window_size_minutes = 1440
+stats_topic = "twin/onlineTracker"

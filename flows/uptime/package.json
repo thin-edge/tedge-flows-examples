@@ -10,7 +10,7 @@
     "test": "jest --coverageProvider=v8 --coverage"
   },
   "tedge": {
-    "mapper": "local"
+    "mapper": "c8y"
   },
   "author": "thin-edge.io",
   "license": "Apache-2.0"
