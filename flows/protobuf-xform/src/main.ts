@@ -1,16 +1,8 @@
 /*
   Serialize json messages into protobuf
 */
-// import * as proto from 'protobufjs';
-import {
-  Message,
-  Context,
-  decodePayload,
-  decodeJsonPayload,
-  encodePayload,
-} from "../../common/tedge";
-import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
-import { base64Decode, base64Encode } from "@bufbuild/protobuf/wire";
+import { Message, Context, decodeJsonPayload } from "../../common/tedge";
+import { create, toBinary } from "@bufbuild/protobuf";
 import {
   SensorMessageSchema,
   EnvironmentSensorSchema,
@@ -19,81 +11,54 @@ import {
 
 export interface Config {
   topic: string;
-  cmdtopic: string;
-  base64: boolean;
 }
 
 export interface FlowContext extends Context {
   config: Config;
 }
 
-function onSetpoint(
-  message: Message,
-  { topic = "out/proto/actuator", base64 = false },
-): Message[] {
-  let binPayload: Uint8Array;
-  if (base64) {
-    binPayload = base64Decode(decodePayload(message.payload));
-  } else {
-    binPayload = message.payload as Uint8Array;
-  }
-
-  let setPoint = fromBinary(SensorMessageSchema, binPayload);
-  return [
-    {
-      time: message.time,
-      topic: topic,
-      payload: JSON.stringify(setPoint),
-    },
-  ];
-}
-
 export function onMessage(message: Message, context: FlowContext): Message[] {
-  const payloadType = message.topic.split("/").slice(-1)[0];
-
-  const {
-    topic = "out/proto/sensor",
-    cmdtopic = "out/proto/actuator",
-    base64 = false,
-  } = context.config;
+  const { topic = "c8y/mqtt/out/proto/sensor" } = context.config;
+  const messageType = message.topic.split("/").slice(-1)[0];
 
   let data;
-  if (payloadType == "environment") {
+  if (messageType == "environment") {
     const payload = decodeJsonPayload(message.payload);
     data = {
       case: "environment" as const,
       value: create(EnvironmentSensorSchema, {
         ...payload,
-        temperature: payload.temperature,
-        humidity: payload.humidity,
+        temperature: payload.temperature ?? 0.0,
+        humidity: payload.humidity ?? 0.0,
       }),
     };
-  } else if (payloadType == "location") {
+  } else if (messageType == "location") {
     const payload = decodeJsonPayload(message.payload);
     data = {
       case: "location" as const,
       value: create(LocationSensorSchema, {
         location: {
-          latitude: payload.latitude,
-          longitude: payload.longitude,
+          latitude: payload.latitude ?? 0.0,
+          longitude: payload.longitude ?? 0.0,
+          altitude: payload.altitude ?? 0.0,
         },
       }),
     };
-  } else if (payloadType == "setpoint") {
-    return onSetpoint(message, { topic: cmdtopic, base64: base64 });
+  } else {
+    console.warn(`Unknown message type. value=${messageType}`);
   }
 
   if (!data) {
     return [];
   }
 
-  const sensor = create(SensorMessageSchema, {
-    sensor: data,
-  });
-
-  const outputTopic = topic.replaceAll("{{type}}", payloadType);
-
-  let binPayload = toBinary(SensorMessageSchema, sensor);
+  const outputTopic = topic.replaceAll("{{type}}", messageType);
+  const binPayload = toBinary(
+    SensorMessageSchema,
+    create(SensorMessageSchema, {
+      sensor: data,
+    }),
+  );
 
   return [
     {

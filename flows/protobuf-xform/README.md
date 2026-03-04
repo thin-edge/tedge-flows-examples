@@ -21,6 +21,12 @@ Topic: **te/device/main///m/environment**
 }
 ```
 
+**Example**
+
+```sh
+tedge mqtt pub te/device/main///m/environment '{"temperature": 30.1,"humidity":95}'
+```
+
 **Type 2: location data**
 
 Topic: **te/device/main///m/location**
@@ -32,21 +38,31 @@ Topic: **te/device/main///m/location**
 }
 ```
 
+**Example**
+
+```sh
+tedge mqtt pub te/device/main///m/location '{"latitude": -27.47544883926631,"longitude": 153.02223634041275}'
+```
+
 ### Decoding Protobuf messages
 
-The encoded measurements produced by the protobuf example flow ...
+The encoded measurements produced by the protobuf example flow:
 
+```sh
+tedge flows test --base64-output te/device/main///m/environment '{ "temperature": 29, "humidity": 50 }'
+
+[c8y/mqtt/out/proto/sensor] ChIJAAAAAAAAPUARAAAAAAAASUA=
 ```
-$ tedge flows test --base64-output te/device/main///m/environment '{ "temperature": 29, "humidity": 50 }'
 
-[c8y-mqtt/proto/sensor_data] ChIJAAAAAAAAPUARAAAAAAAASUA=
-```
+You can decode the message by using the `protoc` command (from the protobuf package).
 
-... can be decoded back by the same protobuf example flow:
+```sh
+echo -n ChIJAAAAAAAAPUARAAAAAAAASUA= \
+| base64 -d \
+| protoc --proto_path ./proto proto/sensor.proto --decode sensorpackage.SensorMessage
 
-```
-$ tedge flows test --base64-input c8y-mqtt/proto/setpoint ChIJAAAAAAAAPUARAAAAAAAASUA=
-
-[te/device/main///sig/setpoint] {"$typeName":"sensorpackage.SensorMessage","sensor":{"case":"environment","value":{"$typeName":"sensorpackage.EnvironmentSensor","metaInfo":{},"temperature":29,"humidity":50}}}
-
+environment {
+  temperature: 29
+  humidity: 50
+}
 ```

@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file sensor.proto.
  */
 export const file_sensor: GenFile = /*@__PURE__*/
-  fileDesc("CgxzZW5zb3IucHJvdG8SDXNlbnNvcnBhY2thZ2UihQEKDVNlbnNvck1lc3NhZ2USNwoLZW52aXJvbm1lbnQYASABKAsyIC5zZW5zb3JwYWNrYWdlLkVudmlyb25tZW50U2Vuc29ySAASMQoIbG9jYXRpb24YAiABKAsyHS5zZW5zb3JwYWNrYWdlLkxvY2F0aW9uU2Vuc29ySABCCAoGc2Vuc29yIu4BChFFbnZpcm9ubWVudFNlbnNvchIWCgt0ZW1wZXJhdHVyZRgBIAEoAToBMBITCghodW1pZGl0eRgCIAEoAToBMBIRCglzZW5zb3JfaWQYAyABKAkSFQoNc2Vuc29yX3NlcmlhbBgEIAEoCRIOCgZhY3RpdmUYBSABKAgSQQoJbWV0YV9pbmZvGAYgAygLMi4uc2Vuc29ycGFja2FnZS5FbnZpcm9ubWVudFNlbnNvci5NZXRhSW5mb0VudHJ5Gi8KDU1ldGFJbmZvRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASI5Cg5Mb2NhdGlvblNlbnNvchInCghsb2NhdGlvbhgBIAEoCzIVLnNlbnNvcnBhY2thZ2UuTGF0TG5nIi0KBkxhdExuZxIQCghsYXRpdHVkZRgBIAEoARIRCglsb25naXR1ZGUYAiABKAFiCGVkaXRpb25zcOgH");
+  fileDesc("CgxzZW5zb3IucHJvdG8SDXNlbnNvcnBhY2thZ2UihQEKDVNlbnNvck1lc3NhZ2USNwoLZW52aXJvbm1lbnQYASABKAsyIC5zZW5zb3JwYWNrYWdlLkVudmlyb25tZW50U2Vuc29ySAASMQoIbG9jYXRpb24YAiABKAsyHS5zZW5zb3JwYWNrYWdlLkxvY2F0aW9uU2Vuc29ySABCCAoGc2Vuc29yIu4BChFFbnZpcm9ubWVudFNlbnNvchIWCgt0ZW1wZXJhdHVyZRgBIAEoAToBMBITCghodW1pZGl0eRgCIAEoAToBMBIRCglzZW5zb3JfaWQYAyABKAkSFQoNc2Vuc29yX3NlcmlhbBgEIAEoCRIOCgZhY3RpdmUYBSABKAgSQQoJbWV0YV9pbmZvGAYgAygLMi4uc2Vuc29ycGFja2FnZS5FbnZpcm9ubWVudFNlbnNvci5NZXRhSW5mb0VudHJ5Gi8KDU1ldGFJbmZvRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASI5Cg5Mb2NhdGlvblNlbnNvchInCghsb2NhdGlvbhgBIAEoCzIVLnNlbnNvcnBhY2thZ2UuTGF0TG5nIkIKBkxhdExuZxIQCghsYXRpdHVkZRgBIAEoARIRCglsb25naXR1ZGUYAiABKAESEwoIYWx0aXR1ZGUYAyABKAE6ATBiCGVkaXRpb25zcOgH");
 
 /**
  * @generated from message sensorpackage.SensorMessage
@@ -113,6 +113,11 @@ export type LatLng = Message<"sensorpackage.LatLng"> & {
    * @generated from field: double longitude = 2;
    */
   longitude: number;
+
+  /**
+   * @generated from field: double altitude = 3 [default = 0];
+   */
+  altitude: number;
 };
 
 /**

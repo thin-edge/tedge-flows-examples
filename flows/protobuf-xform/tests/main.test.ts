@@ -3,7 +3,6 @@ import * as tedge from "../../common/tedge";
 import * as flow from "../src/main";
 
 import { fromBinary } from "@bufbuild/protobuf";
-import { base64Decode } from "@bufbuild/protobuf/wire";
 import { SensorMessageSchema } from "../src/gen/sensor_pb";
 
 test("Converts payload to a environment sensor protobuf message", () => {
