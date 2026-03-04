@@ -1,0 +1,32 @@
+# publish individual log entries (useful for debugging)
+with_logs = false
+
+# enable debug messages
+debug = false
+
+# Publish the statistics instead
+publish_statistics = true
+
+################################################
+# thresholds for triggering alarms
+# 0 = disabled
+################################################
+
+# Total number of log entries (regardless of log level)
+threshold_total = 500
+
+# Number of errors before triggering an alarm
+threshold_error = 10
+
+# Number of warnings before triggering an alarm
+threshold_warning = 50
+
+# Number of info messages before triggering an alarm
+threshold_info = 0
+
+################################################
+# Text based filtering to only look for specific log entries
+################################################
+# Optional log message filter, which will only include log entries
+# where the message text matches the given regex
+#text_filter = ["(connect)"]
