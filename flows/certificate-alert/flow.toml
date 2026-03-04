@@ -13,19 +13,19 @@ config.debug = false
 ##############################
 
 # disable alarming
-config.disable_alarms = false
+config.disable_alarms = "${.params.disable_alarms}"
 
 # threshold when to create a major alarm
-config.alarm = "30d"
+config.alarm = "${.params.alarm}"
 
 # threshold when to create a warning
-config.warning = "90d"
+config.warning = "${.params.warning}"
 
 ##############################
 # certificate meta information
 ##############################
 # don't publish digital twin data
-config.disable_twin = false
+config.disable_twin = "${.params.disable_twin}"
 
 # digital twin property where to publish the certificates meta information to
 config.twin_property = "tedge_Certificate"
