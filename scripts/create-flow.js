@@ -148,6 +148,38 @@ function generateProject(name) {
     templateTestFile,
   );
 
+  // Register in release-please config and manifest
+  const releasePleaseConfigPath = "release-please-config.json";
+  const releaseManifestPath = ".release-please-manifest.json";
+  const packageKey = `flows/${name}`;
+  const initialVersion = packageTemplate.version;
+
+  if (fs.existsSync(releasePleaseConfigPath)) {
+    const config = JSON.parse(
+      fs.readFileSync(releasePleaseConfigPath, "utf-8"),
+    );
+    if (!config.packages[packageKey]) {
+      config.packages[packageKey] = { component: name };
+      fs.writeFileSync(
+        releasePleaseConfigPath,
+        JSON.stringify(config, null, 2) + "\n",
+      );
+      console.log(`Added ${packageKey} to ${releasePleaseConfigPath}`);
+    }
+  }
+
+  if (fs.existsSync(releaseManifestPath)) {
+    const manifest = JSON.parse(fs.readFileSync(releaseManifestPath, "utf-8"));
+    if (!(packageKey in manifest)) {
+      manifest[packageKey] = initialVersion;
+      fs.writeFileSync(
+        releaseManifestPath,
+        JSON.stringify(manifest, null, 2) + "\n",
+      );
+      console.log(`Added ${packageKey} to ${releaseManifestPath}`);
+    }
+  }
+
   // update package lock file and format files
   execSync("npm install");
   execSync("npm run format");

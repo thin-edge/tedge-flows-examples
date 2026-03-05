@@ -1,0 +1,12 @@
+{
+  "flows/certificate-alert": "1.0.0",
+  "flows/cloud-mapper-commands": "0.0.1",
+  "flows/cloud-mapper-telemetry": "0.0.1",
+  "flows/jsonata-xform": "0.0.3",
+  "flows/log-surge": "1.3.1",
+  "flows/protobuf-xform": "0.0.1",
+  "flows/thingsboard": "0.0.1",
+  "flows/thingsboard-registration": "0.0.1",
+  "flows/thingsboard-server-rpc": "0.0.1",
+  "flows/uptime": "1.2.1"
+}

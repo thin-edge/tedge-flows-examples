@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "node",
+  "packages": {
+    "flows/certificate-alert": {
+      "component": "certificate-alert"
+    },
+    "flows/cloud-mapper-commands": {
+      "component": "cloud-mapper-commands"
+    },
+    "flows/cloud-mapper-telemetry": {
+      "component": "cloud-mapper-telemetry"
+    },
+    "flows/jsonata-xform": {
+      "component": "jsonata-xform"
+    },
+    "flows/log-surge": {
+      "component": "log-surge"
+    },
+    "flows/protobuf-xform": {
+      "component": "protobuf-xform"
+    },
+    "flows/thingsboard": {
+      "component": "thingsboard"
+    },
+    "flows/thingsboard-registration": {
+      "component": "thingsboard-registration"
+    },
+    "flows/thingsboard-server-rpc": {
+      "component": "thingsboard-server-rpc"
+    },
+    "flows/uptime": {
+      "component": "uptime"
+    }
+  }
+}
