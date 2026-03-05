@@ -844,6 +844,146 @@ describe("sparkplug-telemetry — ignored message types", () => {
   });
 });
 
+// ── Metric name nesting ───────────────────────────────────────────────────────
+
+describe("sparkplug-telemetry — nested measurement structure", () => {
+  test("3-part name produces nested group.series and no dot in keys", () => {
+    const ts = new Date("2026-02-25T10:00:00.000Z");
+    const output = flow.onMessage(
+      {
+        time: ts,
+        topic: "spBv1.0/g/DDATA/n/d",
+        payload: makePayload([{ name: "spindle.speed.rpm", value: 5000.0 }], ts.getTime()),
+      },
+      tedge.createContext({}),
+    );
+
+    expect(output).toHaveLength(1);
+    const body = JSON.parse(output[0].payload as string);
+    // Nested: { "spindle": { "speed": 5000 } } — no dots in keys
+    expect((body.spindle as Record<string, number>).speed).toBeCloseTo(5000.0);
+    expect(body["spindle.speed.rpm"]).toBeUndefined();
+  });
+
+  test("2-part name produces nested group.series without unit info", () => {
+    const ts = new Date("2026-02-25T10:00:00.000Z");
+    const output = flow.onMessage(
+      {
+        time: ts,
+        topic: "spBv1.0/g/DDATA/n/d",
+        payload: makePayload([{ name: "power.kw", value: 3.8 }], ts.getTime()),
+      },
+      tedge.createContext({}),
+    );
+
+    const body = JSON.parse(output[0].payload as string);
+    expect((body.power as Record<string, number>).kw).toBeCloseTo(3.8);
+  });
+
+  test("4-part name collapses middle segments with underscore", () => {
+    const ts = new Date("2026-02-25T10:00:00.000Z");
+    const output = flow.onMessage(
+      {
+        time: ts,
+        topic: "spBv1.0/g/DDATA/n/d",
+        payload: makePayload([{ name: "axis.x.position.mm", value: 123.4 }], ts.getTime()),
+      },
+      tedge.createContext({}),
+    );
+
+    const body = JSON.parse(output[0].payload as string);
+    // axis=group, x_position=series (middle joined with _), mm=unit
+    expect((body.axis as Record<string, number>).x_position).toBeCloseTo(123.4);
+  });
+
+  test("1-part name stays flat (no nesting)", () => {
+    const ts = new Date("2026-02-25T10:00:00.000Z");
+    const output = flow.onMessage(
+      {
+        time: ts,
+        topic: "spBv1.0/g/DDATA/n/d",
+        payload: makePayload([{ name: "uptime", value: 42 }], ts.getTime()),
+      },
+      tedge.createContext({}),
+    );
+
+    const body = JSON.parse(output[0].payload as string);
+    expect(body.uptime).toBe(42);
+  });
+
+  test("multiple metrics in same group are nested under the same object", () => {
+    const ts = new Date("2026-02-25T10:00:00.000Z");
+    const output = flow.onMessage(
+      {
+        time: ts,
+        topic: "spBv1.0/g/DDATA/n/d",
+        payload: makePayload(
+          [
+            { name: "spindle.speed.rpm", value: 1000 },
+            { name: "spindle.load.pct", value: 50 },
+            { name: "spindle.temperature.celsius", value: 60 },
+          ],
+          ts.getTime(),
+        ),
+      },
+      tedge.createContext({}),
+    );
+
+    expect(output).toHaveLength(1);
+    const spindle = JSON.parse(output[0].payload as string).spindle as Record<string, number>;
+    expect(spindle.speed).toBeCloseTo(1000);
+    expect(spindle.load).toBeCloseTo(50);
+    expect(spindle.temperature).toBeCloseTo(60);
+  });
+
+  test("BIRTH with 3-part metric names publishes retained measurement meta", () => {
+    const ts = new Date("2026-02-25T10:00:00.000Z");
+    const output = flow.onMessage(
+      {
+        time: ts,
+        topic: "spBv1.0/g/DBIRTH/n/device01",
+        payload: makePayload(
+          [
+            { name: "spindle.speed.rpm", value: 0, alias: 0 },
+            { name: "spindle.load.pct", value: 0, alias: 1 },
+            { name: "hydraulic.pressure.bar", value: 0, alias: 2 },
+          ],
+          ts.getTime(),
+        ),
+      },
+      tedge.createContext({}),
+    );
+
+    expect(output).toHaveLength(1);
+    expect(output[0].topic).toBe("te/device/device01///m//meta");
+    expect(output[0].mqtt?.retain).toBe(true);
+    const meta = JSON.parse(output[0].payload as string);
+    expect(meta["spindle.speed"]).toEqual({ unit: "r/min" });
+    expect(meta["spindle.load"]).toEqual({ unit: "%" });
+    expect(meta["hydraulic.pressure"]).toEqual({ unit: "bar" });
+  });
+
+  test("BIRTH with metrics that have no unit info produces no meta message", () => {
+    const ts = new Date("2026-02-25T10:00:00.000Z");
+    const output = flow.onMessage(
+      {
+        time: ts,
+        topic: "spBv1.0/g/DBIRTH/n/device01",
+        payload: makePayload(
+          [
+            { name: "voltage", value: 230.1 },  // 1-part — no unit
+            { name: "power.kw", value: 3.8 },   // 2-part — no unit
+          ],
+          ts.getTime(),
+        ),
+      },
+      tedge.createContext({}),
+    );
+
+    expect(output).toHaveLength(0);
+  });
+});
+
 // ── Real-world CNC payload ────────────────────────────────────────────────────
 //
 // Binary Sparkplug B NDATA captured from a sim-cnc01 edge node.
@@ -897,19 +1037,31 @@ describe("sparkplug-telemetry — real-world CNC NDATA payload", () => {
     expect(meas).toBeDefined();
     const body = JSON.parse(meas!.payload as string);
 
-    expect(typeof body["axis.x.position.mm"]).toBe("number");
-    expect(typeof body["axis.y.position.mm"]).toBe("number");
-    expect(typeof body["axis.z.position.mm"]).toBe("number");
-    expect(typeof body["spindle.speed.rpm"]).toBe("number");
-    expect(typeof body["spindle.load.pct"]).toBe("number");
-    expect(typeof body["spindle.temperature.celsius"]).toBe("number");
-    expect(typeof body["coolant.flow.litres_per_min"]).toBe("number");
-    expect(typeof body["coolant.temperature.celsius"]).toBe("number");
-    expect(typeof body["hydraulic.pressure.bar"]).toBe("number");
-    expect(typeof body["power.kw"]).toBe("number");
-    expect(typeof body["feed.rate.mm_per_min"]).toBe("number");
-    expect(typeof body["program.cycle_count"]).toBe("number");
-    expect(typeof body["program.part_count"]).toBe("number");
+    // Metric names are parsed as <group>.<series>[.<unit>] → nested two-level structure.
+    // e.g. "spindle.speed.rpm" → body.spindle.speed
+    //      "axis.x.position.mm" → body.axis.x_position  (middle parts joined with "_")
+    //      "power.kw"           → body.power.kw          (2-part: group.series)
+    const spindle = body.spindle as Record<string, number>;
+    const axis = body.axis as Record<string, number>;
+    const coolant = body.coolant as Record<string, number>;
+    const hydraulic = body.hydraulic as Record<string, number>;
+    const power = body.power as Record<string, number>;
+    const feed = body.feed as Record<string, number>;
+    const program = body.program as Record<string, number>;
+
+    expect(typeof spindle["speed"]).toBe("number");
+    expect(typeof spindle["load"]).toBe("number");
+    expect(typeof spindle["temperature"]).toBe("number");
+    expect(typeof axis["x_position"]).toBe("number");
+    expect(typeof axis["y_position"]).toBe("number");
+    expect(typeof axis["z_position"]).toBe("number");
+    expect(typeof coolant["flow"]).toBe("number");
+    expect(typeof coolant["temperature"]).toBe("number");
+    expect(typeof hydraulic["pressure"]).toBe("number");
+    expect(typeof power["kw"]).toBe("number");
+    expect(typeof feed["rate"]).toBe("number");
+    expect(typeof program["cycle_count"]).toBe("number");
+    expect(typeof program["part_count"]).toBe("number");
     // Boolean metrics (door.open, estop.active) are emitted as events, not measurements.
     expect(body["door.open"]).toBeUndefined();
     expect(body["estop.active"]).toBeUndefined();
@@ -981,12 +1133,24 @@ describe("sparkplug-telemetry — real-world CNC NBIRTH payload", () => {
     return Buffer.from(PAYLOAD_B64, "base64");
   }
 
-  test("NBIRTH produces no output — it is a state snapshot for alias registration only", () => {
+  test("NBIRTH publishes retained measurement meta with unit info", () => {
     const output = flow.onMessage(
       { time: new Date(), topic: TOPIC, payload: realPayload() },
       tedge.createContext({}),
     );
-    expect(output).toHaveLength(0);
+    // BIRTH produces exactly one retained meta message with unit info.
+    expect(output).toHaveLength(1);
+    expect(output[0].topic).toBe(`te/device/${DEVICE_ID}///m//meta`);
+    expect(output[0].mqtt?.retain).toBe(true);
+    expect(output[0].mqtt?.qos).toBe(1);
+
+    const meta = JSON.parse(output[0].payload as string);
+    // Spot-check a few entries: key = "group.series", value = { unit: "..." }
+    expect(meta["spindle.speed"]).toEqual({ unit: "r/min" });
+    expect(meta["spindle.load"]).toEqual({ unit: "%" });
+    expect(meta["axis.x_position"]).toEqual({ unit: "mm" });
+    expect(meta["coolant.flow"]).toEqual({ unit: "L/min" });
+    expect(meta["hydraulic.pressure"]).toEqual({ unit: "bar" });
   });
 });
 

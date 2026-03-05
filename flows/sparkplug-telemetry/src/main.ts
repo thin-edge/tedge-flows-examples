@@ -185,6 +185,97 @@ function classifyMetrics(metrics: ResolvedMetric[]): MetricGroups {
 }
 
 // ── Output builders ───────────────────────────────────────────────────────────
+//
+// Metric names follow a dot-notation convention: <group>[.<series>[.<unit>]]
+// Cumulocity IoT forbids dots in measurement names, so we parse them into a
+// two-level nested structure:
+//
+//   1 part  → flat scalar:        { "name": value }
+//   2 parts → nested, no unit:    { "group": { "series": value } }
+//   3 parts → nested with unit:   { "group": { "series": value } }  unit = parts[2]
+//   4+ parts → nested, collapsed: { "group": { "series1_series2": value } }  unit = last part
+//
+// Unit information is published separately as a retained meta message on BIRTH.
+
+interface NestedKey {
+  group: string;
+  series?: string; // undefined for flat (1-part) metrics
+  unit?: string;   // present when name has 3+ parts
+}
+
+function nestMetricName(name: string): NestedKey {
+  const parts = name.split(".");
+  if (parts.length === 1) return { group: parts[0] };
+  if (parts.length === 2) return { group: parts[0], series: parts[1] };
+  // 3+ parts: group=first, unit=last, series=middle joined with "_"
+  return {
+    group: parts[0],
+    series: parts.slice(1, parts.length - 1).join("_"),
+    unit: normalizeUnit(parts[parts.length - 1]),
+  };
+}
+
+// Map common unit strings (as they typically appear in metric names) to their
+// standard SI / widely-accepted symbols.
+const UNIT_MAP: Record<string, string> = {
+  celsius:          "°C",
+  fahrenheit:       "°F",
+  kelvin:           "K",
+  pct:              "%",
+  percent:          "%",
+  rpm:              "r/min",
+  mm:               "mm",
+  cm:               "cm",
+  m:                "m",
+  km:               "km",
+  mm_per_min:       "mm/min",
+  m_per_s:          "m/s",
+  km_per_h:         "km/h",
+  bar:              "bar",
+  kpa:              "kPa",
+  pa:               "Pa",
+  mbar:             "mbar",
+  psi:              "psi",
+  w:                "W",
+  kw:               "kW",
+  mw:               "MW",
+  kwh:              "kWh",
+  v:                "V",
+  mv:               "mV",
+  a:                "A",
+  ma:               "mA",
+  hz:               "Hz",
+  khz:              "kHz",
+  mhz:              "MHz",
+  ohm:              "Ω",
+  s:                "s",
+  ms:               "ms",
+  us:               "µs",
+  min:              "min",
+  h:                "h",
+  litres_per_min:   "L/min",
+  l_per_min:        "L/min",
+  ml_per_min:       "mL/min",
+  litres_per_h:     "L/h",
+  l:                "L",
+  ml:               "mL",
+  kg:               "kg",
+  g:                "g",
+  mg:               "mg",
+  n:                "N",
+  nm:               "N·m",
+  lux:              "lx",
+  db:               "dB",
+  dba:              "dB(A)",
+  ppm:              "ppm",
+  ppb:              "ppb",
+  ug_per_m3:        "µg/m³",
+  mg_per_m3:        "mg/m³",
+};
+
+function normalizeUnit(raw: string): string {
+  return UNIT_MAP[raw.toLowerCase()] ?? raw;
+}
 
 function buildMeasurement(
   deviceId: string,
@@ -194,18 +285,45 @@ function buildMeasurement(
   const body: Record<string, unknown> = { time: timestamp.toISOString() };
   let hasValues = false;
   for (const m of metrics) {
-    // Measurements accept numeric values only; booleans are routed to
-    // buildBooleanEvents and strings have no thin-edge.io measurement equivalent.
-    if (typeof m.value === "number") {
-      body[m.name] = m.value;
-      hasValues = true;
+    if (typeof m.value !== "number") continue;
+    const { group, series } = nestMetricName(m.name);
+    if (series === undefined) {
+      // Flat scalar (1-part name)
+      body[group] = m.value;
+    } else {
+      if (typeof body[group] !== "object" || body[group] === null) body[group] = {};
+      (body[group] as Record<string, number>)[series] = m.value;
     }
+    hasValues = true;
   }
   if (!hasValues) return null;
   return {
     time: timestamp,
     topic: `te/device/${deviceId}///m/`,
     payload: JSON.stringify(body),
+  };
+}
+
+// Publish unit metadata for all measurement metrics that carry unit information
+// (3+ part names).  Published retained to te/device/{id}///m//meta on BIRTH so
+// downstream consumers (e.g. thin-edge.io → Cumulocity) know the unit per series.
+function buildMeasurementMeta(
+  deviceId: string,
+  metrics: ResolvedMetric[],
+): Message | null {
+  const meta: Record<string, { unit: string }> = {};
+  for (const m of metrics) {
+    if (typeof m.value !== "number") continue;
+    const { group, series, unit } = nestMetricName(m.name);
+    if (!unit || series === undefined) continue;
+    meta[`${group}.${series}`] = { unit };
+  }
+  if (Object.keys(meta).length === 0) return null;
+  return {
+    time: new Date(),
+    topic: `te/device/${deviceId}///m//meta`,
+    payload: JSON.stringify(meta),
+    mqtt: { retain: true, qos: 1 },
   };
 }
 
@@ -441,15 +559,26 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
 
   // BIRTH messages carry both name and alias for every metric.  We persist
   // the alias → name mapping so later DATA messages (alias-only) can be decoded.
+  // BIRTH itself produces no measurement/event/alarm output (it is a full state
+  // snapshot, not a Report-by-Exception delta).  We do publish retained unit
+  // metadata so downstream consumers know the unit for each measurement series.
   let aliasRegistry = getAliasRegistry(context, tedgeDeviceId);
   if (isBirth) {
     aliasRegistry = updateAliasRegistry(context, tedgeDeviceId, spPayload.metrics);
-    // BIRTH received — the alias registry is now populated; clear the pending flag.
     context.flow.set(`rebirthPending:${edgeNodeId}`, false);
     if (debug) {
       console.log(`sparkplug-telemetry: BIRTH registry updated size=${aliasRegistry.size} device=${tedgeDeviceId}`);
     }
-  } else if (debug) {
+    // Publish measurement unit metadata (retained) derived from the BIRTH metric names.
+    const resolved = resolveMetrics(spPayload.metrics, aliasRegistry);
+    const { measurements } = classifyMetrics(resolved);
+    const metaMsg = buildMeasurementMeta(tedgeDeviceId, measurements);
+    return metaMsg ? [metaMsg] : [];
+  }
+
+  // ── DATA path ─────────────────────────────────────────────────────────────
+
+  if (debug) {
     console.log(`sparkplug-telemetry: DATA registry size=${aliasRegistry.size} device=${tedgeDeviceId}`);
   }
 
@@ -463,7 +592,7 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     // request a rebirth per the Sparkplug B spec so aliases can be resolved.
     // Only send once per edge node until the BIRTH arrives and clears the flag.
     const hasAliasOnlyMetrics = spPayload.metrics.some(m => !m.name);
-    if (isData && aliasRegistry.size === 0 && hasAliasOnlyMetrics) {
+    if (aliasRegistry.size === 0 && hasAliasOnlyMetrics) {
       const alreadyPending = Boolean(context.flow.get(`rebirthPending:${edgeNodeId}`));
       if (!alreadyPending) {
         context.flow.set(`rebirthPending:${edgeNodeId}`, true);
@@ -479,23 +608,18 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   const { measurements, events, booleanMetrics, alarmParts } = classifyMetrics(resolved);
   const output: Message[] = [];
 
-  // BIRTH payloads carry a full state snapshot for alias registration only.
-  // Re-emitting all metric values on every reconnect would flood thin-edge.io
-  // with stale data.  Only DATA (Report-by-Exception changes) produces output.
-  if (isData) {
-    // Measurements → te/device/{id}///m/
-    const measMsg = buildMeasurement(tedgeDeviceId, timestamp, measurements);
-    if (measMsg) output.push(measMsg);
+  // Measurements → te/device/{id}///m/  (nested by group for Cumulocity compatibility)
+  const measMsg = buildMeasurement(tedgeDeviceId, timestamp, measurements);
+  if (measMsg) output.push(measMsg);
 
-    // Boolean metrics → te/device/{id}///e/{name} (only on state change)
-    output.push(...buildBooleanEvents(context, tedgeDeviceId, timestamp, booleanMetrics));
+  // Boolean metrics → te/device/{id}///e/{name} (only on state change)
+  output.push(...buildBooleanEvents(context, tedgeDeviceId, timestamp, booleanMetrics));
 
-    // Named events → te/device/{id}///e/{type}
-    output.push(...buildEvents(tedgeDeviceId, timestamp, events));
+  // Named events → te/device/{id}///e/{type}
+  output.push(...buildEvents(tedgeDeviceId, timestamp, events));
 
-    // Alarms → te/device/{id}///a/{type}  (empty payload = clear, only on state change)
-    output.push(...buildAlarms(context, tedgeDeviceId, timestamp, alarmParts));
-  }
+  // Alarms → te/device/{id}///a/{type}  (empty payload = clear, only on state change)
+  output.push(...buildAlarms(context, tedgeDeviceId, timestamp, alarmParts));
 
   return output;
 }
