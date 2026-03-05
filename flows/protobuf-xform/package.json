@@ -1,6 +1,6 @@
 {
   "name": "protobuf-xform",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "This flow translates sensor data being received as json messages, and transforms them as protobuf messages",
   "source": "src/main.ts",
   "module": "lib/main.js",

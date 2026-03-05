@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/thin-edge/tedge-flows-examples/compare/protobuf-xform-v0.1.0...protobuf-xform-v0.2.0) (2026-03-05)
+
+
+### Features
+
+* **protobuf-xform:** Use clientID when setting the device target in the cloud ([#84](https://github.com/thin-edge/tedge-flows-examples/issues/84)) ([c097e85](https://github.com/thin-edge/tedge-flows-examples/commit/c097e85e9c68328184413302e8bd4cb3c1734372))
+
 ## [0.1.0](https://github.com/thin-edge/tedge-flows-examples/compare/protobuf-xform-v0.0.1...protobuf-xform-v0.1.0) (2026-03-05)
 
 
