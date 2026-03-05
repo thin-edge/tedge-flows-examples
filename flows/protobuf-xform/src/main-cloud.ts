@@ -19,9 +19,6 @@ export function onMessage(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   context: any,
 ): CumulocityMessage[] {
-  // FIXME: replace with external id and read it from the topic
-  const sourceId = context?.config?.sourceId ?? "1047626587";
-
   let sensorMessage;
   try {
     sensorMessage = fromBinary(SensorMessageSchema, message.payload);
@@ -39,7 +36,6 @@ export function onMessage(
 
     const payload: any = {
       time,
-      source: { id: sourceId },
       type: "c8y_EnvironmentSensor",
       c8y_Temperature: {
         T: { value: env.temperature, unit: "°C" },
@@ -66,7 +62,6 @@ export function onMessage(
 
     const payload: any = {
       time,
-      source: { id: sourceId },
       type: "c8y_LocationUpdate",
       text: "Location Update",
       c8y_Position: {
