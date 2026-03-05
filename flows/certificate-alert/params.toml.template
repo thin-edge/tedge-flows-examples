@@ -1,0 +1,11 @@
+# disable alarming
+disable_alarms = false
+
+# threshold when to create a major alarm
+alarm = "30d"
+
+# threshold when to create a warning
+warning = "90d"
+
+# don't publish digital twin data
+disable_twin = false

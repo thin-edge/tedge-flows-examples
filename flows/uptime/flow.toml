@@ -7,5 +7,5 @@ mqtt.topics = [
 [[steps]]
 script = "lib/main.js"
 interval = "10s"
-config.window_size_minutes = 1440
-config.stats_topic = "twin/onlineTracker"
+config.window_size_minutes = "${.params.window_size_minutes}"
+config.stats_topic = "${.params.stats_topic}"
