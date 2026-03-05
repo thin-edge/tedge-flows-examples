@@ -31,3 +31,12 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: Package tarballs
+        run: npm run publish
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: flows
+          path: ./dist/*.tar.gz
