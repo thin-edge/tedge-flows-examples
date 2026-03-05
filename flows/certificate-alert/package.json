@@ -1,6 +1,6 @@
 {
   "name": "certificate-alert",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Publish device certificate information and create alerts when the certificate is about to expire",
   "source": "src/main.ts",
   "module": "lib/main.js",

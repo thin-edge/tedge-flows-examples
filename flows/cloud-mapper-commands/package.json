@@ -1,6 +1,6 @@
 {
   "name": "cloud-mapper-commands",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "This flow demonstrates how to map customer cloud commands to tedge commands",
   "source": "src/main.ts",
   "module": "lib/main.js",
