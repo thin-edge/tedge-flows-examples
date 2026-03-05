@@ -646,8 +646,9 @@ func connectMQTT(broker string, topics []string, msgCh chan<- MQTTMessage, connC
 
 var defaultTopics = []string{
 	"spBv1.0/#",
-	"te/device/+///m/",
 	"te/device/+///m/+",
+	"te/device/+///e/+",
+	"te/device/+///a/+",
 	"c8y/#",
 }
 
