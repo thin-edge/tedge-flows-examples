@@ -31,7 +31,7 @@ jobs:
     if: needs.release-please.outputs.releases_created == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
     env:
       REGISTRY: ghcr.io
@@ -70,6 +70,21 @@ jobs:
 
       - name: Publish
         run: npm run publish -- --target registry
+
+      - name: Upload artifacts to GitHub Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for tarball in dist/*.tar.gz; do
+            filename=$(basename "$tarball" .tar.gz)
+            # Decode %2F mapper prefix if present: e.g. local%2Flog-surge_1.3.2 -> log-surge_1.3.2
+            name_version="${filename##*%2F}"
+            name="${name_version%_*}"
+            version="${name_version##*_}"
+            tag="${name}-v${version}"
+            echo "Uploading $tarball to release $tag"
+            gh release upload "$tag" "$tarball" --clobber || echo "Warning: release $tag not found, skipping"
+          done
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
