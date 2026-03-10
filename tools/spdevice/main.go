@@ -596,7 +596,7 @@ func (m *Model) publishSpData() {
 
 	payload := EncodePayload(seq, ts, metrics)
 	topic := fmt.Sprintf("spBv1.0/%s/NDATA/%s", m.groupId, m.edgeNodeId)
-	m.mqttClient.Publish(topic, 0, false, payload)
+	m.mqttClient.Publish(topic, 1, false, payload)
 
 	m.mu.Lock()
 	m.pubCount++
