@@ -652,7 +652,7 @@ func (m *Model) buildMeasurementPayload() []byte {
 
 func (m *Model) publishTeBirth() {
 	// Publish current measurements.
-	m.mqttClient.Publish(m.teMeasurementTopic(), 0, false, m.buildMeasurementPayload())
+	m.mqttClient.Publish(m.teMeasurementTopic(), 1, false, m.buildMeasurementPayload())
 
 	// Re-publish retained state for all currently active alarms so a
 	// subscriber that just connected sees the right state.
@@ -676,7 +676,7 @@ func (m *Model) publishTeBirth() {
 }
 
 func (m *Model) publishTeData() {
-	m.mqttClient.Publish(m.teMeasurementTopic(), 0, false, m.buildMeasurementPayload())
+	m.mqttClient.Publish(m.teMeasurementTopic(), 1, false, m.buildMeasurementPayload())
 
 	m.mu.Lock()
 	m.pubCount++
@@ -689,7 +689,7 @@ func (m *Model) publishTeEvents(logs []LogEntry) {
 		switch e.Kind {
 		case "event":
 			payload, _ := json.Marshal(map[string]string{"text": e.Message})
-			m.mqttClient.Publish(m.teEventTopic(e.Name), 0, false, payload)
+			m.mqttClient.Publish(m.teEventTopic(e.Name), 1, false, payload)
 		case "alarm":
 			if e.Active {
 				payload, _ := json.Marshal(map[string]string{"text": e.Message})
