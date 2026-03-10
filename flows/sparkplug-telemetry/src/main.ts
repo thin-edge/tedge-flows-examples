@@ -301,6 +301,7 @@ function buildMeasurement(
     time: timestamp,
     topic: `te/device/${deviceId}///m/`,
     payload: JSON.stringify(body),
+    mqtt: { qos: 1 },
   };
 }
 
@@ -341,6 +342,7 @@ function buildEvents(
       time: timestamp,
       topic: `te/device/${deviceId}///e/${eventType}`,
       payload: JSON.stringify({ text, time: timestamp.toISOString() }),
+      mqtt: { qos: 1 },
     };
   });
 }
@@ -370,6 +372,7 @@ function buildBooleanEvents(
         text: `${metric.name} changed to ${isActive}`,
         time: timestamp.toISOString(),
       }),
+      mqtt: { qos: 1 },
     });
   }
   return output;
@@ -421,6 +424,7 @@ function buildAlarms(
         time: timestamp,
         topic: `te/device/${deviceId}///a/${alarmType}`,
         payload: JSON.stringify({ text: text ?? "", time: timestamp.toISOString() }),
+        mqtt: { retain: true, qos: 1 },
       });
     } else {
       // thin-edge.io clears alarms by publishing an empty retained message.
@@ -515,6 +519,10 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   // Only process BIRTH and DATA messages; ignore DEATH, CMD, and STATE.
   if (!isBirth && !isData) {
     return [];
+  }
+
+  if (debug) {
+    console.log(`Processing message: topic=${message.topic}, time=${message.time}`);
   }
 
   // DDATA/DBIRTH → use the device ID; NDATA/NBIRTH → use the edge node ID.
