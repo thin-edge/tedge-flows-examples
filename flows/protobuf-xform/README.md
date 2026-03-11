@@ -34,14 +34,15 @@ Topic: **te/device/main///m/location**
 ```json
 {
   "latitude": -27.47544883926631,
-  "longitude": 153.02223634041275
+  "longitude": 153.02223634041275,
+  "altitude": 1
 }
 ```
 
 **Example**
 
 ```sh
-tedge mqtt pub te/device/main///m/location '{"latitude": -27.47544883926631,"longitude": 153.02223634041275}'
+tedge mqtt pub te/device/main///m/location '{"latitude": -27.47544883926631,"longitude": 153.02223634041275,"altitude":1}'
 ```
 
 ### Decoding Protobuf messages
@@ -64,5 +65,20 @@ echo -n ChIJAAAAAAAAPUARAAAAAAAASUA= \
 environment {
   temperature: 29
   humidity: 50
+}
+```
+
+And decoding the location example:
+
+```
+echo -n Eh0KGwnpkd8Dt3k7wBFgW/wotiBjQBkAAAAAAADwPw== \
+| base64 -d \
+| protoc --proto_path ./proto proto/sensor.proto --decode sensorpackage.SensorMessage
+location {
+  location {
+    latitude: -27.47544883926631
+    longitude: 153.02223634041275
+    altitude: 1
+  }
 }
 ```

@@ -45,7 +45,7 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
       }),
     };
   } else {
-    console.warn(`Unknown message type. value=${messageType}`);
+    console.log(`WARN: Unknown message type. value=${messageType}`);
   }
 
   if (!data) {

@@ -23,7 +23,7 @@ export function onMessage(
   try {
     sensorMessage = fromBinary(SensorMessageSchema, message.payload);
   } catch (e) {
-    console.error("Failed to decode sensor protobuf payload:", e);
+    console.log(`ERROR: Failed to decode sensor protobuf payload: ${e}`);
     return [];
   }
 
@@ -86,6 +86,6 @@ export function onMessage(
     ];
   }
 
-  console.warn(`Unknown sensor type: ${sensor.case}`);
+  console.log(`WARN: Unknown sensor type: ${sensor.case}`);
   return [];
 }
