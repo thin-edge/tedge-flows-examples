@@ -28,6 +28,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@slidev/theme-default": "^0.25.0",
     "tedge": "^1.0.0"
   }
 }
