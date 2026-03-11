@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/thin-edge/tedge-flows-examples/compare/protobuf-xform-v0.2.0...protobuf-xform-v0.2.1) (2026-03-11)
+
+
+### Bug Fixes
+
+* **protobuf-xform:** fix console logging and documentation ([#86](https://github.com/thin-edge/tedge-flows-examples/issues/86)) ([1dc147b](https://github.com/thin-edge/tedge-flows-examples/commit/1dc147b7d6baebf92b1b47c49c057b708b7b1c31))
+
 ## [0.2.0](https://github.com/thin-edge/tedge-flows-examples/compare/protobuf-xform-v0.1.0...protobuf-xform-v0.2.0) (2026-03-05)
 
 
