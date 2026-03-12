@@ -1,6 +1,6 @@
 {
   "name": "tedge-events",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Forward thin-edge.io events to the Cumulocity MQTT service",
   "source": "src/main.ts",
   "module": "lib/main.js",
