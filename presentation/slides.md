@@ -13,6 +13,14 @@ User-defined message pipelines for IoT edge devices
 
 ---
 
+# Caveats
+
+- Naming is still being updated
+
+---
+disabled: true
+---
+
 # thin-edge.io — quick context
 
 An open-source, lightweight IoT framework for **Linux-based edge devices**.
@@ -30,6 +38,8 @@ flowchart LR
 
 
 ---
+disabled: true
+---
 
 # The challenge
 
@@ -45,6 +55,8 @@ Real-world deployments rarely fit the default mapping behaviour.
 
 Each workaround is a separate service to build, test, and maintain.
 
+---
+disabled: true
 ---
 
 # What are flows?
@@ -64,6 +76,7 @@ flowchart LR
 
 ---
 layout: two-cols
+disabled: true
 ---
 
 # Deploying flows to a mapper
@@ -90,7 +103,8 @@ Flows are **installed into** a specific mapper and share its lifecycle.
 - Use `local` for on-device logic that doesn't depend on a cloud connection
 
 ---
-
+disabled: true
+---
 # Four building blocks
 
 | | |
@@ -114,7 +128,7 @@ builtin = "add-timestamp"     # built-in step: attach an RFC 3339 timestamp
 config.format = "rfc3339"
 
 [[steps]]
-script = "lib/main.js"        # SmartFunction — compiled from TypeScript
+script = "lib/main.js"        # SmartFunction — JavaScript (can be transpiled from TypeScript)
 config.unit_map = "celsius"   # injected into context.config at runtime
 
 [[steps]]
@@ -162,7 +176,7 @@ type Message = {
 };
 
 type Context = {
-    config: unknown;    // from flow TOML
+    config: Record<string, unknown>;    // from flow TOML
     mapper: KVStore;    // shared across all flows
     flow:   KVStore;    // shared within this flow
     script: KVStore;    // private to this step, persisted
@@ -174,6 +188,50 @@ layout: section
 ---
 
 # Use-cases
+
+---
+layout: two-cols
+---
+
+# Edge analytics
+
+Three independent flows for local intelligence:
+
+**certificate-alert**
+Polls `tedge cert show` every 10 minutes.
+Raises an alarm if the certificate expiry is below a configured threshold.
+
+**log-surge**
+Tails `journalctl` output.
+Counts log levels over 5-minute windows, raises an alarm if a threshold is exceeded.
+
+**uptime**
+Subscribes to service health MQTT topics.
+Publishes uptime percentage as a retained twin property.
+
+::right::
+
+All three use `onInterval` to aggregate over time:
+
+```typescript
+export function onMessage(msg, ctx) {
+    // buffer events into persistent state
+    const buf = ctx.script.get("history") ?? [];
+    buf.push({ time: msg.time, value: parse(msg) });
+    ctx.script.set("history", buf);
+    return []; // nothing to emit yet
+}
+
+export function onInterval(time, ctx) {
+    const buf = ctx.script.get("history") ?? [];
+    const stats = summarise(buf);
+    return [{
+        topic: "te/device/main///twin/stats",
+        payload: JSON.stringify(stats),
+        mqtt: { retain: true },
+    }];
+}
+```
 
 ---
 
@@ -198,6 +256,8 @@ script = "lib/main.js"
 config.topic = "${.params.outbound_topic}"
 ```
 
+---
+disabled: true
 ---
 
 # Multi-cloud — ThingsBoard
@@ -249,49 +309,6 @@ script = "lib/main.js"
 
 No changes required to the PLC or its existing SparkplugB publisher.
 
----
-layout: two-cols
----
-
-# Edge analytics
-
-Three independent flows for local intelligence:
-
-**certificate-alert**
-Polls `tedge cert show` every 10 minutes.
-Raises an alarm if the certificate expiry is below a configured threshold.
-
-**log-surge**
-Tails `journalctl` output.
-Counts log levels over 5-minute windows, raises an alarm if a threshold is exceeded.
-
-**uptime**
-Subscribes to service health MQTT topics.
-Publishes uptime percentage as a retained twin property.
-
-::right::
-
-All three use `onInterval` to aggregate over time:
-
-```typescript
-export function onMessage(msg, ctx) {
-    // buffer events into persistent state
-    const buf = ctx.script.get("history") ?? [];
-    buf.push({ time: msg.time, value: parse(msg) });
-    ctx.script.set("history", buf);
-    return []; // nothing to emit yet
-}
-
-export function onInterval(time, ctx) {
-    const buf = ctx.script.get("history") ?? [];
-    const stats = summarise(buf);
-    return [{
-        topic: "te/device/main///twin/stats",
-        payload: JSON.stringify(stats),
-        mqtt: { retain: true },
-    }];
-}
-```
 
 ---
 
@@ -313,7 +330,7 @@ topic    = "tedge-agent-logs"
 
 # Or poll on an interval instead of following
 [input.process]
-command  = "journalctl --no-pager --cursor-file=/tmp/cursor --unit tedge-agent"
+command  = "sudo journalctl --no-pager --cursor-file=/tmp/cursor --unit tedge-agent"
 interval = "1h"
 ```
 
@@ -388,7 +405,8 @@ This means:
 - Operators can diff `params.toml` against `params.toml.template` to see what new options are available
 
 ---
-
+disabled: true
+---
 # Testing — offline, no MQTT needed
 
 `tedge flows test` runs transformations against the local flow definitions without any live MQTT connection. Safe to run on a production device.
@@ -413,6 +431,8 @@ $ tedge flows test collectd/device/cpu/percent-active '1754571280.572:2.07' \
 
 Use `--flows-dir` to test a development directory without touching the live config.
 
+---
+disabled: true
 ---
 
 # Getting started
@@ -443,11 +463,14 @@ Docs: https://thin-edge.github.io/thin-edge.io/next/references/mappers/flows/
 
 ---
 layout: section
+disabled: true
 ---
 
 # Demo
 ## SparkplugB primer
 
+---
+disabled: true
 ---
 
 # SparkplugB — what is it?
@@ -460,6 +483,8 @@ Designed for **SCADA / IIoT** use-cases where PLCs, sensors, and edge nodes need
 - **Defined topic namespace** — `spBv1.0/<group>/<message-type>/<edge-node>/<device>`
 - **State awareness** — the broker always knows whether a node is online or offline
 
+---
+disabled: true
 ---
 
 # SparkplugB — message types
