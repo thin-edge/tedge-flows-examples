@@ -1,7 +1,3 @@
-name = "tedge-config-context"
-version = "0.0.1"
-description = "Add configuration to the context so it is accessible for other flows"
-
 [input.process]
 command = "tedge config list"
 interval = "600s"
