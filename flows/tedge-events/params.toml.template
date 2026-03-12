@@ -1,0 +1,5 @@
+# enable debug messages
+debug = false
+
+# topic where the messages will be written to
+output_events_topic = "c8y/mqtt/out/te/v1/events"
