@@ -8,5 +8,6 @@
   "flows/thingsboard": "0.1.0",
   "flows/thingsboard-registration": "0.1.0",
   "flows/thingsboard-server-rpc": "0.1.0",
-  "flows/uptime": "1.3.0"
+  "flows/uptime": "1.3.0",
+  "flows/tedge-config-context": "0.0.0"
 }

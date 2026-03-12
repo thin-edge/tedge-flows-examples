@@ -1,0 +1,26 @@
+{
+  "name": "tedge-config-context",
+  "version": "0.0.0",
+  "description": "Add configuration to the context so it is accessible for other flows",
+  "source": "src/main.ts",
+  "module": "lib/main.js",
+  "type": "module",
+  "tedge": {
+    "mapper": "local"
+  },
+  "scripts": {
+    "build": "esbuild src/main.ts --target=es2018 --bundle --outfile=lib/main.js --format=esm --drop-labels=DEV,TEST",
+    "test": "jest --coverageProvider=v8 --coverage"
+  },
+  "author": "thin-edge.io",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "esbuild": "^0.25.5",
+    "esbuild-register": "^3.6.0",
+    "jest": "^30.0.4",
+    "jest-esbuild": "^0.4.0",
+    "prettier": "3.6.2",
+    "typescript": "^5.8.3"
+  }
+}
