@@ -984,3 +984,174 @@ describe("certificate renewal", () => {
     expect(output[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Subject Alternative Names (SAN)
+// ---------------------------------------------------------------------------
+
+/** Extract the subjectAltName extension string from a Node X509Certificate. */
+function getSAN(cert: crypto.X509Certificate): string {
+  return cert.subjectAltName ?? "";
+}
+
+/** Build a CSR-style payload with optional SAN fields (require_factory_cert=false). */
+function makeOpenRequest(
+  nonce: string,
+  extra: Record<string, unknown> = {},
+): tedge.Message {
+  return {
+    time: new Date(),
+    topic: "te/pki/x509/csr",
+    payload: JSON.stringify({
+      device_id: DEVICE_ID,
+      public_key: OP_PUB,
+      nonce,
+      ...extra,
+    }),
+  };
+}
+
+describe("Subject Alternative Names (SAN)", () => {
+  test("CSR with san_dns_names produces a cert containing dNSName SANs", () => {
+    const ctx = makeIssuerContext({ require_factory_cert: false });
+    const msg = makeOpenRequest("san-dns-1", {
+      san_dns_names: JSON.stringify(["device.local", "device.example.com"]),
+    });
+    const cert = parseCertFromOutput(flow.onMessage(msg, ctx));
+    const san = getSAN(cert);
+    expect(san).toMatch(/DNS:device\.local/);
+    expect(san).toMatch(/DNS:device\.example\.com/);
+  });
+
+  test("CSR with san_ip_addresses produces a cert containing iPAddress SANs", () => {
+    const ctx = makeIssuerContext({ require_factory_cert: false });
+    const msg = makeOpenRequest("san-ip-1", {
+      san_ip_addresses: JSON.stringify(["192.168.1.42"]),
+    });
+    const cert = parseCertFromOutput(flow.onMessage(msg, ctx));
+    const san = getSAN(cert);
+    expect(san).toMatch(/IP Address:192\.168\.1\.42/i);
+  });
+
+  test("CSR with both san_dns_names and san_ip_addresses produces both SAN types", () => {
+    const ctx = makeIssuerContext({ require_factory_cert: false });
+    const msg = makeOpenRequest("san-both-1", {
+      san_dns_names: JSON.stringify(["device.local"]),
+      san_ip_addresses: JSON.stringify(["10.0.0.5"]),
+    });
+    const cert = parseCertFromOutput(flow.onMessage(msg, ctx));
+    const san = getSAN(cert);
+    expect(san).toMatch(/DNS:device\.local/);
+    expect(san).toMatch(/IP Address:10\.0\.0\.5/i);
+  });
+
+  test("CSR without SAN fields produces a cert with no subjectAltName extension", () => {
+    const ctx = makeIssuerContext({ require_factory_cert: false });
+    const msg = makeOpenRequest("san-none-1");
+    const cert = parseCertFromOutput(flow.onMessage(msg, ctx));
+    expect(getSAN(cert)).toBe("");
+  });
+
+  test("keygen request with san_dns_names produces a cert containing dNSName SANs", () => {
+    const ctx = makeIssuerContext({ require_factory_cert: false });
+    const msg: tedge.Message = {
+      time: new Date(),
+      topic: "te/pki/x509/keygen",
+      payload: JSON.stringify({
+        device_id: DEVICE_ID,
+        nonce: "san-keygen-dns-1",
+        san_dns_names: JSON.stringify(["keygen-device.local"]),
+      }),
+    };
+    const cert = parseCertFromOutput(flow.onMessage(msg, ctx));
+    expect(getSAN(cert)).toMatch(/DNS:keygen-device\.local/);
+  });
+
+  test("invalid san_dns_names JSON is rejected", () => {
+    const ctx = makeIssuerContext({ require_factory_cert: false });
+    const msg = makeOpenRequest("san-invalid-dns-1", {
+      san_dns_names: "not-valid-json",
+    });
+    const output = flow.onMessage(msg, ctx);
+    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+  });
+
+  test("invalid san_ip_addresses JSON is rejected", () => {
+    const ctx = makeIssuerContext({ require_factory_cert: false });
+    const msg = makeOpenRequest("san-invalid-ip-1", {
+      san_ip_addresses: "{bad}",
+    });
+    const output = flow.onMessage(msg, ctx);
+    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+  });
+
+  // ── SAN retention during renewal ─────────────────────────────────────────
+
+  test("renewal without SAN fields inherits SANs from the current certificate", () => {
+    const ctx = makeIssuerContext({ require_factory_cert: false });
+
+    // Issue initial cert with SANs
+    const initMsg = makeOpenRequest("san-renew-inherit-init", {
+      san_dns_names: JSON.stringify(["device.local"]),
+      san_ip_addresses: JSON.stringify(["10.1.2.3"]),
+    });
+    const initCertDerB64 = JSON.parse(flow.onMessage(initMsg, ctx)[0].payload as string).cert_der as string;
+
+    // Renew without providing SAN fields
+    const sig = makeRenewalReqSig(DEVICE_ID, "san-renew-inherit-1", OP_PUB, OP_PRIV);
+    const renewMsg = makeRenewalRequest({
+      nonce: "san-renew-inherit-1",
+      current_cert_der_b64: initCertDerB64,
+      req_sig: sig,
+    });
+    const renewedCert = parseCertFromOutput(flow.onMessage(renewMsg, ctx));
+    const san = getSAN(renewedCert);
+    expect(san).toMatch(/DNS:device\.local/);
+    expect(san).toMatch(/IP Address:10\.1\.2\.3/i);
+  });
+
+  test("renewal with new san_dns_names overrides the original SANs", () => {
+    const ctx = makeIssuerContext({ require_factory_cert: false });
+
+    // Issue initial cert with one SAN
+    const initMsg = makeOpenRequest("san-renew-override-init", {
+      san_dns_names: JSON.stringify(["old.local"]),
+    });
+    const initCertDerB64 = JSON.parse(flow.onMessage(initMsg, ctx)[0].payload as string).cert_der as string;
+
+    // Renew providing different SANs
+    const sig = makeRenewalReqSig(DEVICE_ID, "san-renew-override-1", OP_PUB, OP_PRIV);
+    const renewMsg: tedge.Message = {
+      time: new Date(),
+      topic: "te/pki/x509/renew",
+      payload: JSON.stringify({
+        device_id: DEVICE_ID,
+        public_key: OP_PUB,
+        nonce: "san-renew-override-1",
+        _current_cert: initCertDerB64,
+        _req_sig: sig,
+        san_dns_names: JSON.stringify(["new.local"]),
+      }),
+    };
+    const renewedCert = parseCertFromOutput(flow.onMessage(renewMsg, ctx));
+    const san = getSAN(renewedCert);
+    expect(san).toMatch(/DNS:new\.local/);
+    expect(san).not.toMatch(/DNS:old\.local/);
+  });
+
+  test("renewal of a cert without SANs (and no new SANs provided) produces a cert with no SAN extension", () => {
+    const ctx = makeIssuerContext({ require_factory_cert: false });
+
+    // Issue initial cert without SANs
+    const initMsg = makeOpenRequest("san-renew-none-init");
+    const initCertDerB64 = JSON.parse(flow.onMessage(initMsg, ctx)[0].payload as string).cert_der as string;
+
+    // Renew without providing SANs
+    const sig = makeRenewalReqSig(DEVICE_ID, "san-renew-none-1", OP_PUB, OP_PRIV);
+    const renewedCert = parseCertFromOutput(flow.onMessage(
+      makeRenewalRequest({ nonce: "san-renew-none-1", current_cert_der_b64: initCertDerB64, req_sig: sig }),
+      ctx,
+    ));
+    expect(getSAN(renewedCert)).toBe("");
+  });
+});

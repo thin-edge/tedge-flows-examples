@@ -20,8 +20,8 @@ usage() {
 Usage:
   x509-cert.sh setup-ca             [output-prefix]
   x509-cert.sh create-factory-cert  <device-id> <factory-ca-private.pem> [factory-device-private.pem]
-  x509-cert.sh create-csr           <device-id> <factory-device-private.pem> <factory-cert-base64> [op-private.pem]
-  x509-cert.sh create-keygen-req    <device-id> <factory-device-private.pem> <factory-cert-base64>
+  x509-cert.sh create-csr           <device-id> <factory-device-private.pem> <factory-cert-base64> [op-private.pem] [--san-dns <name>]... [--san-ip <addr>]...
+  x509-cert.sh create-keygen-req    <device-id> <factory-device-private.pem> <factory-cert-base64> [--san-dns <name>]... [--san-ip <addr>]...
   x509-cert.sh enroll               <device-id> --broker <host> [options]
   x509-cert.sh reenroll             <device-id> --broker <host> [options]
   x509-cert.sh decode-cert          <base64-DER-cert>
@@ -118,6 +118,8 @@ enroll
   --timeout <seconds>            How long to wait for the response (default: 30)
   --csr-topic <topic>            CSR topic (default: te/pki/x509/csr)
   --keygen-topic <topic>         Keygen topic (default: te/pki/x509/keygen)
+  --san-dns <name>               DNS SAN entry (repeatable, e.g. --san-dns device.local)
+  --san-ip <addr>                IP SAN entry (repeatable, e.g. --san-ip 192.168.1.42)
 
   Output files written to --out-dir:
     device-private.pem   Private key (keygen mode or generated for CSR if --op-key not given)
@@ -153,6 +155,8 @@ reenroll
   --timeout <seconds>            How long to wait for the response (default: 30)
   --renewal-topic <topic>        Renewal topic (default: te/pki/x509/renew)
   --response-prefix <prefix>     Response topic prefix (default: te/pki/x509/cert/issued)
+  --san-dns <name>               DNS SAN entry (repeatable, e.g. --san-dns device.local)
+  --san-ip <addr>                IP SAN entry (repeatable, e.g. --san-ip 192.168.1.42)
 
   Output files written to --out-dir:
     device-cert.pem      Renewed TLS client certificate
@@ -215,19 +219,23 @@ parse_enroll_flags() {
   ENROLL_TIMEOUT="30"
   ENROLL_CSR_TOPIC="te/pki/x509/csr"
   ENROLL_KEYGEN_TOPIC="te/pki/x509/keygen"
+  ENROLL_SAN_DNS=""
+  ENROLL_SAN_IP=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --broker)        ENROLL_BROKER="$2";        shift 2 ;;
-      --port)          ENROLL_PORT="$2";          shift 2 ;;
-      --factory-cert)  ENROLL_FACTORY_CERT="$2";  shift 2 ;;
-      --factory-key)   ENROLL_FACTORY_KEY="$2";   shift 2 ;;
-      --keygen)        ENROLL_KEYGEN=true;         shift   ;;
-      --op-key)        ENROLL_OP_KEY="$2";         shift 2 ;;
-      --out-dir)       ENROLL_OUT_DIR="$2";        shift 2 ;;
-      --timeout)       ENROLL_TIMEOUT="$2";        shift 2 ;;
-      --csr-topic)     ENROLL_CSR_TOPIC="$2";      shift 2 ;;
-      --keygen-topic)  ENROLL_KEYGEN_TOPIC="$2";   shift 2 ;;
+      --broker)        ENROLL_BROKER="$2";                    shift 2 ;;
+      --port)          ENROLL_PORT="$2";                      shift 2 ;;
+      --factory-cert)  ENROLL_FACTORY_CERT="$2";              shift 2 ;;
+      --factory-key)   ENROLL_FACTORY_KEY="$2";               shift 2 ;;
+      --keygen)        ENROLL_KEYGEN=true;                     shift   ;;
+      --op-key)        ENROLL_OP_KEY="$2";                    shift 2 ;;
+      --out-dir)       ENROLL_OUT_DIR="$2";                   shift 2 ;;
+      --timeout)       ENROLL_TIMEOUT="$2";                   shift 2 ;;
+      --csr-topic)     ENROLL_CSR_TOPIC="$2";                 shift 2 ;;
+      --keygen-topic)  ENROLL_KEYGEN_TOPIC="$2";              shift 2 ;;
+      --san-dns)       ENROLL_SAN_DNS+=$'\n'"$2";            shift 2 ;;
+      --san-ip)        ENROLL_SAN_IP+=$'\n'"$2";             shift 2 ;;
       *) echo "Error: unknown flag '$1'" >&2; exit 1 ;;
     esac
   done
@@ -236,6 +244,12 @@ sign_file() {
   local priv_pem="$1"
   local data_file="$2"
   openssl pkeyutl -sign -inkey "$priv_pem" -rawin -in "$data_file" | base64 | tr -d '\n'
+}
+
+# Convert a newline-separated list of strings to a JSON array string.
+# Empty or blank input returns '[]'.
+build_json_str_array() {
+  printf '%s\n' "$1" | jq -Rsc '[split("\n")[] | select(length > 0)]'
 }
 
 parse_reenroll_flags() {
@@ -249,19 +263,23 @@ parse_reenroll_flags() {
   REENROLL_TIMEOUT="30"
   REENROLL_RENEWAL_TOPIC="te/pki/x509/renew"
   REENROLL_RESPONSE_PREFIX="te/pki/x509/cert/issued"
+  REENROLL_SAN_DNS=""
+  REENROLL_SAN_IP=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --broker)           REENROLL_BROKER="$2";           shift 2 ;;
-      --port)             REENROLL_PORT="$2";             shift 2 ;;
-      --current-cert)     REENROLL_CURRENT_CERT="$2";     shift 2 ;;
-      --current-key)      REENROLL_CURRENT_KEY="$2";      shift 2 ;;
-      --rotate)           REENROLL_ROTATE=true;            shift   ;;
-      --new-key)          REENROLL_NEW_KEY="$2";           shift 2 ;;
-      --out-dir)          REENROLL_OUT_DIR="$2";           shift 2 ;;
-      --timeout)          REENROLL_TIMEOUT="$2";           shift 2 ;;
-      --renewal-topic)    REENROLL_RENEWAL_TOPIC="$2";     shift 2 ;;
-      --response-prefix)  REENROLL_RESPONSE_PREFIX="$2";   shift 2 ;;
+      --broker)           REENROLL_BROKER="$2";               shift 2 ;;
+      --port)             REENROLL_PORT="$2";                 shift 2 ;;
+      --current-cert)     REENROLL_CURRENT_CERT="$2";         shift 2 ;;
+      --current-key)      REENROLL_CURRENT_KEY="$2";          shift 2 ;;
+      --rotate)           REENROLL_ROTATE=true;                shift   ;;
+      --new-key)          REENROLL_NEW_KEY="$2";               shift 2 ;;
+      --out-dir)          REENROLL_OUT_DIR="$2";               shift 2 ;;
+      --timeout)          REENROLL_TIMEOUT="$2";               shift 2 ;;
+      --renewal-topic)    REENROLL_RENEWAL_TOPIC="$2";         shift 2 ;;
+      --response-prefix)  REENROLL_RESPONSE_PREFIX="$2";       shift 2 ;;
+      --san-dns)          REENROLL_SAN_DNS+=$'\n'"$2";        shift 2 ;;
+      --san-ip)           REENROLL_SAN_IP+=$'\n'"$2";         shift 2 ;;
       *) echo "Error: unknown flag '$1'" >&2; exit 1 ;;
     esac
   done
@@ -353,7 +371,25 @@ EOF
     DEVICE_ID="${2:?'device-id required'}"
     FACTORY_DEV_PRIV="${3:?'factory-device-private.pem required'}"
     FACTORY_CERT_B64="${4:?'factory-cert-base64 required'}"
-    OP_PEM="${5:-op-private.pem}"
+
+    # Optional 5th arg is op-private.pem unless it starts with '--' (a flag)
+    if [[ "${5:-}" == --* ]]; then
+      OP_PEM="op-private.pem"
+      _san_start=5
+    else
+      OP_PEM="${5:-op-private.pem}"
+      _san_start=6
+    fi
+    CSR_SAN_DNS=""; CSR_SAN_IP=""
+    _i=$_san_start
+    while [[ $_i -le $# ]]; do
+      _arg="${!_i}"; _i=$((_i + 1))
+      case "$_arg" in
+        --san-dns) CSR_SAN_DNS+=$'\n'"${!_i}"; _i=$((_i + 1)) ;;
+        --san-ip)  CSR_SAN_IP+=$'\n'"${!_i}";  _i=$((_i + 1)) ;;
+        *) echo "Error: unknown option '$_arg'" >&2; exit 1 ;;
+      esac
+    done
 
     [[ -f "$FACTORY_DEV_PRIV" ]] || { echo "Error: $FACTORY_DEV_PRIV not found" >&2; exit 1; }
 
@@ -382,14 +418,20 @@ EOF
     printf '%s' "$REQ_BODY" > "$TMP"
     REQ_SIG=$(sign_file "$FACTORY_DEV_PRIV" "$TMP")
 
-    # Output CSR JSON to stdout
+    # Output CSR JSON to stdout (with optional SAN fields)
+    _dns_json=$(build_json_str_array "$CSR_SAN_DNS")
+    _ip_json=$(build_json_str_array "$CSR_SAN_IP")
     jq -cn \
       --arg id   "$DEVICE_ID" \
       --arg pub  "$OP_PUB" \
       --arg n    "$NONCE" \
       --arg cert "$FACTORY_CERT_B64" \
       --arg sig  "$REQ_SIG" \
-      '{device_id: $id, public_key: $pub, nonce: $n, _factory_cert: $cert, _req_sig: $sig}'
+      --arg dns  "$_dns_json" \
+      --arg ip   "$_ip_json" \
+      '{device_id: $id, public_key: $pub, nonce: $n, _factory_cert: $cert, _req_sig: $sig}
+       | if $dns != "[]" then . + {san_dns_names: $dns} else . end
+       | if $ip  != "[]" then . + {san_ip_addresses: $ip} else . end'
     ;;
 
   # ─── create-keygen-req ───────────────────────────────────────────────────────
@@ -397,6 +439,16 @@ EOF
     DEVICE_ID="${2:?'device-id required'}"
     FACTORY_DEV_PRIV="${3:?'factory-device-private.pem required'}"
     FACTORY_CERT_B64="${4:?'factory-cert-base64 required'}"
+    KEYGEN_SAN_DNS=""; KEYGEN_SAN_IP=""
+    _i=5
+    while [[ $_i -le $# ]]; do
+      _arg="${!_i}"; _i=$((_i + 1))
+      case "$_arg" in
+        --san-dns) KEYGEN_SAN_DNS+=$'\n'"${!_i}"; _i=$((_i + 1)) ;;
+        --san-ip)  KEYGEN_SAN_IP+=$'\n'"${!_i}";  _i=$((_i + 1)) ;;
+        *) echo "Error: unknown option '$_arg'" >&2; exit 1 ;;
+      esac
+    done
 
     [[ -f "$FACTORY_DEV_PRIV" ]] || { echo "Error: $FACTORY_DEV_PRIV not found" >&2; exit 1; }
 
@@ -415,13 +467,19 @@ EOF
     printf '%s' "$REQ_BODY" > "$TMP"
     REQ_SIG=$(sign_file "$FACTORY_DEV_PRIV" "$TMP")
 
-    # Output keygen request JSON to stdout
+    # Output keygen request JSON to stdout (with optional SAN fields)
+    _dns_json=$(build_json_str_array "$KEYGEN_SAN_DNS")
+    _ip_json=$(build_json_str_array "$KEYGEN_SAN_IP")
     jq -cn \
       --arg id   "$DEVICE_ID" \
       --arg n    "$NONCE" \
       --arg cert "$FACTORY_CERT_B64" \
       --arg sig  "$REQ_SIG" \
-      '{device_id: $id, nonce: $n, _factory_cert: $cert, _req_sig: $sig}'
+      --arg dns  "$_dns_json" \
+      --arg ip   "$_ip_json" \
+      '{device_id: $id, nonce: $n, _factory_cert: $cert, _req_sig: $sig}
+       | if $dns != "[]" then . + {san_dns_names: $dns} else . end
+       | if $ip  != "[]" then . + {san_ip_addresses: $ip} else . end'
     ;;
 
   # ─── enroll ──────────────────────────────────────────────────────────────────
@@ -502,6 +560,16 @@ EOF
           --arg id "$ENROLL_DEVICE_ID" --arg pub "$OP_PUB" --arg n "$NONCE" \
           '{device_id: $id, public_key: $pub, nonce: $n}')
       fi
+    fi
+
+    # Inject SAN fields into payload if specified
+    _dns_json=$(build_json_str_array "$ENROLL_SAN_DNS")
+    _ip_json=$(build_json_str_array "$ENROLL_SAN_IP")
+    if [[ "$_dns_json" != "[]" || "$_ip_json" != "[]" ]]; then
+      PAYLOAD=$(jq -c \
+        --arg dns "$_dns_json" --arg ip "$_ip_json" \
+        'if $dns != "[]" then . + {san_dns_names: $dns} else . end
+         | if $ip != "[]" then . + {san_ip_addresses: $ip} else . end' <<< "$PAYLOAD")
     fi
 
     # Subscribe for the response before publishing (avoid race)
@@ -605,6 +673,16 @@ EOF
       --arg cert "$CURRENT_CERT_DER_B64" \
       --arg sig  "$REQ_SIG" \
       '{device_id: $id, public_key: $pub, nonce: $n, _current_cert: $cert, _req_sig: $sig}')
+
+    # Inject SAN fields into payload if specified
+    _dns_json=$(build_json_str_array "$REENROLL_SAN_DNS")
+    _ip_json=$(build_json_str_array "$REENROLL_SAN_IP")
+    if [[ "$_dns_json" != "[]" || "$_ip_json" != "[]" ]]; then
+      PAYLOAD=$(jq -c \
+        --arg dns "$_dns_json" --arg ip "$_ip_json" \
+        'if $dns != "[]" then . + {san_dns_names: $dns} else . end
+         | if $ip != "[]" then . + {san_ip_addresses: $ip} else . end' <<< "$PAYLOAD")
+    fi
 
     # Subscribe before publishing to avoid race
     RESPONSE_TOPIC="${REENROLL_RESPONSE_PREFIX}/${REENROLL_DEVICE_ID}"

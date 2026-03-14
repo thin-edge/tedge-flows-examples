@@ -492,6 +492,69 @@ FACTORY_CERT=$(./scripts/x509-cert.sh create-factory-cert child-001 factory-ca-p
 
 Full flag reference: `./scripts/x509-cert.sh enroll --help` or see the usage header in the script.
 
+### Using with mosquitto to enable TLS
+
+A mosquitto broker must be already configure and running on a non-TLS endpoint.
+
+1. Create certificate for the broker
+
+    ```sh
+    ./x509-cert.sh enroll broker --broker localhost --keygen \
+    --san-dns localhost --san-dns "$HOST" \
+    --san-ip 127.0.0.1
+    ```
+
+1. Copy the certificates
+
+    ```sh
+    mkdir -p /etc/mosquitto/certs/
+    cp device-private.pem  /etc/mosquitto/certs/broker-private.pem
+    cp device-cert.pem /etc/mosquitto/certs/broker-cert.pem
+    cp ca-cert.pem /etc/mosquitto/certs/ca-cert.pem
+    ```
+
+1. Create a mosquitto TLS listener
+
+    ```sh
+    TEDGE_CONFIG_DIR=${TEDGE_CONFIG_DIR:-/etc/tedge}
+    cat <<EOT >${TEDGE_CONFIG_DIR}/mosquitto-conf/mosquitto-tls.conf
+    # TLS listener on port 8883
+    listener 8883
+
+    # CA certificate used to verify connecting client certificates.
+    # Certificates issued by the x509-cert-issuer flow are signed by this CA.
+    cafile /etc/mosquitto/certs/ca-cert.pem
+
+    # Server certificate and private key.
+    certfile /etc/mosquitto/certs/broker-cert.pem
+    keyfile /etc/mosquitto/certs/broker-private.pem
+
+
+    # Require clients to present a valid certificate signed by the CA above.
+    require_certificate true
+
+    # Use the certificate's Common Name (CN) as the MQTT client username.
+    # This lets you apply per-device ACL rules based on the CN.
+    use_identity_as_username true
+    EOT
+    ```
+
+1. Restart mosquitto
+
+    ```sh
+    systemctl restart mosquitto
+    ```
+
+1. Create a child certificate
+
+    ```sh
+    mosquitto_sub -h localhost -p 8883 \
+        --cafile /opt/homebrew/etc/mosquitto/certs/ca-cert.pem \
+        --key device-private.pem \
+        --cert device-cert.pem \
+        -t '#' -v --debug
+    ```
+
 ### Related flows
 
 - **pki-issuer** — issues a simpler application-layer JSON certificate for payload signing, without needing a full X.509 CA.

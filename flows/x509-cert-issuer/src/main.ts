@@ -172,6 +172,7 @@ const OID_CN = "2.5.4.3";
 const OID_SKI = "2.5.29.14";
 const OID_AKI = "2.5.29.35";
 const OID_BASIC_CONSTRAINTS = "2.5.29.19";
+const OID_SAN = "2.5.29.17";
 
 function algIdEd25519(): asn1.Sequence {
   return new asn1.Sequence({ value: [
@@ -202,11 +203,32 @@ function keyIdentifier(pubKeyBytes: Uint8Array): Uint8Array {
   return sha256(pubKeyBytes).slice(0, 20);
 }
 
+/** Parse an IPv4 dotted-decimal string into 4 bytes, or null if invalid. */
+function parseIPv4(ip: string): Uint8Array | null {
+  const parts = ip.split(".");
+  if (parts.length !== 4) return null;
+  const bytes = new Uint8Array(4);
+  for (let i = 0; i < 4; i++) {
+    const n = parseInt(parts[i], 10);
+    if (isNaN(n) || n < 0 || n > 255) return null;
+    bytes[i] = n;
+  }
+  return bytes;
+}
+
+export interface SAN {
+  /** DNS names to include as dNSName GeneralNames. */
+  dns?: string[];
+  /** IPv4 addresses to include as iPAddress GeneralNames. */
+  ip?: string[];
+}
+
 function buildExtensions(
   subjectPubKey: Uint8Array,
   issuerPubKey: Uint8Array,
   isCA: boolean,
   issuerKeyId?: Uint8Array,
+  san?: SAN,
 ): asn1.Constructed {
   const skiValue = keyIdentifier(subjectPubKey);
   // Use the CA cert's verbatim SKID bytes (extracted via readDerSKID) when available,
@@ -234,6 +256,35 @@ function buildExtensions(
   ]});
 
   const exts: asn1.Sequence[] = [skiExt, akiExt];
+
+  // SAN extension
+  const dnsSANs = san?.dns?.filter(Boolean) ?? [];
+  const ipSANs = san?.ip?.filter(Boolean) ?? [];
+  if (dnsSANs.length > 0 || ipSANs.length > 0) {
+    const generalNames: asn1.AsnType[] = [];
+    for (const dns of dnsSANs) {
+      generalNames.push(new asn1.Primitive({
+        idBlock: { tagClass: 3, tagNumber: 2 }, // [2] dNSName IA5String
+        valueHex: toAB(new TextEncoder().encode(dns)),
+      }));
+    }
+    for (const ip of ipSANs) {
+      const ipBytes = parseIPv4(ip);
+      if (ipBytes) {
+        generalNames.push(new asn1.Primitive({
+          idBlock: { tagClass: 3, tagNumber: 7 }, // [7] iPAddress OCTET STRING
+          valueHex: toAB(ipBytes),
+        }));
+      }
+    }
+    if (generalNames.length > 0) {
+      const sanBody = new asn1.Sequence({ value: generalNames });
+      exts.push(new asn1.Sequence({ value: [
+        new asn1.ObjectIdentifier({ value: OID_SAN }),
+        new asn1.OctetString({ valueHex: sanBody.toBER(false) }),
+      ]}));
+    }
+  }
 
   if (isCA) {
     // BasicConstraints: critical=true, cA=true
@@ -269,6 +320,8 @@ function buildTBS(opts: {
   /** Verbatim SKID bytes extracted from the CA cert via readDerSKID(). Used as the AKI value. */
   issuerKeyId?: Uint8Array;
   isCA: boolean;
+  /** Optional Subject Alternative Names to embed in the certificate. */
+  san?: SAN;
 }): Uint8Array {
   // version: [0] EXPLICIT INTEGER 2 (v3)
   const version = new asn1.Constructed({
@@ -293,7 +346,7 @@ function buildTBS(opts: {
     ]}),
     rdnName(opts.subjectCN),
     asnSubjectPublicKeyInfo(opts.subjectPubKey),
-    buildExtensions(opts.subjectPubKey, opts.issuerPubKey, opts.isCA, opts.issuerKeyId),
+    buildExtensions(opts.subjectPubKey, opts.issuerPubKey, opts.isCA, opts.issuerKeyId, opts.san),
   ]});
 
   return toU8(tbs.toBER(false));
@@ -564,6 +617,57 @@ function readCertNotAfter(der: Uint8Array): Date | null {
   }
 }
 
+/**
+ * Extract SAN DNS names and IP addresses from a DER-encoded certificate.
+ * Returns null when the certificate has no SAN extension.
+ */
+function readCertSANs(der: Uint8Array): SAN | null {
+  try {
+    const parsed = asn1.fromBER(toAB(der));
+    if (parsed.offset === -1) return null;
+    const cert = parsed.result as asn1.Sequence;
+    const tbs = (cert as any).valueBlock.value[0] as asn1.Sequence;
+    const fields = (tbs as any).valueBlock.value as asn1.AsnType[];
+    const extsWrapper = fields.find(
+      (f: asn1.AsnType) => f.idBlock.tagClass === 3 && f.idBlock.tagNumber === 3,
+    ) as asn1.Constructed | undefined;
+    if (!extsWrapper) return null;
+
+    const extsSeq = (extsWrapper as any).valueBlock.value[0] as asn1.Sequence;
+    const extensions = (extsSeq as any).valueBlock.value as asn1.Sequence[];
+
+    for (const ext of extensions) {
+      const extFields = (ext as any).valueBlock.value as asn1.AsnType[];
+      const oid = extFields[0] as asn1.ObjectIdentifier;
+      if (oid.valueBlock.toString() !== OID_SAN) continue;
+
+      const extnValue = extFields[extFields.length - 1] as asn1.OctetString;
+      const inner = asn1.fromBER(extnValue.valueBlock.valueHexView);
+      if (inner.offset === -1) return null;
+
+      const generalNames = (inner.result as any).valueBlock.value as asn1.AsnType[];
+      const dns: string[] = [];
+      const ip: string[] = [];
+      const decoder = new TextDecoder();
+      for (const gn of generalNames) {
+        const tagNum = (gn as any).idBlock.tagNumber;
+        const hex = (gn as any).valueBlock.valueHexView as Uint8Array;
+        if (tagNum === 2) {
+          // dNSName — IA5String bytes
+          dns.push(decoder.decode(hex));
+        } else if (tagNum === 7 && hex.length === 4) {
+          // iPAddress — 4-byte IPv4
+          ip.push(Array.from(hex).join("."));
+        }
+      }
+      return (dns.length > 0 || ip.length > 0) ? { dns, ip } : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Flow entry point
 // ---------------------------------------------------------------------------
@@ -613,7 +717,7 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   }
 
   const payload = decodeJsonPayload(message.payload);
-  const { device_id, common_name, public_key, nonce, _factory_cert, _req_sig, _current_cert } = payload;
+  const { device_id, common_name, public_key, nonce, _factory_cert, _req_sig, _current_cert, san_dns_names, san_ip_addresses } = payload;
 
   if (!device_id || !nonce) {
     return reject("missing required fields: device_id, nonce");
@@ -735,6 +839,23 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
 
   const caPubKeyBytes = ed25519.getPublicKey(hexToBytes(ca_private_key));
 
+  // Parse optional SAN fields from the request payload.
+  // For renewals: if no SANs are provided, carry them forward from the current certificate.
+  let san: SAN | undefined;
+  try {
+    const dnsList: string[] = san_dns_names ? JSON.parse(String(san_dns_names)) : [];
+    const ipList: string[] = san_ip_addresses ? JSON.parse(String(san_ip_addresses)) : [];
+    if (dnsList.length > 0 || ipList.length > 0) {
+      san = { dns: dnsList, ip: ipList };
+    } else if (isRenewalRequest) {
+      // No SANs in the renewal request — inherit from the current certificate.
+      const currentCertForSAN = atobBytes(_current_cert as string);
+      san = readCertSANs(currentCertForSAN) ?? undefined;
+    }
+  } catch {
+    return reject("invalid san_dns_names or san_ip_addresses — must be JSON arrays");
+  }
+
   const tbs = buildTBS({
     serialNumber: serial,
     issuerNameDer,
@@ -745,6 +866,7 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     issuerPubKey: caPubKeyBytes,
     issuerKeyId,
     isCA: false,
+    san,
   });
 
   const certDer = signCert(tbs, ca_private_key);
