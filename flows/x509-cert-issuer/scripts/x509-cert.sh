@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Helper script for the x509-cert-issuer flow.
-# Requires: openssl (Ed25519 support), jq, xxd
+# Requires: openssl (Ed25519 support), jq
 #
 # Commands:
 #   setup-ca             Generate CA + factory CA and write params.toml (one-time)
@@ -105,7 +105,7 @@ decode-cert
 enroll
   Full first-boot enrollment over a live MQTT broker. Sends the certificate request,
   waits for the signed response, and writes the private key and certificates to disk.
-  Requires: openssl, jq, xxd, mosquitto_pub, mosquitto_sub
+  Requires: openssl, jq, mosquitto_pub, mosquitto_sub
 
   <device-id>                    Device identifier
   --broker <host>                MQTT broker hostname or IP (required)
@@ -203,7 +203,6 @@ require_cmd() {
 
 require_cmd openssl
 require_cmd jq
-require_cmd xxd
 # ─── enroll helpers ──────────────────────────────────────────────────────────
 
 # Parse --key value pairs from remaining args into variables.
@@ -302,15 +301,15 @@ case "$COMMAND" in
     # Generate factory CA private key (used to sign per-device factory certs)
     openssl genpkey -algorithm ed25519 -out "$FACTORY_CA_PRIV_PEM" 2>/dev/null
 
-    # Extract hex/DER values for params.toml
-    CA_PRIV_HEX=$(openssl pkey -in "$CA_PRIV_PEM" -outform DER | tail -c 32 | xxd -p -c 32)
+    # Extract base64/DER values for params.toml
+    CA_PRIV_B64=$(openssl pkey -in "$CA_PRIV_PEM" -outform DER | tail -c 32 | openssl base64 -A)
     CA_CERT_DER=$(openssl x509 -in "$CA_CERT_PEM" -outform DER | base64 | tr -d '\n')
     FACTORY_CA_PUB=$(openssl pkey -in "$FACTORY_CA_PRIV_PEM" -pubout -outform DER \
-      | tail -c 32 | xxd -p -c 32)
+      | tail -c 32 | openssl base64 -A)
 
     # Write params.toml
     cat > params.toml <<EOF
-ca_private_key = "$CA_PRIV_HEX"
+ca_private_key = "$CA_PRIV_B64"
 ca_cert_der = "$CA_CERT_DER"
 factory_ca_public_keys = "[\"$FACTORY_CA_PUB\"]"
 require_factory_cert = true
@@ -344,7 +343,7 @@ EOF
 
     # Extract device factory public key
     FACTORY_DEV_PUB=$(openssl pkey -in "$FACTORY_DEV_PEM" -pubout -outform DER \
-      | tail -c 32 | xxd -p -c 32)
+      | tail -c 32 | openssl base64 -A)
 
     # Build canonical cert body (keys sorted alphabetically: device_id, public_key)
     CERT_BODY=$(jq -cn \
@@ -400,7 +399,7 @@ EOF
     fi
 
     # Extract operational public key
-    OP_PUB=$(openssl pkey -in "$OP_PEM" -pubout -outform DER | tail -c 32 | xxd -p -c 32)
+    OP_PUB=$(openssl pkey -in "$OP_PEM" -pubout -outform DER | tail -c 32 | openssl base64 -A)
 
     # Random nonce
     NONCE=$(openssl rand -hex 16)
@@ -535,7 +534,7 @@ EOF
         openssl genpkey -algorithm ed25519 -out "$OP_KEY_FILE" 2>/dev/null
         echo "Generated operational private key: $OP_KEY_FILE" >&2
       fi
-      OP_PUB=$(openssl pkey -in "$OP_KEY_FILE" -pubout -outform DER | tail -c 32 | xxd -p -c 32)
+      OP_PUB=$(openssl pkey -in "$OP_KEY_FILE" -pubout -outform DER | tail -c 32 | openssl base64 -A)
 
       if [[ -n "$ENROLL_FACTORY_CERT" ]]; then
         [[ -n "$ENROLL_FACTORY_KEY" ]] || { echo "Error: --factory-key required when --factory-cert is set" >&2; exit 1; }
@@ -649,7 +648,7 @@ EOF
       OP_PEM="$REENROLL_CURRENT_KEY"
     fi
 
-    OP_PUB=$(openssl pkey -in "$OP_PEM" -pubout -outform DER | tail -c 32 | xxd -p -c 32)
+    OP_PUB=$(openssl pkey -in "$OP_PEM" -pubout -outform DER | tail -c 32 | openssl base64 -A)
     NONCE=$(openssl rand -hex 16)
 
     # Build canonical request body (keys sorted: device_id, nonce, public_key)

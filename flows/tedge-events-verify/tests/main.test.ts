@@ -85,15 +85,15 @@ function makeVerifierContext(
 }
 
 // X.509 CA — set up in beforeAll using Node crypto + openssl (same pattern as x509-cert-issuer tests)
-let X509_CA_PRIV_HEX: string;
+let X509_CA_PRIV_B64: string;
 let X509_CA_PUB_HEX: string;
 let X509_CA_CERT_DER_B64: string;
 
 beforeAll(() => {
   const { privateKey } = crypto.generateKeyPairSync("ed25519");
   const privDer = privateKey.export({ type: "pkcs8", format: "der" }) as Buffer;
-  X509_CA_PRIV_HEX = privDer.slice(-32).toString("hex");
-  X509_CA_PUB_HEX = bytesToHex(ed25519.getPublicKey(hexToBytes(X509_CA_PRIV_HEX)));
+  X509_CA_PRIV_B64 = Buffer.from(privDer.slice(-32)).toString("base64");
+  X509_CA_PUB_HEX = bytesToHex(ed25519.getPublicKey(Buffer.from(X509_CA_PRIV_B64, "base64")));
 
   const { execSync } = require("child_process");
   execSync(
@@ -298,7 +298,7 @@ describe("PKI certificate mode", () => {
 describe("PKI X.509 certificate mode (x509-cert-issuer)", () => {
   function makeX509IssuerContext(extra: Record<string, unknown> = {}) {
     return tedge.createContext({
-      ca_private_key: X509_CA_PRIV_HEX,
+      ca_private_key: X509_CA_PRIV_B64,
       ca_cert_der: X509_CA_CERT_DER_B64,
       require_factory_cert: false,
       ...extra,
@@ -311,7 +311,7 @@ describe("PKI X.509 certificate mode (x509-cert-issuer)", () => {
       {
         time: new Date(),
         topic: "te/pki/x509/csr",
-        payload: JSON.stringify({ device_id: DEVICE_SOURCE, public_key: devicePubHex, nonce }),
+        payload: JSON.stringify({ device_id: DEVICE_SOURCE, public_key: uint8ToBase64(hexToBytes(devicePubHex)), nonce }),
       },
       ctx,
     );
@@ -377,7 +377,7 @@ describe("PKI X.509 certificate mode (x509-cert-issuer)", () => {
       {
         time: new Date(),
         topic: "te/pki/x509/csr",
-        payload: JSON.stringify({ device_id: "device-2", public_key: DEVICE2_PUBLIC_KEY, nonce: "nonce-x509-multi-2" }),
+        payload: JSON.stringify({ device_id: "device-2", public_key: uint8ToBase64(hexToBytes(DEVICE2_PUBLIC_KEY)), nonce: "nonce-x509-multi-2" }),
       },
       ctx2,
     );

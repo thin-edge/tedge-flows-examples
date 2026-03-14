@@ -17,7 +17,7 @@ Publish to `te/pki/x509/csr` and subscribe to `te/pki/x509/cert/issued/<device_i
 ```json
 {
   "device_id": "my-device-001",
-  "public_key": "<hex-ed25519-public-key-for-the-new-cert>",
+  "public_key": "<base64-ed25519-public-key-for-the-new-cert>",
   "nonce": "<unique-random-string>",
   "_factory_cert": "<base64-encoded-factory-certificate-json>",
   "_req_sig": "<base64-ed25519-signature>"
@@ -47,7 +47,7 @@ mosquitto_sub -h localhost -t "te/pki/x509/cert/issued/my-device-001" &
 # Publish a certificate signing request
 mosquitto_pub -h localhost -t te/pki/x509/csr -m '{
   "device_id": "my-device-001",
-  "public_key": "<hex-operational-public-key>",
+  "public_key": "<base64-operational-public-key>",
   "nonce": "<unique-random-value>",
   "_factory_cert": "<base64-factory-cert>",
   "_req_sig": "<base64-request-signature>"
@@ -58,9 +58,9 @@ mosquitto_pub -h localhost -t te/pki/x509/csr -m '{
 
 | Parameter                    | Default                         | Description                                                                                                                 |
 | ---------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `ca_private_key`             | *(required)*                    | Hex-encoded 32-byte Ed25519 private key of this CA.                                                                         |
+| `ca_private_key`             | *(required)*                    | Base64-encoded 32-byte Ed25519 private key of this CA.                                                                      |
 | `ca_cert_der`                | *(required)*                    | Base64-encoded DER of the CA certificate. Included in the response so the device can install the full chain.                |
-| `factory_ca_public_keys`     | `[]`                            | JSON array of hex-encoded Ed25519 public keys. A factory certificate signed by *any* entry is accepted.                     |
+| `factory_ca_public_keys`     | `[]`                            | JSON array of base64-encoded Ed25519 public keys. A factory certificate signed by *any* entry is accepted.                  |
 | `cert_validity_days`         | `365`                           | Validity period for issued certificates in days.                                                                            |
 | `nonce_window_hours`         | `24`                            | Time window for nonce uniqueness enforcement. Resets on flow restart.                                                       |
 | `require_factory_cert`       | `true`                          | When `false`, factory certificate and request signature checks are skipped. Only use when topic access is restricted.       |
@@ -81,7 +81,7 @@ For deployments where every device on the network is trusted (e.g. an isolated f
 # Minimal CSR — no factory credential needed
 DEVICE_ID="child-001"
 openssl genpkey -algorithm ed25519 -out op-private.pem
-OP_PUB=$(openssl pkey -in op-private.pem -pubout -outform DER | tail -c 32 | xxd -p -c 32)
+OP_PUB=$(openssl pkey -in op-private.pem -pubout -outform DER | tail -c 32 | openssl base64 -A)
 NONCE=$(openssl rand -hex 16)
 
 jq -cn --arg id "$DEVICE_ID" --arg pub "$OP_PUB" --arg n "$NONCE" \
@@ -94,7 +94,7 @@ jq -cn --arg id "$DEVICE_ID" --arg pub "$OP_PUB" --arg n "$NONCE" \
 ```sh
 DEVICE_ID="child-001"
 openssl genpkey -algorithm ed25519 -out op-private.pem
-OP_PUB=$(openssl pkey -in op-private.pem -pubout -outform DER | tail -c 32 | xxd -p -c 32)
+OP_PUB=$(openssl pkey -in op-private.pem -pubout -outform DER | tail -c 32 | openssl base64 -A)
 NONCE=$(openssl rand -hex 16)
 
 echo "[te/pki/x509/csr] $(jq -cn --arg id "$DEVICE_ID" --arg pub "$OP_PUB" --arg n "$NONCE" \
@@ -192,7 +192,7 @@ Publish to `te/pki/x509/renew` and subscribe to `te/pki/x509/cert/issued/<device
 ```json
 {
   "device_id": "my-device-001",
-  "public_key": "<hex-ed25519-public-key-for-the-new-cert>",
+  "public_key": "<base64-ed25519-public-key-for-the-new-cert>",
   "nonce": "<unique-random-string>",
   "_current_cert": "<base64-DER-of-currently-held-certificate>",
   "_req_sig": "<base64-ed25519-signature>"
@@ -230,7 +230,7 @@ The `x509-cert.sh` helper script provides a `reenroll` command that handles this
 ```sh
 DEVICE_ID="my-device-001"
 NONCE=$(openssl rand -hex 16)
-NEW_PUB=$(openssl pkey -in op-private.pem -pubout -outform DER | tail -c 32 | xxd -p -c 32)
+NEW_PUB=$(openssl pkey -in op-private.pem -pubout -outform DER | tail -c 32 | openssl base64 -A)
 CURRENT_CERT=$(cat device-cert.pem | openssl x509 -outform DER | base64 | tr -d '\n')
 
 # Sign {device_id, nonce, public_key} (sorted) with the CURRENT operational private key
@@ -273,13 +273,13 @@ openssl req -new -x509 -key ca-private.pem -out ca-cert.pem -days 3650 -subj "/C
 openssl genpkey -algorithm ed25519 -out factory-ca-private.pem
 
 # Extract values for params.toml
-CA_PRIV_HEX=$(openssl pkey -in ca-private.pem -outform DER | tail -c 32 | xxd -p -c 32)
+CA_PRIV_B64=$(openssl pkey -in ca-private.pem -outform DER | tail -c 32 | openssl base64 -A)
 CA_CERT_DER=$(openssl x509 -in ca-cert.pem -outform DER | base64 | tr -d '\n')
-FACTORY_CA_PUB=$(openssl pkey -in factory-ca-private.pem -pubout -outform DER | tail -c 32 | xxd -p -c 32)
+FACTORY_CA_PUB=$(openssl pkey -in factory-ca-private.pem -pubout -outform DER | tail -c 32 | openssl base64 -A)
 
 # Write params.toml
 cat > params.toml <<EOF
-ca_private_key = "$CA_PRIV_HEX"
+ca_private_key = "$CA_PRIV_B64"
 ca_cert_der = "$CA_CERT_DER"
 factory_ca_public_keys = "[\\"$FACTORY_CA_PUB\\"]"
 require_factory_cert = true
@@ -299,7 +299,7 @@ use_identity_as_username true
 
 ### Child device enrollment example
 
-The full workflow has two phases: factory provisioning (done once per device by the manufacturer) and first-boot enrollment (run on the device itself). Requires `openssl`, `jq`, `xxd`, and `mosquitto_pub`/`mosquitto_sub`.
+The full workflow has two phases: factory provisioning (done once per device by the manufacturer) and first-boot enrollment (run on the device itself). Requires `openssl`, `jq`, and `mosquitto_pub`/`mosquitto_sub`.
 
 #### Phase 1 — Factory provisioning (manufacturer, done once per device)
 
@@ -309,13 +309,13 @@ DEVICE_ID="child-001"
 # --- Factory CA (done once, shared across all devices) ---
 openssl genpkey -algorithm ed25519 -out factory-ca-private.pem
 FACTORY_CA_PUB=$(openssl pkey -in factory-ca-private.pem -pubout -outform DER \
-  | tail -c 32 | xxd -p -c 32)
+  | tail -c 32 | openssl base64 -A)
 echo "Add to flow params: factory_ca_public_keys = [\"$FACTORY_CA_PUB\"]"
 
 # --- Per-device factory keypair ---
 openssl genpkey -algorithm ed25519 -out factory-device-private.pem
 FACTORY_DEV_PUB=$(openssl pkey -in factory-device-private.pem -pubout -outform DER \
-  | tail -c 32 | xxd -p -c 32)
+  | tail -c 32 | openssl base64 -A)
 
 # --- Build the factory certificate ---
 # Canonical cert body (keys must be sorted alphabetically)
@@ -350,7 +350,7 @@ BROKER="localhost"
 # --- Generate the device's operational TLS keypair ---
 openssl genpkey -algorithm ed25519 -out op-private.pem
 OP_PUB=$(openssl pkey -in op-private.pem -pubout -outform DER \
-  | tail -c 32 | xxd -p -c 32)
+  | tail -c 32 | openssl base64 -A)
 
 # --- Generate a one-time nonce ---
 NONCE=$(openssl rand -hex 16)

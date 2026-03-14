@@ -1,9 +1,9 @@
 # enable debug logging
 debug = false
 
-# hex-encoded 32-byte Ed25519 private key of this CA.
+# base64-encoded 32-byte Ed25519 private key of this CA.
 # extract from a PEM key with:
-#   openssl pkey -in ca.pem -outform DER | tail -c 32 | xxd -p -c 32
+#   openssl pkey -in ca.pem -outform DER | tail -c 32 | openssl base64 -A
 ca_private_key = ""
 
 # base64-encoded DER of the CA certificate (included in the response for chain installation).
@@ -11,9 +11,9 @@ ca_private_key = ""
 #   openssl x509 -in ca.pem -outform DER | base64 | tr -d '\n'
 ca_cert_der = ""
 
-# JSON array of trusted factory CA public keys (hex-encoded Ed25519).
+# JSON array of trusted factory CA public keys (base64-encoded Ed25519).
 # a device must present a factory certificate signed by one of these CAs.
-# example: '["aabbcc...", "ddeeff..."]'
+# example: '["<base64-pubkey>", "<base64-pubkey>"]'
 factory_ca_public_keys = "[]"
 
 # issued certificate validity period in days

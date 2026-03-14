@@ -6,8 +6,8 @@ import * as asn1 from "asn1js";
 export interface Config {
   debug?: boolean;
   /**
-   * Hex-encoded 32-byte Ed25519 private key of this CA.
-   * Generate with: openssl pkey -in ca.pem -outform DER | tail -c 32 | xxd -p -c 32
+   * Base64-encoded 32-byte Ed25519 private key of this CA.
+   * Generate with: openssl pkey -in ca.pem -outform DER | tail -c 32 | openssl base64 -A
    */
   ca_private_key?: string;
   /**
@@ -28,10 +28,10 @@ export interface Config {
    */
   nonce_window_hours?: number;
   /**
-   * JSON array of trusted factory CA public keys (hex-encoded Ed25519).
+   * JSON array of trusted factory CA public keys (base64-encoded Ed25519).
    * A device must present a factory certificate signed by one of these CAs to
    * prove device identity before a certificate is issued.
-   * Example: '["aabbcc...", "ddeeff..."]'
+   * Example: '["<base64-pubkey>", "<base64-pubkey>"]'
    */
   factory_ca_public_keys?: string;
   /**
@@ -91,20 +91,6 @@ export interface FlowContext extends Context {
 // ---------------------------------------------------------------------------
 // Utility
 // ---------------------------------------------------------------------------
-
-function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
-}
-
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
 
 // Base64 decode without atob (not available in QuickJS)
 function atobBytes(base64: string): Uint8Array {
@@ -369,8 +355,8 @@ function buildPrivKeyDER(privKeyBytes: Uint8Array): Uint8Array {
 /**
  * Sign a TBSCertificate and wrap in a full Certificate DER.
  */
-function signCert(tbs: Uint8Array, caPrivKeyHex: string): Uint8Array {
-  const sig = ed25519.sign(tbs, hexToBytes(caPrivKeyHex));
+function signCert(tbs: Uint8Array, caPrivKeyB64: string): Uint8Array {
+  const sig = ed25519.sign(tbs, atobBytes(caPrivKeyB64));
   const tbsParsed = asn1.fromBER(toAB(tbs));
   const cert = new asn1.Sequence({ value: [
     tbsParsed.result,
@@ -388,7 +374,7 @@ function verifyFactoryCert(
   factoryCertB64: string,
   deviceId: string,
   factoryCAPubKeys: string[],
-): { valid: false; reason: string } | { valid: true; factoryPubKeyHex: string } {
+): { valid: false; reason: string } | { valid: true; factoryPubKeyB64: string } {
   let cert: Record<string, string>;
   try {
     cert = JSON.parse(atobToString(factoryCertB64));
@@ -404,7 +390,7 @@ function verifyFactoryCert(
 
   const certValid = factoryCAPubKeys.some((caPubKey) => {
     try {
-      return ed25519.verify(atobBytes(_cert_sig), encoder.encode(canonical), hexToBytes(caPubKey));
+      return ed25519.verify(atobBytes(_cert_sig), encoder.encode(canonical), atobBytes(caPubKey));
     } catch {
       return false;
     }
@@ -422,7 +408,7 @@ function verifyFactoryCert(
     return { valid: false, reason: `factory certificate expired: ${cert.expires}` };
   }
 
-  return { valid: true, factoryPubKeyHex: cert.public_key };
+  return { valid: true, factoryPubKeyB64: cert.public_key };
 }
 
 function verifyReqSig(
@@ -430,13 +416,13 @@ function verifyReqSig(
   nonce: string,
   publicKey: string,
   reqSigB64: string,
-  factoryPubKeyHex: string,
+  factoryPubKeyB64: string,
 ): boolean {
   try {
     const reqBody = { device_id: deviceId, nonce, public_key: publicKey };
     const encoder = new TextEncoder();
     const canonical = JSON.stringify(reqBody, Object.keys(reqBody).sort());
-    return ed25519.verify(atobBytes(reqSigB64), encoder.encode(canonical), hexToBytes(factoryPubKeyHex));
+    return ed25519.verify(atobBytes(reqSigB64), encoder.encode(canonical), atobBytes(factoryPubKeyB64));
   } catch {
     return false;
   }
@@ -447,13 +433,13 @@ function verifyKeygenReqSig(
   deviceId: string,
   nonce: string,
   reqSigB64: string,
-  factoryPubKeyHex: string,
+  factoryPubKeyB64: string,
 ): boolean {
   try {
     const reqBody = { device_id: deviceId, nonce };
     const encoder = new TextEncoder();
     const canonical = JSON.stringify(reqBody, Object.keys(reqBody).sort());
-    return ed25519.verify(atobBytes(reqSigB64), encoder.encode(canonical), hexToBytes(factoryPubKeyHex));
+    return ed25519.verify(atobBytes(reqSigB64), encoder.encode(canonical), atobBytes(factoryPubKeyB64));
   } catch {
     return false;
   }
@@ -748,8 +734,8 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     if (!_req_sig) return reject("missing required field: _req_sig");
     // Keygen requests sign {device_id, nonce}; CSR requests sign {device_id, nonce, public_key}
     const reqSigOk = isKeygenRequest
-      ? verifyKeygenReqSig(String(device_id), String(nonce), _req_sig as string, factoryResult.factoryPubKeyHex)
-      : verifyReqSig(String(device_id), String(nonce), String(public_key), _req_sig as string, factoryResult.factoryPubKeyHex);
+      ? verifyKeygenReqSig(String(device_id), String(nonce), _req_sig as string, factoryResult.factoryPubKeyB64)
+      : verifyReqSig(String(device_id), String(nonce), String(public_key), _req_sig as string, factoryResult.factoryPubKeyB64);
     if (!reqSigOk) return reject("request signature invalid");
   } else if (isRenewalRequest) {
     // Renewal: device proves possession of a valid CA-issued certificate by signing
@@ -765,7 +751,7 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     }
 
     // Verify cert was issued by this CA (prevents use of self-signed or third-party certs)
-    const caPubKeyBytesForRenew = ed25519.getPublicKey(hexToBytes(ca_private_key));
+    const caPubKeyBytesForRenew = ed25519.getPublicKey(atobBytes(ca_private_key));
     if (!verifyCertSignature(currentCertDer, caPubKeyBytesForRenew)) {
       return reject("current certificate not issued by this CA");
     }
@@ -793,7 +779,7 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     // Verify request signature with the current certificate's public key (proof of possession)
     const certPubKeyBytes = readCertPublicKeyBytes(currentCertDer);
     if (!certPubKeyBytes) return reject("failed to extract public key from current certificate");
-    if (!verifyReqSig(String(device_id), String(nonce), String(public_key), _req_sig as string, bytesToHex(certPubKeyBytes))) {
+    if (!verifyReqSig(String(device_id), String(nonce), String(public_key), _req_sig as string, uint8ToBase64(certPubKeyBytes))) {
       return reject("request signature invalid");
     }
   }
@@ -834,10 +820,10 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     devicePubKeyBytes = ed25519.getPublicKey(privKey);
     generatedPrivKeyDer = uint8ToBase64(buildPrivKeyDER(privKey));
   } else {
-    devicePubKeyBytes = hexToBytes(String(public_key));
+    devicePubKeyBytes = atobBytes(String(public_key));
   }
 
-  const caPubKeyBytes = ed25519.getPublicKey(hexToBytes(ca_private_key));
+  const caPubKeyBytes = ed25519.getPublicKey(atobBytes(ca_private_key));
 
   // Parse optional SAN fields from the request payload.
   // For renewals: if no SANs are provided, carry them forward from the current certificate.

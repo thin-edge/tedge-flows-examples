@@ -13,28 +13,28 @@ import { fromBER, Sequence } from "asn1js";
 // Factory CA (manufacturer)
 const FACTORY_CA_PRIV_BYTES = ed25519.utils.randomSecretKey();
 const FACTORY_CA_PRIV = bytesToHex(FACTORY_CA_PRIV_BYTES);
-const FACTORY_CA_PUB = bytesToHex(ed25519.getPublicKey(FACTORY_CA_PRIV_BYTES));
+const FACTORY_CA_PUB = uint8ToBase64(ed25519.getPublicKey(FACTORY_CA_PRIV_BYTES));
 
 // Factory CA 2 (second manufacturer — for multi-CA tests)
 const FACTORY_CA2_PRIV_BYTES = ed25519.utils.randomSecretKey();
 const FACTORY_CA2_PRIV = bytesToHex(FACTORY_CA2_PRIV_BYTES);
-const FACTORY_CA2_PUB = bytesToHex(ed25519.getPublicKey(FACTORY_CA2_PRIV_BYTES));
+const FACTORY_CA2_PUB = uint8ToBase64(ed25519.getPublicKey(FACTORY_CA2_PRIV_BYTES));
 
 // Factory device key pair (burned in at manufacturing)
 const FACTORY_DEV_PRIV_BYTES = ed25519.utils.randomSecretKey();
 const FACTORY_DEV_PRIV = bytesToHex(FACTORY_DEV_PRIV_BYTES);
-const FACTORY_DEV_PUB = bytesToHex(ed25519.getPublicKey(FACTORY_DEV_PRIV_BYTES));
+const FACTORY_DEV_PUB = uint8ToBase64(ed25519.getPublicKey(FACTORY_DEV_PRIV_BYTES));
 
 // Operational key pair (what the device wants an X.509 cert for)
 const OP_PRIV_BYTES = ed25519.utils.randomSecretKey();
 const OP_PRIV = bytesToHex(OP_PRIV_BYTES);
-const OP_PUB = bytesToHex(ed25519.getPublicKey(OP_PRIV_BYTES));
+const OP_PUB = uint8ToBase64(ed25519.getPublicKey(OP_PRIV_BYTES));
 
 const DEVICE_ID = "my-device-001";
 
 // Operational CA (the gateway running x509-cert-issuer)
 // We generate this using Node crypto so we have a real X.509 CA cert to work with
-let CA_PRIV_HEX: string;
+let CA_PRIV_B64: string;
 let CA_CERT_DER_B64: string;
 let CA_CERT_PEM: string;
 
@@ -144,7 +144,7 @@ function makeValidRequest(nonce = "valid-nonce", opPub = OP_PUB, factoryPriv = F
 
 function makeIssuerContext(extra: Record<string, unknown> = {}) {
   return tedge.createContext({
-    ca_private_key: CA_PRIV_HEX,
+    ca_private_key: CA_PRIV_B64,
     ca_cert_der: CA_CERT_DER_B64,
     factory_ca_public_keys: JSON.stringify([FACTORY_CA_PUB]),
     ...extra,
@@ -168,7 +168,7 @@ beforeAll(() => {
 
   // Extract raw 32-byte private key scalar
   const privDer = privateKey.export({ type: "pkcs8", format: "der" });
-  CA_PRIV_HEX = privDer.slice(-32).toString("hex");
+  CA_PRIV_B64 = Buffer.from(privDer.slice(-32)).toString("base64");
 
   // Generate a self-signed CA certificate
   const caCert = crypto.X509Certificate
@@ -425,7 +425,7 @@ describe("rejection — request signature", () => {
   test("tampered public_key in request after signing → rejected", () => {
     const factoryCert = makeFactoryCert(DEVICE_ID, FACTORY_DEV_PUB, FACTORY_CA_PRIV);
     const sig = makeReqSig(DEVICE_ID, "n-pub-tamper", OP_PUB, FACTORY_DEV_PRIV);
-    const rogueKey = bytesToHex(ed25519.getPublicKey(ed25519.utils.randomSecretKey()));
+    const rogueKey = uint8ToBase64(ed25519.getPublicKey(ed25519.utils.randomSecretKey()));
     const req = makeRequest({ nonce: "n-pub-tamper", public_key: rogueKey, factory_cert: factoryCert, req_sig: sig });
     const output = flow.onMessage(req, makeIssuerContext());
     expect(output[0].topic).toBe("te/pki/x509/req/rejected");
@@ -439,7 +439,7 @@ describe("rejection — request signature", () => {
 describe("anti-replay nonce protection", () => {
   test("same nonce in same context → second request rejected", () => {
     const ctx = makeIssuerContext();
-    const opKey2 = bytesToHex(ed25519.getPublicKey(ed25519.utils.randomSecretKey()));
+    const opKey2 = uint8ToBase64(ed25519.getPublicKey(ed25519.utils.randomSecretKey()));
     const out1 = flow.onMessage(makeValidRequest("replay-nonce"), ctx);
     const out2 = flow.onMessage(makeValidRequest("replay-nonce"), ctx);
     expect(out1[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
@@ -463,7 +463,7 @@ describe("configuration errors", () => {
 
   test("missing ca_cert_der → rejected", () => {
     const ctx = tedge.createContext({
-      ca_private_key: CA_PRIV_HEX,
+      ca_private_key: CA_PRIV_B64,
       factory_ca_public_keys: JSON.stringify([FACTORY_CA_PUB]),
     });
     const output = flow.onMessage(makeValidRequest("n-no-der"), ctx);
@@ -548,7 +548,7 @@ describe("require_factory_cert = false", () => {
 
   test("empty factory_ca_public_keys does not block when require_factory_cert=false", () => {
     const ctx = tedge.createContext({
-      ca_private_key: CA_PRIV_HEX,
+      ca_private_key: CA_PRIV_B64,
       ca_cert_der: CA_CERT_DER_B64,
       factory_ca_public_keys: "[]",
       require_factory_cert: false,
@@ -855,7 +855,7 @@ describe("certificate renewal", () => {
     const ctx = makeIssuerContext();
     const certDerB64 = issueInitialCert(ctx, "renew-init-newkey");
     const newPrivBytes = ed25519.utils.randomSecretKey();
-    const newPub = bytesToHex(ed25519.getPublicKey(newPrivBytes));
+    const newPub = uint8ToBase64(ed25519.getPublicKey(newPrivBytes));
     const sig = makeRenewalReqSig(DEVICE_ID, "renew-newkey", newPub, OP_PRIV);
     const output = flow.onMessage(
       makeRenewalRequest({ nonce: "renew-newkey", new_public_key: newPub, current_cert_der_b64: certDerB64, req_sig: sig }),
