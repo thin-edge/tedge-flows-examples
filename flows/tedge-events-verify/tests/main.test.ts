@@ -1,8 +1,10 @@
-import { expect, test, describe } from "@jest/globals";
+import { expect, test, describe, beforeAll } from "@jest/globals";
+import * as crypto from "crypto";
 import * as tedge from "../../common/tedge";
 import { uint8ToBase64 } from "../../common/tedge";
 import * as flow from "../src/main";
 import * as signer from "../../tedge-events-signed/src/main";
+import * as x509Flow from "../../x509-cert-issuer/src/main";
 import { ed25519 } from "@noble/curves/ed25519.js";
 
 // All keypairs generated fresh each test run — never committed
@@ -56,7 +58,7 @@ function makeSignedMessage(
   source: string = DEVICE_SOURCE,
   privateKey: string = TEST_PRIVATE_KEY,
   deviceCert?: string,
-) {
+): tedge.Message {
   const config: Record<string, unknown> = { private_key: privateKey };
   if (deviceCert !== undefined) config.device_cert = deviceCert;
   const signerContext = tedge.createContext(config);
@@ -69,7 +71,7 @@ function makeSignedMessage(
     },
     signerContext,
   );
-  return out[0];
+  return out[0] as tedge.Message;
 }
 
 function makeVerifierContext(
@@ -81,6 +83,26 @@ function makeVerifierContext(
     ...extra,
   });
 }
+
+// X.509 CA — set up in beforeAll using Node crypto + openssl (same pattern as x509-cert-issuer tests)
+let X509_CA_PRIV_HEX: string;
+let X509_CA_PUB_HEX: string;
+let X509_CA_CERT_DER_B64: string;
+
+beforeAll(() => {
+  const { privateKey } = crypto.generateKeyPairSync("ed25519");
+  const privDer = privateKey.export({ type: "pkcs8", format: "der" }) as Buffer;
+  X509_CA_PRIV_HEX = privDer.slice(-32).toString("hex");
+  X509_CA_PUB_HEX = bytesToHex(ed25519.getPublicKey(hexToBytes(X509_CA_PRIV_HEX)));
+
+  const { execSync } = require("child_process");
+  execSync(
+    `openssl req -new -x509 -key /dev/stdin -out /tmp/ca-verify-jest.pem -days 3650 -subj "/CN=TestCAVerify" 2>/dev/null`,
+    { input: privateKey.export({ type: "pkcs8", format: "pem" }) as string },
+  );
+  const derBuf = execSync(`openssl x509 -in /tmp/ca-verify-jest.pem -outform DER 2>/dev/null`) as Buffer;
+  X509_CA_CERT_DER_B64 = derBuf.toString("base64");
+});
 
 describe("verified messages", () => {
   test("valid signature is forwarded to output_verified_topic", () => {
@@ -272,3 +294,101 @@ describe("PKI certificate mode", () => {
     expect(flow.onMessage(msg2, context)[0].topic).toBe("te/verified/events");
   });
 });
+
+describe("PKI X.509 certificate mode (x509-cert-issuer)", () => {
+  function makeX509IssuerContext(extra: Record<string, unknown> = {}) {
+    return tedge.createContext({
+      ca_private_key: X509_CA_PRIV_HEX,
+      ca_cert_der: X509_CA_CERT_DER_B64,
+      require_factory_cert: false,
+      ...extra,
+    });
+  }
+
+  function issueX509DeviceCert(devicePubHex: string, nonce: string): string {
+    const ctx = makeX509IssuerContext();
+    const output = x509Flow.onMessage(
+      {
+        time: new Date(),
+        topic: "te/pki/x509/csr",
+        payload: JSON.stringify({ device_id: DEVICE_SOURCE, public_key: devicePubHex, nonce }),
+      },
+      ctx,
+    );
+    expect(output).toHaveLength(1);
+    return JSON.parse(output[0].payload as string).cert_der;
+  }
+
+  function makeVerifierContextX509(extra: Record<string, unknown> = {}) {
+    return tedge.createContext({ root_ca_public_key: X509_CA_PUB_HEX, ...extra });
+  }
+
+  test("valid X.509 cert + valid signature → verified", () => {
+    const certDer = issueX509DeviceCert(TEST_PUBLIC_KEY, "nonce-x509-valid-1");
+    const signed = makeSignedMessage("door opened", DEVICE_SOURCE, TEST_PRIVATE_KEY, certDer);
+    const output = flow.onMessage(signed, makeVerifierContextX509());
+    expect(output).toHaveLength(1);
+    expect(output[0].topic).toBe("te/verified/events");
+  });
+
+  test("tampered payload → rejected", () => {
+    const certDer = issueX509DeviceCert(TEST_PUBLIC_KEY, "nonce-x509-tamper-1");
+    const signed = makeSignedMessage("door opened", DEVICE_SOURCE, TEST_PRIVATE_KEY, certDer);
+    const payload = tedge.decodeJsonPayload(signed.payload);
+    payload.text = "tampered";
+    const tampered = { ...signed, payload: JSON.stringify(payload) };
+    const output = flow.onMessage(tampered, makeVerifierContextX509());
+    expect(output).toHaveLength(1);
+    expect(output[0].topic).toBe("te/rejected/events");
+  });
+
+  test("cert signed by wrong CA → rejected", () => {
+    const certDer = issueX509DeviceCert(TEST_PUBLIC_KEY, "nonce-x509-wrongca-1");
+    const signed = makeSignedMessage("door opened", DEVICE_SOURCE, TEST_PRIVATE_KEY, certDer);
+    // Verify with a different (JSON PKI) CA public key — will fail cert sig check
+    const wrongContext = tedge.createContext({ root_ca_public_key: CA_PUBLIC_KEY });
+    const output = flow.onMessage(signed, wrongContext);
+    expect(output).toHaveLength(1);
+    expect(output[0].topic).toBe("te/rejected/events");
+  });
+
+  test("signed with wrong device key → rejected", () => {
+    const certDer = issueX509DeviceCert(TEST_PUBLIC_KEY, "nonce-x509-wrongkey-1");
+    // Sign with a different private key than the one in the cert
+    const signed = makeSignedMessage("door opened", DEVICE_SOURCE, CA_PRIVATE_KEY, certDer);
+    const output = flow.onMessage(signed, makeVerifierContextX509());
+    expect(output).toHaveLength(1);
+    expect(output[0].topic).toBe("te/rejected/events");
+  });
+
+  test("missing _cert in PKI mode → rejected", () => {
+    // Sign without attaching a cert
+    const signed = makeSignedMessage("door opened", DEVICE_SOURCE, TEST_PRIVATE_KEY);
+    const output = flow.onMessage(signed, makeVerifierContextX509());
+    expect(output).toHaveLength(1);
+    expect(output[0].topic).toBe("te/rejected/events");
+  });
+
+  test("multiple devices with separate X.509 certs from same CA", () => {
+    const cert1 = issueX509DeviceCert(TEST_PUBLIC_KEY, "nonce-x509-multi-1");
+    // For device 2 we need to issue a cert with device-2's public key
+    const ctx2 = makeX509IssuerContext();
+    const out2 = x509Flow.onMessage(
+      {
+        time: new Date(),
+        topic: "te/pki/x509/csr",
+        payload: JSON.stringify({ device_id: "device-2", public_key: DEVICE2_PUBLIC_KEY, nonce: "nonce-x509-multi-2" }),
+      },
+      ctx2,
+    );
+    const cert2 = JSON.parse(out2[0].payload as string).cert_der;
+
+    const msg1 = makeSignedMessage("event 1", DEVICE_SOURCE, TEST_PRIVATE_KEY, cert1);
+    const msg2 = makeSignedMessage("event 2", "device-2", DEVICE2_PRIVATE_KEY, cert2);
+
+    const context = makeVerifierContextX509();
+    expect(flow.onMessage(msg1, context)[0].topic).toBe("te/verified/events");
+    expect(flow.onMessage(msg2, context)[0].topic).toBe("te/verified/events");
+  });
+});
+
