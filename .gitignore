@@ -145,7 +145,5 @@ vite.config.ts.timestamp-*
 .DS_Store
 
 # test files
-ca-private.pem
-ca-public.pem
-private.pem
+*.pem
 params.toml
