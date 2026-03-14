@@ -1,5 +1,5 @@
 [input.mqtt]
-topics = ["te/pki/x509/csr", "te/pki/x509/keygen"]
+topics = ["te/pki/x509/csr", "te/pki/x509/keygen", "te/pki/x509/renew"]
 
 [config]
 debug = "${.params.debug}"
@@ -10,8 +10,10 @@ cert_validity_days = "${.params.cert_validity_days}"
 nonce_window_hours = "${.params.nonce_window_hours}"
 require_factory_cert = "${.params.require_factory_cert}"
 keygen_topic = "${.params.keygen_topic}"
+renewal_topic = "${.params.renewal_topic}"
 output_cert_topic_prefix = "${.params.output_cert_topic_prefix}"
 output_keygen_topic_prefix = "${.params.output_keygen_topic_prefix}"
+output_renewal_topic_prefix = "${.params.output_renewal_topic_prefix}"
 output_rejected_topic = "${.params.output_rejected_topic}"
 
 [[steps]]

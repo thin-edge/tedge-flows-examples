@@ -8,6 +8,7 @@
 #   create-csr           Build and sign a CSR request (Phase 2, device first boot)
 #   create-keygen-req    Build a signed keygen request (for constrained devices)
 #   enroll               Full enrollment over MQTT: send request, wait for cert, save files
+#   reenroll             Renew an existing CA-issued certificate over MQTT (no factory cert needed)
 #   decode-cert          Decode and display an issued X.509 certificate (base64 DER)
 
 set -euo pipefail
@@ -22,6 +23,7 @@ Usage:
   x509-cert.sh create-csr           <device-id> <factory-device-private.pem> <factory-cert-base64> [op-private.pem]
   x509-cert.sh create-keygen-req    <device-id> <factory-device-private.pem> <factory-cert-base64>
   x509-cert.sh enroll               <device-id> --broker <host> [options]
+  x509-cert.sh reenroll             <device-id> --broker <host> [options]
   x509-cert.sh decode-cert          <base64-DER-cert>
 
 setup-ca
@@ -135,6 +137,42 @@ enroll
     ./x509-cert.sh enroll child-001 --broker mqtt.local --keygen \
       --factory-cert "\$FACTORY_CERT" --factory-key factory-device-private.pem
 
+reenroll
+  Renew an existing CA-issued certificate. The device proves it holds the corresponding
+  private key by signing the request with it — no factory certificate is required.
+  On success, overwrites device-cert.pem (and optionally device-private.pem if --rotate).
+
+  <device-id>                    Device identifier
+  --broker <host>                MQTT broker hostname or IP (required)
+  --port <port>                  MQTT broker port (default: 1883)
+  --current-cert <pem>           Currently held certificate in PEM or DER format (default: device-cert.pem)
+  --current-key <pem>            Current operational private key PEM (default: device-private.pem)
+  --rotate                       Generate a fresh Ed25519 keypair for the renewed certificate
+  --new-key <pem>                Use this existing PEM as the new key (implies key rotation)
+  --out-dir <dir>                Directory to write output files (default: same dir as --current-cert)
+  --timeout <seconds>            How long to wait for the response (default: 30)
+  --renewal-topic <topic>        Renewal topic (default: te/pki/x509/renew)
+  --response-prefix <prefix>     Response topic prefix (default: te/pki/x509/cert/issued)
+
+  Output files written to --out-dir:
+    device-cert.pem      Renewed TLS client certificate
+    ca-cert.pem          CA certificate
+    device-private.pem   New private key (only when --rotate is used and no --new-key given)
+
+  Examples:
+    # Renew with the same key:
+    ./x509-cert.sh reenroll my-device-001 --broker mqtt.local \
+      --current-cert device-cert.pem --current-key device-private.pem
+
+    # Renew and rotate to a fresh keypair:
+    ./x509-cert.sh reenroll my-device-001 --broker mqtt.local \
+      --current-cert device-cert.pem --current-key device-private.pem --rotate
+
+    # Renew and rotate to a specific new key:
+    ./x509-cert.sh reenroll my-device-001 --broker mqtt.local \
+      --current-cert device-cert.pem --current-key device-private.pem \
+      --new-key new-private.pem
+
 Full workflow:
   # 1. One-time: generate CA + factory CA, write params.toml
   ./x509-cert.sh setup-ca my-ca
@@ -147,6 +185,10 @@ Full workflow:
   ./x509-cert.sh enroll my-device-001 --broker mqtt.local --keygen \
     --factory-cert "$FACTORY_CERT" --factory-key factory-device-private.pem
   # => writes device-private.pem, device-cert.pem, ca-cert.pem
+
+  # 4. Renewal (repeat as needed, e.g. from a cron job before expiry):
+  ./x509-cert.sh reenroll my-device-001 --broker mqtt.local \
+    --current-cert device-cert.pem --current-key device-private.pem
 EOF
   exit 1
 }
@@ -194,6 +236,35 @@ sign_file() {
   local priv_pem="$1"
   local data_file="$2"
   openssl pkeyutl -sign -inkey "$priv_pem" -rawin -in "$data_file" | base64 | tr -d '\n'
+}
+
+parse_reenroll_flags() {
+  REENROLL_BROKER=""
+  REENROLL_PORT="2883"
+  REENROLL_CURRENT_CERT="device-cert.pem"
+  REENROLL_CURRENT_KEY="device-private.pem"
+  REENROLL_ROTATE=false
+  REENROLL_NEW_KEY=""
+  REENROLL_OUT_DIR=""
+  REENROLL_TIMEOUT="30"
+  REENROLL_RENEWAL_TOPIC="te/pki/x509/renew"
+  REENROLL_RESPONSE_PREFIX="te/pki/x509/cert/issued"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --broker)           REENROLL_BROKER="$2";           shift 2 ;;
+      --port)             REENROLL_PORT="$2";             shift 2 ;;
+      --current-cert)     REENROLL_CURRENT_CERT="$2";     shift 2 ;;
+      --current-key)      REENROLL_CURRENT_KEY="$2";      shift 2 ;;
+      --rotate)           REENROLL_ROTATE=true;            shift   ;;
+      --new-key)          REENROLL_NEW_KEY="$2";           shift 2 ;;
+      --out-dir)          REENROLL_OUT_DIR="$2";           shift 2 ;;
+      --timeout)          REENROLL_TIMEOUT="$2";           shift 2 ;;
+      --renewal-topic)    REENROLL_RENEWAL_TOPIC="$2";     shift 2 ;;
+      --response-prefix)  REENROLL_RESPONSE_PREFIX="$2";   shift 2 ;;
+      *) echo "Error: unknown flag '$1'" >&2; exit 1 ;;
+    esac
+  done
 }
 
 case "$COMMAND" in
@@ -473,6 +544,101 @@ EOF
     echo "  device-cert.pem     — TLS client certificate" >&2
     echo "  ca-cert.pem         — CA certificate (install on broker as trusted CA)" >&2
     openssl verify -CAfile "${ENROLL_OUT_DIR}/ca-cert.pem" "${ENROLL_OUT_DIR}/device-cert.pem" >&2
+    ;;
+
+  # ─── reenroll ────────────────────────────────────────────────────────────────
+  reenroll)
+    REENROLL_DEVICE_ID="${2:?'device-id required'}"
+    shift 2
+    parse_reenroll_flags "$@"
+
+    require_cmd mosquitto_pub
+    require_cmd mosquitto_sub
+
+    [[ -n "$REENROLL_BROKER" ]]       || { echo "Error: --broker is required" >&2; exit 1; }
+    [[ -f "$REENROLL_CURRENT_CERT" ]] || { echo "Error: --current-cert: $REENROLL_CURRENT_CERT not found" >&2; exit 1; }
+    [[ -f "$REENROLL_CURRENT_KEY" ]]  || { echo "Error: --current-key: $REENROLL_CURRENT_KEY not found" >&2; exit 1; }
+
+    # Default out-dir to the directory containing the current cert
+    [[ -n "$REENROLL_OUT_DIR" ]] || REENROLL_OUT_DIR="$(dirname "$REENROLL_CURRENT_CERT")"
+    mkdir -p "$REENROLL_OUT_DIR"
+
+    # Convert current cert to base64 DER (handles both PEM and DER input)
+    CURRENT_CERT_DER_B64=$(openssl x509 -in "$REENROLL_CURRENT_CERT" -outform DER | base64 | tr -d '\n')
+
+    # Determine the key for the renewed certificate
+    WRITE_NEW_KEY=false
+    if [[ -n "$REENROLL_NEW_KEY" ]]; then
+      [[ -f "$REENROLL_NEW_KEY" ]] || { echo "Error: $REENROLL_NEW_KEY not found" >&2; exit 1; }
+      OP_PEM="$REENROLL_NEW_KEY"
+    elif $REENROLL_ROTATE; then
+      OP_PEM="${REENROLL_OUT_DIR}/device-private.pem"
+      openssl genpkey -algorithm ed25519 -out "$OP_PEM" 2>/dev/null
+      echo "Generated new operational private key: $OP_PEM" >&2
+      WRITE_NEW_KEY=true
+    else
+      # Keep the same key — renew cert only
+      OP_PEM="$REENROLL_CURRENT_KEY"
+    fi
+
+    OP_PUB=$(openssl pkey -in "$OP_PEM" -pubout -outform DER | tail -c 32 | xxd -p -c 32)
+    NONCE=$(openssl rand -hex 16)
+
+    # Build canonical request body (keys sorted: device_id, nonce, public_key)
+    REQ_BODY=$(jq -cn \
+      --arg id  "$REENROLL_DEVICE_ID" \
+      --arg n   "$NONCE" \
+      --arg pub "$OP_PUB" \
+      '{device_id: $id, nonce: $n, public_key: $pub} | to_entries | sort_by(.key) | from_entries')
+
+    # Sign with the CURRENT operational private key (proof of possession)
+    TMP_BODY=$(mktemp)
+    RESPONSE_FILE=$(mktemp)
+    trap 'rm -f "$TMP_BODY" "$RESPONSE_FILE"' EXIT
+    printf '%s' "$REQ_BODY" > "$TMP_BODY"
+    REQ_SIG=$(sign_file "$REENROLL_CURRENT_KEY" "$TMP_BODY")
+
+    PAYLOAD=$(jq -cn \
+      --arg id   "$REENROLL_DEVICE_ID" \
+      --arg pub  "$OP_PUB" \
+      --arg n    "$NONCE" \
+      --arg cert "$CURRENT_CERT_DER_B64" \
+      --arg sig  "$REQ_SIG" \
+      '{device_id: $id, public_key: $pub, nonce: $n, _current_cert: $cert, _req_sig: $sig}')
+
+    # Subscribe before publishing to avoid race
+    RESPONSE_TOPIC="${REENROLL_RESPONSE_PREFIX}/${REENROLL_DEVICE_ID}"
+    echo "Subscribing to $RESPONSE_TOPIC ..." >&2
+    mosquitto_sub \
+      -h "$REENROLL_BROKER" -p "$REENROLL_PORT" \
+      -t "$RESPONSE_TOPIC" \
+      -C 1 -W "$REENROLL_TIMEOUT" > "$RESPONSE_FILE" &
+    SUB_PID=$!
+
+    sleep 0.3
+
+    echo "Publishing renewal request to $REENROLL_RENEWAL_TOPIC ..." >&2
+    printf '%s' "$PAYLOAD" | mosquitto_pub \
+      -h "$REENROLL_BROKER" -p "$REENROLL_PORT" \
+      -t "$REENROLL_RENEWAL_TOPIC" -s
+
+    wait "$SUB_PID" || { echo "Error: timed out waiting for response on $RESPONSE_TOPIC" >&2; exit 1; }
+
+    # Validate response
+    CERT_DER=$(jq -r '.cert_der    // empty' "$RESPONSE_FILE")
+    CA_DER=$(jq   -r '.ca_cert_der // empty' "$RESPONSE_FILE")
+    [[ -n "$CERT_DER" ]] || { echo "Error: response missing cert_der — $(cat "$RESPONSE_FILE")" >&2; exit 1; }
+
+    printf '%s' "$CERT_DER" | base64 -d | openssl x509 -inform DER -out "${REENROLL_OUT_DIR}/device-cert.pem"
+    printf '%s' "$CA_DER"   | base64 -d | openssl x509 -inform DER -out "${REENROLL_OUT_DIR}/ca-cert.pem"
+
+    echo "Renewal complete. Files written to ${REENROLL_OUT_DIR}/" >&2
+    echo "  device-cert.pem  — renewed TLS client certificate" >&2
+    echo "  ca-cert.pem      — CA certificate" >&2
+    if $WRITE_NEW_KEY; then
+      echo "  $(basename "$OP_PEM")  — new private key (keep secret)" >&2
+    fi
+    openssl verify -CAfile "${REENROLL_OUT_DIR}/ca-cert.pem" "${REENROLL_OUT_DIR}/device-cert.pem" >&2
     ;;
 
   # ─── decode-cert ─────────────────────────────────────────────────────────────

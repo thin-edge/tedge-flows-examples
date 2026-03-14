@@ -764,3 +764,223 @@ describe("issuer Name DER bytes match CA subject Name DER bytes", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Certificate renewal
+// ---------------------------------------------------------------------------
+
+/** Sign a renewal request with the CURRENT operational private key. */
+function makeRenewalReqSig(
+  deviceId: string,
+  nonce: string,
+  newPublicKey: string,
+  currentPrivHex: string,
+): string {
+  const body = { device_id: deviceId, nonce, public_key: newPublicKey };
+  const encoder = new TextEncoder();
+  const canonical = JSON.stringify(body, Object.keys(body).sort());
+  const sig = ed25519.sign(encoder.encode(canonical), hexToBytes(currentPrivHex));
+  return uint8ToBase64(sig);
+}
+
+function makeRenewalRequest(opts: {
+  device_id?: string;
+  new_public_key?: string;
+  nonce?: string;
+  current_cert_der_b64?: string;
+  req_sig?: string;
+}): tedge.Message {
+  return {
+    time: new Date(),
+    topic: "te/pki/x509/renew",
+    payload: JSON.stringify({
+      device_id: opts.device_id ?? DEVICE_ID,
+      public_key: opts.new_public_key ?? OP_PUB,
+      nonce: opts.nonce ?? "renew-nonce",
+      _current_cert: opts.current_cert_der_b64,
+      _req_sig: opts.req_sig,
+    }),
+  };
+}
+
+/**
+ * Issue a cert via the normal CSR flow and return its base64 DER.
+ * Uses a fresh context so nonces don't collide with the calling test's context.
+ */
+function issueInitialCert(
+  ctx: ReturnType<typeof makeIssuerContext>,
+  nonce: string,
+  opPub = OP_PUB,
+): string {
+  const output = flow.onMessage(makeValidRequest(nonce, opPub), ctx);
+  if (!output[0] || !output[0].topic.startsWith("te/pki/x509/cert/issued/")) {
+    throw new Error(`initial cert issuance failed: ${output[0]?.topic}`);
+  }
+  return JSON.parse(output[0].payload as string).cert_der as string;
+}
+
+describe("certificate renewal", () => {
+  test("valid renewal with same key is accepted and returns a cert on the issued topic", () => {
+    const ctx = makeIssuerContext();
+    const certDerB64 = issueInitialCert(ctx, "renew-init-1");
+    const sig = makeRenewalReqSig(DEVICE_ID, "renew-1", OP_PUB, OP_PRIV);
+    const output = flow.onMessage(makeRenewalRequest({ nonce: "renew-1", current_cert_der_b64: certDerB64, req_sig: sig }), ctx);
+    expect(output).toHaveLength(1);
+    expect(output[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
+  });
+
+  test("renewal response contains cert_der, ca_cert_der, and device_id", () => {
+    const ctx = makeIssuerContext();
+    const certDerB64 = issueInitialCert(ctx, "renew-init-fields");
+    const sig = makeRenewalReqSig(DEVICE_ID, "renew-fields", OP_PUB, OP_PRIV);
+    const output = flow.onMessage(makeRenewalRequest({ nonce: "renew-fields", current_cert_der_b64: certDerB64, req_sig: sig }), ctx);
+    const resp = JSON.parse(output[0].payload as string);
+    expect(resp.device_id).toBe(DEVICE_ID);
+    expect(resp.cert_der).toMatch(/^[A-Za-z0-9+/]+=*$/);
+    expect(resp.ca_cert_der).toMatch(/^[A-Za-z0-9+/]+=*$/);
+  });
+
+  test("renewed cert is signed by the CA", () => {
+    const ctx = makeIssuerContext();
+    const certDerB64 = issueInitialCert(ctx, "renew-init-chain");
+    const sig = makeRenewalReqSig(DEVICE_ID, "renew-chain", OP_PUB, OP_PRIV);
+    const output = flow.onMessage(makeRenewalRequest({ nonce: "renew-chain", current_cert_der_b64: certDerB64, req_sig: sig }), ctx);
+    const resp = JSON.parse(output[0].payload as string);
+    const renewedCert = new crypto.X509Certificate(Buffer.from(resp.cert_der, "base64"));
+    const caCert = new crypto.X509Certificate(Buffer.from(resp.ca_cert_der, "base64"));
+    expect(renewedCert.verify(caCert.publicKey)).toBe(true);
+  });
+
+  test("renewal with a new key issues a cert for the new key", () => {
+    const ctx = makeIssuerContext();
+    const certDerB64 = issueInitialCert(ctx, "renew-init-newkey");
+    const newPrivBytes = ed25519.utils.randomSecretKey();
+    const newPub = bytesToHex(ed25519.getPublicKey(newPrivBytes));
+    const sig = makeRenewalReqSig(DEVICE_ID, "renew-newkey", newPub, OP_PRIV);
+    const output = flow.onMessage(
+      makeRenewalRequest({ nonce: "renew-newkey", new_public_key: newPub, current_cert_der_b64: certDerB64, req_sig: sig }),
+      ctx,
+    );
+    expect(output[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
+    const renewedCert = parseCertFromOutput(output);
+    // The renewed cert subject should still be the device
+    expect(renewedCert.subject).toMatch(/CN\s*=\s*my-device-001/);
+  });
+
+  test("custom output_renewal_topic_prefix is used", () => {
+    const ctx = makeIssuerContext({ output_renewal_topic_prefix: "my/renewals" });
+    const certDerB64 = issueInitialCert(ctx, "renew-init-topic");
+    const sig = makeRenewalReqSig(DEVICE_ID, "renew-topic", OP_PUB, OP_PRIV);
+    const output = flow.onMessage(makeRenewalRequest({ nonce: "renew-topic", current_cert_der_b64: certDerB64, req_sig: sig }), ctx);
+    expect(output[0].topic).toBe(`my/renewals/${DEVICE_ID}`);
+  });
+
+  test("missing _current_cert is rejected", () => {
+    const ctx = makeIssuerContext();
+    const sig = makeRenewalReqSig(DEVICE_ID, "renew-no-curr", OP_PUB, OP_PRIV);
+    const output = flow.onMessage(makeRenewalRequest({ nonce: "renew-no-curr", req_sig: sig }), ctx);
+    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+  });
+
+  test("missing _req_sig is rejected", () => {
+    const ctx = makeIssuerContext();
+    const certDerB64 = issueInitialCert(ctx, "renew-init-nosig");
+    const output = flow.onMessage(makeRenewalRequest({ nonce: "renew-nosig", current_cert_der_b64: certDerB64 }), ctx);
+    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+  });
+
+  test("certificate not issued by this CA is rejected", () => {
+    const ctx = makeIssuerContext();
+    const certDerB64 = issueInitialCert(ctx, "renew-init-foreign");
+    // Corrupt the last byte of the signature to simulate a foreign CA
+    const certBytes = Buffer.from(certDerB64, "base64");
+    certBytes[certBytes.length - 1] ^= 0xff;
+    const corruptedCertDerB64 = certBytes.toString("base64");
+    const sig = makeRenewalReqSig(DEVICE_ID, "renew-foreign", OP_PUB, OP_PRIV);
+    const output = flow.onMessage(
+      makeRenewalRequest({ nonce: "renew-foreign", current_cert_der_b64: corruptedCertDerB64, req_sig: sig }),
+      ctx,
+    );
+    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+  });
+
+  test("certificate CN mismatch with device_id is rejected", () => {
+    // Issue a cert for "other-device" (no factory cert required)
+    const ctx = makeIssuerContext({ require_factory_cert: false });
+    const otherMsg: tedge.Message = {
+      time: new Date(),
+      topic: "te/pki/x509/csr",
+      payload: JSON.stringify({ device_id: "other-device", public_key: OP_PUB, nonce: "cn-mismatch-issue" }),
+    };
+    const issuedResp = JSON.parse(flow.onMessage(otherMsg, ctx)[0].payload as string);
+
+    // Try to renew claiming device_id = DEVICE_ID, but the cert's CN = "other-device"
+    const sig = makeRenewalReqSig(DEVICE_ID, "cn-mismatch-renew", OP_PUB, OP_PRIV);
+    const output = flow.onMessage(
+      makeRenewalRequest({ device_id: DEVICE_ID, nonce: "cn-mismatch-renew", current_cert_der_b64: issuedResp.cert_der, req_sig: sig }),
+      ctx,
+    );
+    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+  });
+
+  test("request signature signed with wrong key is rejected", () => {
+    const ctx = makeIssuerContext();
+    const certDerB64 = issueInitialCert(ctx, "renew-init-wrongsig");
+    const wrongPriv = bytesToHex(ed25519.utils.randomSecretKey());
+    const sig = makeRenewalReqSig(DEVICE_ID, "renew-wrongsig", OP_PUB, wrongPriv);
+    const output = flow.onMessage(
+      makeRenewalRequest({ nonce: "renew-wrongsig", current_cert_der_b64: certDerB64, req_sig: sig }),
+      ctx,
+    );
+    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+  });
+
+  test("nonce replay in renewal is rejected", () => {
+    const ctx = makeIssuerContext();
+    const certDerB64 = issueInitialCert(ctx, "renew-init-replay");
+    const sig = makeRenewalReqSig(DEVICE_ID, "renew-replay-nonce", OP_PUB, OP_PRIV);
+    const req = makeRenewalRequest({ nonce: "renew-replay-nonce", current_cert_der_b64: certDerB64, req_sig: sig });
+    const out1 = flow.onMessage(req, ctx);
+    const out2 = flow.onMessage(req, ctx);
+    expect(out1[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
+    expect(out2[0].topic).toBe("te/pki/x509/req/rejected");
+  });
+
+  test("renewal_window_days rejects cert not close enough to expiry", () => {
+    // cert_validity_days=365; renewal_window_days=30 → cert expires in 365 days, window is 30 → rejected
+    const ctx = makeIssuerContext({ cert_validity_days: 365, renewal_window_days: 30 });
+    const certDerB64 = issueInitialCert(ctx, "renew-init-window-far");
+    const sig = makeRenewalReqSig(DEVICE_ID, "renew-window-far", OP_PUB, OP_PRIV);
+    const output = flow.onMessage(
+      makeRenewalRequest({ nonce: "renew-window-far", current_cert_der_b64: certDerB64, req_sig: sig }),
+      ctx,
+    );
+    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+  });
+
+  test("renewal_window_days accepts cert close to expiry", () => {
+    // cert_validity_days=10; renewal_window_days=30 → cert expires in 10 days, within 30-day window → accepted
+    const ctx = makeIssuerContext({ cert_validity_days: 10, renewal_window_days: 30 });
+    const certDerB64 = issueInitialCert(ctx, "renew-init-window-close");
+    const sig = makeRenewalReqSig(DEVICE_ID, "renew-window-close", OP_PUB, OP_PRIV);
+    const output = flow.onMessage(
+      makeRenewalRequest({ nonce: "renew-window-close", current_cert_der_b64: certDerB64, req_sig: sig }),
+      ctx,
+    );
+    expect(output).toHaveLength(1);
+    expect(output[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
+  });
+
+  test("require_factory_cert=true does not block renewals", () => {
+    // Factory cert verification is required for CSR but should be bypassed for renewal
+    const ctx = makeIssuerContext(); // require_factory_cert=true (default)
+    const certDerB64 = issueInitialCert(ctx, "renew-init-factorybypass");
+    const sig = makeRenewalReqSig(DEVICE_ID, "renew-factorybypass", OP_PUB, OP_PRIV);
+    const output = flow.onMessage(
+      makeRenewalRequest({ nonce: "renew-factorybypass", current_cert_der_b64: certDerB64, req_sig: sig }),
+      ctx,
+    );
+    expect(output).toHaveLength(1);
+    expect(output[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
+  });
+});
