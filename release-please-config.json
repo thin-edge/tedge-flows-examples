@@ -37,6 +37,15 @@
     },
     "flows/tedge-events": {
       "component": "tedge-events"
+    },
+    "flows/tedge-events-signed": {
+      "component": "tedge-events-signed"
+    },
+    "flows/tedge-events-verify": {
+      "component": "tedge-events-verify"
+    },
+    "flows/x509-cert-issuer": {
+      "component": "x509-cert-issuer"
     }
   }
 }
