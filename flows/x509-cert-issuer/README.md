@@ -545,11 +545,11 @@ A mosquitto broker must be already configure and running on a non-TLS endpoint.
     systemctl restart mosquitto
     ```
 
-1. Create a child certificate
+1. Create a child certificate and use it to connect to the broker
 
     ```sh
     mosquitto_sub -h localhost -p 8883 \
-        --cafile /opt/homebrew/etc/mosquitto/certs/ca-cert.pem \
+        --cafile ca-cert.pem \
         --key device-private.pem \
         --cert device-cert.pem \
         -t '#' -v --debug
