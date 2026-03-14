@@ -1,0 +1,16 @@
+# enable debug messages
+debug = false
+
+# topic where the messages will be written to
+output_events_topic = "c8y/mqtt/out/te/v1/events"
+
+# hex-encoded 32-byte Ed25519 private key used to sign outgoing event payloads.
+# each device should have its own unique key pair.
+# leave empty to disable signing.
+private_key = ""
+
+# base64-encoded device certificate JSON issued by the root CA.
+# when set, the certificate is attached to outgoing messages as _cert.
+# use with root_ca_public_key in the verifier flow for PKI mode.
+# leave empty to disable certificate attachment.
+device_cert = ""

@@ -1,0 +1,11 @@
+[input.mqtt]
+topics = ["te/+/+/+/+/e/+"]
+
+[config]
+debug = "${.params.debug}"
+output_events_topic = "${.params.output_events_topic}"
+private_key = "${.params.private_key}"
+device_cert = "${.params.device_cert}"
+
+[[steps]]
+script = "lib/main.js"
