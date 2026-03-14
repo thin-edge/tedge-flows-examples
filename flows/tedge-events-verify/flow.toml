@@ -1,0 +1,12 @@
+[input.mqtt]
+topics = ["c8y/mqtt/out/te/v1/events"]
+
+[config]
+debug = "${.params.debug}"
+root_ca_public_key = "${.params.root_ca_public_key}"
+public_keys = "${.params.public_keys}"
+output_verified_topic = "${.params.output_verified_topic}"
+output_rejected_topic = "${.params.output_rejected_topic}"
+
+[[steps]]
+script = "lib/main.js"

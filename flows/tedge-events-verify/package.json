@@ -1,0 +1,17 @@
+{
+  "name": "tedge-events-verify",
+  "version": "0.0.1",
+  "description": "Verify Ed25519 signatures on events produced by the tedge-events-signed flow",
+  "source": "src/main.ts",
+  "module": "lib/main.js",
+  "type": "module",
+  "tedge": {
+    "mapper": "local"
+  },
+  "scripts": {
+    "build": "esbuild src/main.ts --target=es2018 --bundle --outfile=lib/main.js --format=esm --drop-labels=DEV,TEST",
+    "test": "jest --coverageProvider=v8 --coverage"
+  },
+  "author": "thin-edge.io",
+  "license": "Apache-2.0"
+}

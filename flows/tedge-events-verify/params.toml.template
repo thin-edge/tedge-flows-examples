@@ -1,0 +1,20 @@
+# enable debug messages
+debug = false
+
+# topic where verified messages are forwarded to
+output_verified_topic = "te/verified/events"
+
+# topic where rejected messages are forwarded to (leave empty to silently drop)
+output_rejected_topic = "te/rejected/events"
+
+# PKI mode: hex-encoded Ed25519 root CA public key.
+# when set, messages must carry a _cert field (a certificate signed by this CA).
+# the verifier uses the device public key inside the certificate to verify the payload.
+# takes priority over public_keys when set.
+root_ca_public_key = ""
+
+# static map mode: JSON object mapping device source IDs to hex-encoded Ed25519 public keys.
+# used when root_ca_public_key is not set.
+# Example:
+#   public_keys = '{"my-device":"<hex-public-key>","other-device":"<hex-public-key>"}'
+public_keys = '{}'
