@@ -67,6 +67,9 @@ mosquitto_pub -h localhost -t te/pki/x509/csr -m '{
 | `keygen_topic`               | `te/pki/x509/keygen`            | Input topic for server-side key generation — flow generates the keypair on behalf of the device.                            |
 | `output_cert_topic_prefix`   | `te/pki/x509/cert/issued`       | Issued certificates are published to `<prefix>/<device_id>`.                                                                |
 | `output_keygen_topic_prefix` | `te/pki/x509/keygen/issued`     | Keygen responses are published to `<prefix>/<device_id>`.                                                                   |
+| `renewal_topic`              | `te/pki/x509/renew`             | Input topic for certificate renewal requests. No factory certificate is required — see below.                               |
+| `output_renewal_topic_prefix`| *(same as `output_cert_topic_prefix`)* | Renewal responses are published to `<prefix>/<device_id>`.                                                         |
+| `renewal_window_days`        | *(unset)*                       | When set, only allow renewals within this many days of certificate expiry.                                                  |
 | `output_rejected_topic`      | `te/pki/x509/req/rejected`      | Topic for rejected requests. Empty string silently discards.                                                                |
 | `debug`                      | `false`                         | Log request outcomes to the console.                                                                                        |
 
@@ -177,6 +180,85 @@ echo "Private key saved to device-private.pem (store securely)"
 ```
 
 > **Warning:** the keygen response contains an unencrypted private key. Ensure the `te/pki/x509/keygen/issued/<device_id>` topic has strict broker ACLs so only the target device can subscribe to it.
+
+### Certificate renewal
+
+Devices that already have a valid certificate issued by this flow can renew it without presenting their factory certificate again. The device proves it still holds the corresponding private key by signing the renewal request with it (**proof of possession**).
+
+Publish to `te/pki/x509/renew` and subscribe to `te/pki/x509/cert/issued/<device_id>` for the response.
+
+**Request payload:**
+
+```json
+{
+  "device_id": "my-device-001",
+  "public_key": "<hex-ed25519-public-key-for-the-new-cert>",
+  "nonce": "<unique-random-string>",
+  "_current_cert": "<base64-DER-of-currently-held-certificate>",
+  "_req_sig": "<base64-ed25519-signature>"
+}
+```
+
+`_req_sig` is an Ed25519 signature of the canonical JSON of `{device_id, nonce, public_key}` (keys sorted alphabetically) using the **current operational private key** — the one corresponding to the public key in `_current_cert`. The `public_key` field is the key to certify in the renewed certificate and may be the same as the current key or a new one (key rotation).
+
+The flow verifies that:
+1. `_current_cert` was signed by this CA.
+2. The CN in `_current_cert` matches `device_id`.
+3. `_current_cert` has not expired.
+4. `_req_sig` is valid under the public key embedded in `_current_cert` (proof of possession).
+
+**Response payload** (published to `te/pki/x509/cert/issued/<device_id>`):
+
+Same format as a regular CSR response — `cert_der` and `ca_cert_der`.
+
+**Using the helper script:**
+
+The `x509-cert.sh` helper script provides a `reenroll` command that handles this automatically:
+
+```sh
+# Renew with the same key:
+./x509-cert.sh reenroll my-device-001 --broker localhost \
+  --current-cert device-cert.pem --current-key device-private.pem
+
+# Renew and rotate to a fresh keypair:
+./x509-cert.sh reenroll my-device-001 --broker localhost \
+  --current-cert device-cert.pem --current-key device-private.pem --rotate
+```
+
+**Shell example (manual renewal with the same key):**
+
+```sh
+DEVICE_ID="my-device-001"
+NONCE=$(openssl rand -hex 16)
+NEW_PUB=$(openssl pkey -in op-private.pem -pubout -outform DER | tail -c 32 | xxd -p -c 32)
+CURRENT_CERT=$(cat device-cert.pem | openssl x509 -outform DER | base64 | tr -d '\n')
+
+# Sign {device_id, nonce, public_key} (sorted) with the CURRENT operational private key
+REQ_BODY=$(jq -cn --arg id "$DEVICE_ID" --arg n "$NONCE" --arg pub "$NEW_PUB" \
+  '{device_id: $id, nonce: $n, public_key: $pub} | to_entries | sort_by(.key) | from_entries')
+REQ_SIG=$(printf '%s' "$REQ_BODY" \
+  | openssl pkeyutl -sign -inkey op-private.pem -rawin \
+  | base64 | tr -d '\n')
+
+mosquitto_sub -h localhost -t "te/pki/x509/cert/issued/$DEVICE_ID" -C 1 -W 30 &
+jq -cn \
+  --arg id   "$DEVICE_ID" \
+  --arg pub  "$NEW_PUB" \
+  --arg n    "$NONCE" \
+  --arg cert "$CURRENT_CERT" \
+  --arg sig  "$REQ_SIG" \
+  '{device_id: $id, public_key: $pub, nonce: $n, _current_cert: $cert, _req_sig: $sig}' \
+  | mosquitto_pub -h localhost -t te/pki/x509/renew -s
+wait
+```
+
+**Optional: restrict renewals to a window before expiry**
+
+Set `renewal_window_days = 30` in `params.toml` to only allow renewals within 30 days of the certificate's expiry date. This limits unnecessary renewals while still allowing timely rotation:
+
+```toml
+renewal_window_days = 30
+```
 
 ### CA setup
 

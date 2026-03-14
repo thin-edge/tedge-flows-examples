@@ -64,6 +64,24 @@ export interface Config {
    * Default: "te/pki/x509/keygen/issued"
    */
   output_keygen_topic_prefix?: string;
+  /**
+   * Input topic for certificate renewal requests.
+   * A device proves ownership of its current CA-issued certificate by signing the
+   * renewal request with the corresponding private key (proof of possession).
+   * No factory certificate is required.
+   * Default: "te/pki/x509/renew"
+   */
+  renewal_topic?: string;
+  /**
+   * Topic prefix for renewal responses — device_id is appended: <prefix>/<device_id>.
+   * Defaults to output_cert_topic_prefix when not set.
+   */
+  output_renewal_topic_prefix?: string;
+  /**
+   * When set, only allow renewals within this many days of certificate expiry.
+   * Unset (default) means renewal is accepted at any time the certificate is still valid.
+   */
+  renewal_window_days?: number;
 }
 
 export interface FlowContext extends Context {
@@ -471,6 +489,82 @@ function readDerSKID(der: Uint8Array): Uint8Array | null {
 }
 
 // ---------------------------------------------------------------------------
+// Certificate renewal helpers — parsing an existing DER-encoded certificate
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract the raw 32-byte Ed25519 public key from a DER-encoded certificate.
+ * For Ed25519, the SPKI DER always ends with the 32-byte public key.
+ */
+function readCertPublicKeyBytes(der: Uint8Array): Uint8Array | null {
+  const spki = getTBSField(der, 5); // SPKI is TBS field 5
+  if (!spki) return null;
+  try {
+    const spkiDer = toU8(spki.toBER(false));
+    if (spkiDer.length < 32) return null;
+    return spkiDer.slice(-32);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Verify that a DER-encoded certificate was signed by the given Ed25519 CA public key.
+ */
+function verifyCertSignature(certDer: Uint8Array, caPubKey: Uint8Array): boolean {
+  try {
+    const parsed = asn1.fromBER(toAB(certDer));
+    if (parsed.offset === -1) return false;
+    const certFields = (parsed.result as any).valueBlock.value as asn1.AsnType[];
+    // Certificate ::= SEQUENCE { tbs, sigAlg, signature BIT STRING }
+    const tbsDer = toU8(certFields[0].toBER(false));
+    // Ed25519 signature BIT STRING DER ends with 64 signature bytes
+    const sigDer = toU8(certFields[2].toBER(false));
+    if (sigDer.length < 64) return false;
+    return ed25519.verify(sigDer.slice(-64), tbsDer, caPubKey);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Extract the Common Name (CN) from the subject of a DER-encoded certificate.
+ */
+function readCertCN(der: Uint8Array): string | null {
+  const subject = getTBSField(der, 4); // subject is TBS field 4
+  if (!subject) return null;
+  try {
+    for (const rdn of (subject as any).valueBlock.value as asn1.Set[]) {
+      for (const attr of (rdn as any).valueBlock.value as asn1.Sequence[]) {
+        const attrFields = (attr as any).valueBlock.value as asn1.AsnType[];
+        if ((attrFields[0] as asn1.ObjectIdentifier).valueBlock.toString() === OID_CN) {
+          return (attrFields[1] as any).valueBlock.value as string;
+        }
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extract the notAfter date from a DER-encoded certificate.
+ */
+function readCertNotAfter(der: Uint8Array): Date | null {
+  const validity = getTBSField(der, 3); // validity is TBS field 3
+  if (!validity) return null;
+  try {
+    const fields = (validity as any).valueBlock.value as asn1.AsnType[];
+    const notAfterField = fields[1];
+    const d = (notAfterField as any).toDate() as Date;
+    return d instanceof Date && !isNaN(d.getTime()) ? d : null;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Flow entry point
 // ---------------------------------------------------------------------------
 
@@ -484,13 +578,17 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     factory_ca_public_keys: factoryKeysJson = "[]",
     require_factory_cert = true,
     keygen_topic = "te/pki/x509/keygen",
+    renewal_topic = "te/pki/x509/renew",
     output_cert_topic_prefix = "te/pki/x509/cert/issued",
     output_keygen_topic_prefix = "te/pki/x509/keygen/issued",
+    output_renewal_topic_prefix,
     output_rejected_topic = "te/pki/x509/req/rejected",
+    renewal_window_days,
   } = context.config;
 
   const requireFactoryCert = require_factory_cert !== false;
   const isKeygenRequest = message.topic === keygen_topic;
+  const isRenewalRequest = message.topic === renewal_topic;
 
   const reject = (reason: string): Message[] => {
     if (debug) console.log(`x509-cert-issuer: rejected — ${reason}`);
@@ -515,7 +613,7 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   }
 
   const payload = decodeJsonPayload(message.payload);
-  const { device_id, common_name, public_key, nonce, _factory_cert, _req_sig } = payload;
+  const { device_id, common_name, public_key, nonce, _factory_cert, _req_sig, _current_cert } = payload;
 
   if (!device_id || !nonce) {
     return reject("missing required fields: device_id, nonce");
@@ -533,8 +631,8 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   }
   if (nonces[nonce as string] !== undefined) return reject("nonce already used");
 
-  // Factory certificate verification (optional based on config)
-  if (requireFactoryCert) {
+  // Factory certificate verification (optional based on config, skipped for renewals)
+  if (requireFactoryCert && !isRenewalRequest) {
     if (!_factory_cert) return reject("missing required field: _factory_cert");
     const factoryResult = verifyFactoryCert(
       _factory_cert as string,
@@ -549,6 +647,51 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
       ? verifyKeygenReqSig(String(device_id), String(nonce), _req_sig as string, factoryResult.factoryPubKeyHex)
       : verifyReqSig(String(device_id), String(nonce), String(public_key), _req_sig as string, factoryResult.factoryPubKeyHex);
     if (!reqSigOk) return reject("request signature invalid");
+  } else if (isRenewalRequest) {
+    // Renewal: device proves possession of a valid CA-issued certificate by signing
+    // the request with the corresponding private key (proof of possession).
+    if (!_current_cert) return reject("missing required field: _current_cert");
+    if (!_req_sig) return reject("missing required field: _req_sig");
+
+    let currentCertDer: Uint8Array;
+    try {
+      currentCertDer = atobBytes(_current_cert as string);
+    } catch {
+      return reject("failed to decode _current_cert");
+    }
+
+    // Verify cert was issued by this CA (prevents use of self-signed or third-party certs)
+    const caPubKeyBytesForRenew = ed25519.getPublicKey(hexToBytes(ca_private_key));
+    if (!verifyCertSignature(currentCertDer, caPubKeyBytesForRenew)) {
+      return reject("current certificate not issued by this CA");
+    }
+
+    // Verify the certificate CN matches the claimed device_id
+    const certCN = readCertCN(currentCertDer);
+    if (certCN !== String(device_id)) {
+      return reject(`certificate CN "${certCN}" does not match device_id "${device_id}"`);
+    }
+
+    // Verify the certificate has not expired
+    const currentCertNotAfter = readCertNotAfter(currentCertDer);
+    if (!currentCertNotAfter || currentCertNotAfter < new Date()) {
+      return reject("current certificate is expired");
+    }
+
+    // Optionally enforce a renewal window (e.g. only allow within 30 days of expiry)
+    if (renewal_window_days !== undefined) {
+      const windowMs = Number(renewal_window_days) * 86_400_000;
+      if (currentCertNotAfter.getTime() - Date.now() > windowMs) {
+        return reject(`renewal only allowed within ${renewal_window_days} days of certificate expiry`);
+      }
+    }
+
+    // Verify request signature with the current certificate's public key (proof of possession)
+    const certPubKeyBytes = readCertPublicKeyBytes(currentCertDer);
+    if (!certPubKeyBytes) return reject("failed to extract public key from current certificate");
+    if (!verifyReqSig(String(device_id), String(nonce), String(public_key), _req_sig as string, bytesToHex(certPubKeyBytes))) {
+      return reject("request signature invalid");
+    }
   }
 
   // Record nonce
@@ -607,7 +750,7 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   const certDer = signCert(tbs, ca_private_key);
 
   if (debug) {
-    const mode = isKeygenRequest ? "keygen" : "csr";
+    const mode = isKeygenRequest ? "keygen" : isRenewalRequest ? "renew" : "csr";
     console.log(
       `x509-cert-issuer: issued cert [${mode}] CN="${subjectCN}" expires=${notAfter.toISOString()}`,
     );
@@ -615,7 +758,9 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
 
   const outputTopic = isKeygenRequest
     ? `${output_keygen_topic_prefix}/${device_id}`
-    : `${output_cert_topic_prefix}/${device_id}`;
+    : isRenewalRequest
+      ? `${output_renewal_topic_prefix ?? output_cert_topic_prefix}/${device_id}`
+      : `${output_cert_topic_prefix}/${device_id}`;
 
   const responsePayload: Record<string, string> = {
     device_id: String(device_id),
