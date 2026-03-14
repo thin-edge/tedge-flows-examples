@@ -32,7 +32,9 @@ Publish to `te/pki/x509/csr` and subscribe to `te/pki/x509/cert/issued/<device_i
 {
   "device_id": "my-device-001",
   "cert_der": "<base64-encoded-DER>",
-  "ca_cert_der": "<base64-encoded-DER>"
+  "cert_pem": "-----BEGIN CERTIFICATE-----\n...",
+  "ca_cert_der": "<base64-encoded-DER>",
+  "ca_cert_pem": "-----BEGIN CERTIFICATE-----\n..."
 }
 ```
 
@@ -140,10 +142,15 @@ For very constrained devices that cannot produce a cryptographically secure priv
 {
   "device_id": "child-001",
   "private_key_der": "<base64-encoded-DER>",
+  "private_key_pem": "-----BEGIN PRIVATE KEY-----\n...",
   "cert_der": "<base64-encoded-DER>",
-  "ca_cert_der": "<base64-encoded-DER>"
+  "cert_pem": "-----BEGIN CERTIFICATE-----\n...",
+  "ca_cert_der": "<base64-encoded-DER>",
+  "ca_cert_pem": "-----BEGIN CERTIFICATE-----\n..."
 }
 ```
+
+The `_pem` fields are convenience copies — they contain the same data as the corresponding `_der` fields, already converted to PEM format for direct use with Mosquitto and OpenSSL.
 
 Shell example (with factory cert):
 
@@ -173,9 +180,9 @@ jq -cn \
 
 wait
 # Extract and store the private key and certificates
-jq -r '.private_key_der' /tmp/keygen-response.json | base64 -d | openssl pkey -inform DER -out device-private.pem
-jq -r '.cert_der'        /tmp/keygen-response.json | base64 -d | openssl x509 -inform DER -out device-cert.pem
-jq -r '.ca_cert_der'     /tmp/keygen-response.json | base64 -d | openssl x509 -inform DER -out ca-cert.pem
+jq -r '.private_key_pem' /tmp/keygen-response.json > device-private.pem
+jq -r '.cert_pem'        /tmp/keygen-response.json > device-cert.pem
+jq -r '.ca_cert_pem'     /tmp/keygen-response.json > ca-cert.pem
 echo "Private key saved to device-private.pem (store securely)"
 ```
 
@@ -412,15 +419,16 @@ echo "[te/pki/x509/keygen] $(jq -cn --arg id "$DEVICE_ID" --arg n "$NONCE" \
   | tedge flows test --flow ./flow.toml \
   | sed 's/^\[.*\] //' \
   | tee /tmp/keygen-response.json \
-  | jq -r '.cert_der' \
+  | jq -r '.cert_pem' \
   | ./scripts/x509-cert.sh decode-cert -
 ```
 
 Save the generated private key and certificate from the same response:
 
 ```sh
-jq -r '.private_key_der' /tmp/keygen-response.json | base64 -d | openssl pkey -inform DER -out device-private.pem
-jq -r '.cert_der'        /tmp/keygen-response.json | base64 -d | openssl x509 -inform DER -out device-cert.pem
+jq -r '.private_key_pem' /tmp/keygen-response.json > device-private.pem
+jq -r '.cert_pem'        /tmp/keygen-response.json > device-cert.pem
+jq -r '.ca_cert_pem'     /tmp/keygen-response.json > ca-cert.pem
 ```
 
 **With a factory certificate (`require_factory_cert = true`):**
@@ -440,15 +448,16 @@ echo "[te/pki/x509/keygen] $REQUEST" \
   | tedge flows test --flow ./flow.toml \
   | sed 's/^\[.*\] //' \
   | tee /tmp/keygen-response.json \
-  | jq -r '.cert_der' \
+  | jq -r '.cert_pem' \
   | ./scripts/x509-cert.sh decode-cert -
 ```
 
 Save the generated private key and certificate from the same response:
 
 ```sh
-jq -r '.private_key_der' /tmp/keygen-response.json | base64 -d | openssl pkey -inform DER -out device-private.pem
-jq -r '.cert_der'        /tmp/keygen-response.json | base64 -d | openssl x509 -inform DER -out device-cert.pem
+jq -r '.private_key_pem' /tmp/keygen-response.json > device-private.pem
+jq -r '.cert_pem'        /tmp/keygen-response.json > device-cert.pem
+jq -r '.ca_cert_pem'     /tmp/keygen-response.json > ca-cert.pem
 ```
 
 #### Enrolling against a live MQTT broker with `enroll`

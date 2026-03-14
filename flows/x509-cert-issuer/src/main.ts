@@ -114,6 +114,12 @@ function atobToString(base64: string): string {
   return new TextDecoder().decode(atobBytes(base64));
 }
 
+function derToPem(label: string, der: Uint8Array): string {
+  const b64 = uint8ToBase64(der);
+  const lines = b64.match(/.{1,64}/g)!.join("\n");
+  return `-----BEGIN ${label}-----\n${lines}\n-----END ${label}-----`;
+}
+
 /**
  * Cryptographically secure random bytes.
  * Uses crypto.getRandomValues when available (Node.js, modern browsers);
@@ -873,10 +879,13 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   const responsePayload: Record<string, string> = {
     device_id: String(device_id),
     cert_der: uint8ToBase64(certDer),
+    cert_pem: derToPem("CERTIFICATE", certDer),
     ca_cert_der: uint8ToBase64(caCertDer),
+    ca_cert_pem: derToPem("CERTIFICATE", caCertDer),
   };
   if (isKeygenRequest) {
     responsePayload.private_key_der = generatedPrivKeyDer!;
+    responsePayload.private_key_pem = derToPem("PRIVATE KEY", atobBytes(generatedPrivKeyDer!));
   }
 
   return [{ time: new Date(), topic: outputTopic, payload: JSON.stringify(responsePayload) }];

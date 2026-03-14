@@ -591,19 +591,19 @@ EOF
     wait "$SUB_PID" || { echo "Error: timed out waiting for response on $RESPONSE_TOPIC" >&2; exit 1; }
 
     # Validate response
-    CERT_DER=$(jq -r '.cert_der    // empty' "$RESPONSE_FILE")
-    CA_DER=$(jq   -r '.ca_cert_der // empty' "$RESPONSE_FILE")
-    [[ -n "$CERT_DER" ]] || { echo "Error: response missing cert_der — $(cat "$RESPONSE_FILE")" >&2; exit 1; }
+    CERT_PEM=$(jq -r '.cert_pem    // empty' "$RESPONSE_FILE")
+    CA_PEM=$(jq   -r '.ca_cert_pem // empty' "$RESPONSE_FILE")
+    [[ -n "$CERT_PEM" ]] || { echo "Error: response missing cert_pem — $(cat "$RESPONSE_FILE")" >&2; exit 1; }
 
     # Write certificate and CA cert
-    printf '%s' "$CERT_DER" | base64 -d | openssl x509 -inform DER -out "${ENROLL_OUT_DIR}/device-cert.pem"
-    printf '%s' "$CA_DER"   | base64 -d | openssl x509 -inform DER -out "${ENROLL_OUT_DIR}/ca-cert.pem"
+    printf '%s\n' "$CERT_PEM" > "${ENROLL_OUT_DIR}/device-cert.pem"
+    printf '%s\n' "$CA_PEM"   > "${ENROLL_OUT_DIR}/ca-cert.pem"
 
     # Write private key (keygen only — CSR mode key was already written above)
     if $ENROLL_KEYGEN; then
-      PRIV_DER=$(jq -r '.private_key_der // empty' "$RESPONSE_FILE")
-      [[ -n "$PRIV_DER" ]] || { echo "Error: response missing private_key_der" >&2; exit 1; }
-      printf '%s' "$PRIV_DER" | base64 -d | openssl pkey -inform DER -out "${ENROLL_OUT_DIR}/device-private.pem"
+      PRIV_PEM=$(jq -r '.private_key_pem // empty' "$RESPONSE_FILE")
+      [[ -n "$PRIV_PEM" ]] || { echo "Error: response missing private_key_pem" >&2; exit 1; }
+      printf '%s\n' "$PRIV_PEM" > "${ENROLL_OUT_DIR}/device-private.pem"
     fi
 
     echo "Enrollment complete. Files written to ${ENROLL_OUT_DIR}/" >&2
@@ -702,12 +702,12 @@ EOF
     wait "$SUB_PID" || { echo "Error: timed out waiting for response on $RESPONSE_TOPIC" >&2; exit 1; }
 
     # Validate response
-    CERT_DER=$(jq -r '.cert_der    // empty' "$RESPONSE_FILE")
-    CA_DER=$(jq   -r '.ca_cert_der // empty' "$RESPONSE_FILE")
-    [[ -n "$CERT_DER" ]] || { echo "Error: response missing cert_der — $(cat "$RESPONSE_FILE")" >&2; exit 1; }
+    CERT_PEM=$(jq -r '.cert_pem    // empty' "$RESPONSE_FILE")
+    CA_PEM=$(jq   -r '.ca_cert_pem // empty' "$RESPONSE_FILE")
+    [[ -n "$CERT_PEM" ]] || { echo "Error: response missing cert_pem — $(cat "$RESPONSE_FILE")" >&2; exit 1; }
 
-    printf '%s' "$CERT_DER" | base64 -d | openssl x509 -inform DER -out "${REENROLL_OUT_DIR}/device-cert.pem"
-    printf '%s' "$CA_DER"   | base64 -d | openssl x509 -inform DER -out "${REENROLL_OUT_DIR}/ca-cert.pem"
+    printf '%s\n' "$CERT_PEM" > "${REENROLL_OUT_DIR}/device-cert.pem"
+    printf '%s\n' "$CA_PEM"   > "${REENROLL_OUT_DIR}/ca-cert.pem"
 
     echo "Renewal complete. Files written to ${REENROLL_OUT_DIR}/" >&2
     echo "  device-cert.pem  — renewed TLS client certificate" >&2
