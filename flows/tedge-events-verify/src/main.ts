@@ -46,7 +46,10 @@ function bytesToHex(bytes: Uint8Array): string {
 }
 
 function toAB(arr: Uint8Array): ArrayBuffer {
-  return (arr.buffer as ArrayBuffer).slice(arr.byteOffset, arr.byteOffset + arr.byteLength);
+  return (arr.buffer as ArrayBuffer).slice(
+    arr.byteOffset,
+    arr.byteOffset + arr.byteLength,
+  );
 }
 
 function toU8(ab: ArrayBuffer): Uint8Array {
@@ -83,7 +86,9 @@ function atobToString(base64: string): string {
 /** Navigate TBSCertificate fields, skipping the optional [0] EXPLICIT version tag. */
 function getTBSField(tbsFields: asn1.AsnType[], index: number): asn1.AsnType {
   const offset =
-    tbsFields[0].idBlock.tagClass === 3 && tbsFields[0].idBlock.tagNumber === 0 ? 1 : 0;
+    tbsFields[0].idBlock.tagClass === 3 && tbsFields[0].idBlock.tagNumber === 0
+      ? 1
+      : 0;
   return tbsFields[offset + index];
 }
 
@@ -97,24 +102,28 @@ function parseASN1Time(node: asn1.AsnType): Date {
   if (s.length === 13) {
     // UTCTime
     const yy = parseInt(s.slice(0, 2), 10);
-    return new Date(Date.UTC(
-      yy >= 50 ? 1900 + yy : 2000 + yy,
-      parseInt(s.slice(2, 4), 10) - 1,
-      parseInt(s.slice(4, 6), 10),
+    return new Date(
+      Date.UTC(
+        yy >= 50 ? 1900 + yy : 2000 + yy,
+        parseInt(s.slice(2, 4), 10) - 1,
+        parseInt(s.slice(4, 6), 10),
+        parseInt(s.slice(6, 8), 10),
+        parseInt(s.slice(8, 10), 10),
+        parseInt(s.slice(10, 12), 10),
+      ),
+    );
+  }
+  // GeneralizedTime
+  return new Date(
+    Date.UTC(
+      parseInt(s.slice(0, 4), 10),
+      parseInt(s.slice(4, 6), 10) - 1,
       parseInt(s.slice(6, 8), 10),
       parseInt(s.slice(8, 10), 10),
       parseInt(s.slice(10, 12), 10),
-    ));
-  }
-  // GeneralizedTime
-  return new Date(Date.UTC(
-    parseInt(s.slice(0, 4), 10),
-    parseInt(s.slice(4, 6), 10) - 1,
-    parseInt(s.slice(6, 8), 10),
-    parseInt(s.slice(8, 10), 10),
-    parseInt(s.slice(10, 12), 10),
-    parseInt(s.slice(12, 14), 10),
-  ));
+      parseInt(s.slice(12, 14), 10),
+    ),
+  );
 }
 
 /**
@@ -125,7 +134,8 @@ function verifyX509Cert(derBytes: Uint8Array, caPublicKeyHex: string): boolean {
   try {
     const parsed = asn1.fromBER(toAB(derBytes));
     if (parsed.offset === -1) return false;
-    const certFields = ((parsed.result as any).valueBlock.value) as asn1.AsnType[];
+    const certFields = (parsed.result as any).valueBlock
+      .value as asn1.AsnType[];
     // TBS bytes are what was signed
     const tbsBytes = toU8(certFields[0].toBER(false));
     // Signature BIT STRING DER: [0x03, 0x41, 0x00, <64 bytes>] — take the last 64 bytes
@@ -143,16 +153,19 @@ function verifyX509Cert(derBytes: Uint8Array, caPublicKeyHex: string): boolean {
  *
  * Ed25519 SubjectPublicKeyInfo DER is always 44 bytes; the key is the last 32 bytes.
  */
-function parseX509Cert(derBytes: Uint8Array): { publicKeyHex: string; notAfter: Date } | null {
+function parseX509Cert(
+  derBytes: Uint8Array,
+): { publicKeyHex: string; notAfter: Date } | null {
   try {
     const parsed = asn1.fromBER(toAB(derBytes));
     if (parsed.offset === -1) return null;
-    const certFields = ((parsed.result as any).valueBlock.value) as asn1.AsnType[];
-    const tbsFields = ((certFields[0] as any).valueBlock.value) as asn1.AsnType[];
+    const certFields = (parsed.result as any).valueBlock
+      .value as asn1.AsnType[];
+    const tbsFields = (certFields[0] as any).valueBlock.value as asn1.AsnType[];
 
     // Validity (TBS field 3): second child is notAfter (UTCTime or GeneralizedTime)
     const validity = getTBSField(tbsFields, 3);
-    const validityFields = ((validity as any).valueBlock.value) as asn1.AsnType[];
+    const validityFields = (validity as any).valueBlock.value as asn1.AsnType[];
     const notAfter: Date = parseASN1Time(validityFields[1]);
 
     // SubjectPublicKeyInfo (TBS field 5): Ed25519 key is always the last 32 bytes of SPKI DER
@@ -176,7 +189,11 @@ function verifyPayload(
     const { _sig: _removed, _cert: _removedCert, ...rest } = payload;
     const encoder = new TextEncoder();
     const canonical = JSON.stringify(rest, Object.keys(rest).sort());
-    return ed25519.verify(atobBytes(sig), encoder.encode(canonical), hexToBytes(publicKeyHex));
+    return ed25519.verify(
+      atobBytes(sig),
+      encoder.encode(canonical),
+      hexToBytes(publicKeyHex),
+    );
   } catch {
     return false;
   }
@@ -235,12 +252,20 @@ export function onMessage(message: Message, context: FlowContext) {
         return reject();
       }
       if (certInfo.notAfter < new Date()) {
-        console.error(`X.509 certificate expired: ${certInfo.notAfter.toISOString()}`);
+        console.error(
+          `X.509 certificate expired: ${certInfo.notAfter.toISOString()}`,
+        );
         return reject();
       }
-      const valid = verifyPayload(payload, _sig as string, certInfo.publicKeyHex);
+      const valid = verifyPayload(
+        payload,
+        _sig as string,
+        certInfo.publicKeyHex,
+      );
       if (debug) {
-        console.log(`PKI X.509: payload signature ${valid ? "valid" : "INVALID"}`);
+        console.log(
+          `PKI X.509: payload signature ${valid ? "valid" : "INVALID"}`,
+        );
       }
       return valid ? accept() : reject();
     }
@@ -262,7 +287,10 @@ export function onMessage(message: Message, context: FlowContext) {
 
     try {
       const encoder = new TextEncoder();
-      const certCanonical = JSON.stringify(certBody, Object.keys(certBody).sort());
+      const certCanonical = JSON.stringify(
+        certBody,
+        Object.keys(certBody).sort(),
+      );
       const certValid = ed25519.verify(
         atobBytes(_cert_sig),
         encoder.encode(certCanonical),
@@ -309,8 +337,9 @@ export function onMessage(message: Message, context: FlowContext) {
 
   const valid = verifyPayload(payload, _sig as string, publicKeyHex);
   if (debug) {
-    console.log(`Signature ${valid ? "valid" : "INVALID"} for source: ${source}`);
+    console.log(
+      `Signature ${valid ? "valid" : "INVALID"} for source: ${source}`,
+    );
   }
   return valid ? accept() : reject();
 }
-

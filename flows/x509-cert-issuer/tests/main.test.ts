@@ -13,17 +13,23 @@ import { fromBER, Sequence } from "asn1js";
 // Factory CA (manufacturer)
 const FACTORY_CA_PRIV_BYTES = ed25519.utils.randomSecretKey();
 const FACTORY_CA_PRIV = bytesToHex(FACTORY_CA_PRIV_BYTES);
-const FACTORY_CA_PUB = uint8ToBase64(ed25519.getPublicKey(FACTORY_CA_PRIV_BYTES));
+const FACTORY_CA_PUB = uint8ToBase64(
+  ed25519.getPublicKey(FACTORY_CA_PRIV_BYTES),
+);
 
 // Factory CA 2 (second manufacturer — for multi-CA tests)
 const FACTORY_CA2_PRIV_BYTES = ed25519.utils.randomSecretKey();
 const FACTORY_CA2_PRIV = bytesToHex(FACTORY_CA2_PRIV_BYTES);
-const FACTORY_CA2_PUB = uint8ToBase64(ed25519.getPublicKey(FACTORY_CA2_PRIV_BYTES));
+const FACTORY_CA2_PUB = uint8ToBase64(
+  ed25519.getPublicKey(FACTORY_CA2_PRIV_BYTES),
+);
 
 // Factory device key pair (burned in at manufacturing)
 const FACTORY_DEV_PRIV_BYTES = ed25519.utils.randomSecretKey();
 const FACTORY_DEV_PRIV = bytesToHex(FACTORY_DEV_PRIV_BYTES);
-const FACTORY_DEV_PUB = uint8ToBase64(ed25519.getPublicKey(FACTORY_DEV_PRIV_BYTES));
+const FACTORY_DEV_PUB = uint8ToBase64(
+  ed25519.getPublicKey(FACTORY_DEV_PRIV_BYTES),
+);
 
 // Operational key pair (what the device wants an X.509 cert for)
 const OP_PRIV_BYTES = ed25519.utils.randomSecretKey();
@@ -61,14 +67,18 @@ function bytesToHex(bytes: Uint8Array): string {
  * TBS fields: version? | serial(0) | sigAlg(1) | issuer(2) | validity(3) | subject(4) | SPKI(5)
  */
 function getTBSFieldDer(certDer: Buffer, fieldIndex: number): Buffer {
-  const ab = certDer.buffer.slice(certDer.byteOffset, certDer.byteOffset + certDer.byteLength) as ArrayBuffer;
+  const ab = certDer.buffer.slice(
+    certDer.byteOffset,
+    certDer.byteOffset + certDer.byteLength,
+  ) as ArrayBuffer;
   const parsed = fromBER(ab);
   if (parsed.offset === -1) throw new Error("invalid DER");
   const cert = parsed.result as Sequence;
   const tbs = (cert as any).valueBlock.value[0] as Sequence;
   const fields = (tbs as any).valueBlock.value;
   let idx = 0;
-  if (fields[0].idBlock.tagClass === 3 && fields[0].idBlock.tagNumber === 0) idx++;
+  if (fields[0].idBlock.tagClass === 3 && fields[0].idBlock.tagNumber === 0)
+    idx++;
   const field = fields[idx + fieldIndex];
   return Buffer.from(field.toBER(false));
 }
@@ -87,7 +97,10 @@ function makeFactoryCert(
   caPrivHex: string,
   expires?: string,
 ): string {
-  const body: Record<string, string> = { device_id: deviceId, public_key: devicePubHex };
+  const body: Record<string, string> = {
+    device_id: deviceId,
+    public_key: devicePubHex,
+  };
   if (expires) body.expires = expires;
   const encoder = new TextEncoder();
   const canonical = JSON.stringify(body, Object.keys(body).sort());
@@ -105,7 +118,10 @@ function makeReqSig(
   const body = { device_id: deviceId, nonce, public_key: publicKey };
   const encoder = new TextEncoder();
   const canonical = JSON.stringify(body, Object.keys(body).sort());
-  const sig = ed25519.sign(encoder.encode(canonical), hexToBytes(factoryPrivHex));
+  const sig = ed25519.sign(
+    encoder.encode(canonical),
+    hexToBytes(factoryPrivHex),
+  );
   return uint8ToBase64(sig);
 }
 
@@ -130,8 +146,16 @@ function makeRequest(opts: {
 }
 
 /** Build a fully valid certificate request */
-function makeValidRequest(nonce = "valid-nonce", opPub = OP_PUB, factoryPriv = FACTORY_DEV_PRIV): tedge.Message {
-  const factoryCert = makeFactoryCert(DEVICE_ID, FACTORY_DEV_PUB, FACTORY_CA_PRIV);
+function makeValidRequest(
+  nonce = "valid-nonce",
+  opPub = OP_PUB,
+  factoryPriv = FACTORY_DEV_PRIV,
+): tedge.Message {
+  const factoryCert = makeFactoryCert(
+    DEVICE_ID,
+    FACTORY_DEV_PUB,
+    FACTORY_CA_PRIV,
+  );
   const reqSig = makeReqSig(DEVICE_ID, nonce, opPub, factoryPriv);
   return makeRequest({
     device_id: DEVICE_ID,
@@ -178,10 +202,17 @@ beforeAll(() => {
         const { execSync } = require("child_process");
         execSync(
           `openssl req -new -x509 -key /dev/stdin -out /tmp/ca-jest.pem -days 3650 -subj "/CN=TestCA" 2>/dev/null`,
-          { input: privateKey.export({ type: "pkcs8", format: "pem" }) as string },
+          {
+            input: privateKey.export({
+              type: "pkcs8",
+              format: "pem",
+            }) as string,
+          },
         );
         CA_CERT_PEM = require("fs").readFileSync("/tmp/ca-jest.pem", "utf8");
-        const derBuf = execSync(`openssl x509 -in /tmp/ca-jest.pem -outform DER 2>/dev/null`) as Buffer;
+        const derBuf = execSync(
+          `openssl x509 -in /tmp/ca-jest.pem -outform DER 2>/dev/null`,
+        ) as Buffer;
         CA_CERT_DER_B64 = derBuf.toString("base64");
         return new crypto.X509Certificate(CA_CERT_PEM);
       })()
@@ -213,19 +244,32 @@ describe("certificate issuance — happy path", () => {
 
   test("issued cert is a valid X.509 certificate parseable by Node crypto", () => {
     const ctx = makeIssuerContext();
-    const cert = parseCertFromOutput(flow.onMessage(makeValidRequest("nonce-x509"), ctx));
+    const cert = parseCertFromOutput(
+      flow.onMessage(makeValidRequest("nonce-x509"), ctx),
+    );
     expect(cert.subject).toContain(DEVICE_ID);
   });
 
   test("issued cert subject CN matches device_id by default", () => {
     const ctx = makeIssuerContext();
-    const cert = parseCertFromOutput(flow.onMessage(makeValidRequest("nonce-cn"), ctx));
+    const cert = parseCertFromOutput(
+      flow.onMessage(makeValidRequest("nonce-cn"), ctx),
+    );
     expect(cert.subject).toMatch(/CN\s*=\s*my-device-001/);
   });
 
   test("explicit common_name overrides device_id in subject CN", () => {
-    const factoryCert = makeFactoryCert(DEVICE_ID, FACTORY_DEV_PUB, FACTORY_CA_PRIV);
-    const reqSig = makeReqSig(DEVICE_ID, "nonce-cn-override", OP_PUB, FACTORY_DEV_PRIV);
+    const factoryCert = makeFactoryCert(
+      DEVICE_ID,
+      FACTORY_DEV_PUB,
+      FACTORY_CA_PRIV,
+    );
+    const reqSig = makeReqSig(
+      DEVICE_ID,
+      "nonce-cn-override",
+      OP_PUB,
+      FACTORY_DEV_PRIV,
+    );
     const msg: tedge.Message = {
       time: new Date(),
       topic: "te/pki/x509/csr",
@@ -245,7 +289,9 @@ describe("certificate issuance — happy path", () => {
 
   test("issued cert issuer CN matches CA cert", () => {
     const ctx = makeIssuerContext();
-    const cert = parseCertFromOutput(flow.onMessage(makeValidRequest("nonce-issuer"), ctx));
+    const cert = parseCertFromOutput(
+      flow.onMessage(makeValidRequest("nonce-issuer"), ctx),
+    );
     expect(cert.issuer).toMatch(/CN\s*=\s*TestCA/);
   });
 
@@ -253,14 +299,18 @@ describe("certificate issuance — happy path", () => {
     const ctx = makeIssuerContext();
     const output = flow.onMessage(makeValidRequest("nonce-ca-pem"), ctx);
     const resp = JSON.parse(output[0].payload as string);
-    const returnedCA = new crypto.X509Certificate(Buffer.from(resp.ca_cert_der, "base64"));
+    const returnedCA = new crypto.X509Certificate(
+      Buffer.from(resp.ca_cert_der, "base64"),
+    );
     const configuredCA = new crypto.X509Certificate(CA_CERT_PEM);
     expect(returnedCA.serialNumber).toBe(configuredCA.serialNumber);
   });
 
   test("issued cert is not a CA (isCA=false)", () => {
     const ctx = makeIssuerContext();
-    const cert = parseCertFromOutput(flow.onMessage(makeValidRequest("nonce-isca"), ctx));
+    const cert = parseCertFromOutput(
+      flow.onMessage(makeValidRequest("nonce-isca"), ctx),
+    );
     // ca flag absent or false
     expect(cert.ca).toBe(false);
   });
@@ -269,15 +319,21 @@ describe("certificate issuance — happy path", () => {
     const ctx = makeIssuerContext();
     const output = flow.onMessage(makeValidRequest("nonce-verify-chain"), ctx);
     const resp = JSON.parse(output[0].payload as string);
-    const deviceCert = new crypto.X509Certificate(Buffer.from(resp.cert_der, "base64"));
-    const caCert = new crypto.X509Certificate(Buffer.from(resp.ca_cert_der, "base64"));
+    const deviceCert = new crypto.X509Certificate(
+      Buffer.from(resp.cert_der, "base64"),
+    );
+    const caCert = new crypto.X509Certificate(
+      Buffer.from(resp.ca_cert_der, "base64"),
+    );
     expect(deviceCert.verify(caCert.publicKey)).toBe(true);
   });
 
   test("cert_validity_days controls notAfter", () => {
     const ctx = makeIssuerContext({ cert_validity_days: 30 });
     const before = Date.now();
-    const cert = parseCertFromOutput(flow.onMessage(makeValidRequest("nonce-validity"), ctx));
+    const cert = parseCertFromOutput(
+      flow.onMessage(makeValidRequest("nonce-validity"), ctx),
+    );
     const after = Date.now();
     const notAfter = new Date(cert.validTo).getTime();
     const expected = before + 30 * 86_400_000;
@@ -312,23 +368,43 @@ describe("multiple factory CAs", () => {
   }
 
   test("cert from factory CA 1 is accepted", () => {
-    const output = flow.onMessage(makeValidRequest("multi-ca-1"), dualCAContext());
+    const output = flow.onMessage(
+      makeValidRequest("multi-ca-1"),
+      dualCAContext(),
+    );
     expect(output[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
   });
 
   test("cert from factory CA 2 is accepted", () => {
     const cert2 = makeFactoryCert(DEVICE_ID, FACTORY_DEV_PUB, FACTORY_CA2_PRIV);
     const sig2 = makeReqSig(DEVICE_ID, "multi-ca-2", OP_PUB, FACTORY_DEV_PRIV);
-    const req = makeRequest({ nonce: "multi-ca-2", factory_cert: cert2, req_sig: sig2 });
+    const req = makeRequest({
+      nonce: "multi-ca-2",
+      factory_cert: cert2,
+      req_sig: sig2,
+    });
     const output = flow.onMessage(req, dualCAContext());
     expect(output[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
   });
 
   test("cert from unknown CA is rejected", () => {
     const roguePrivBytes = ed25519.utils.randomSecretKey();
-    const rogueCert = makeFactoryCert(DEVICE_ID, FACTORY_DEV_PUB, bytesToHex(roguePrivBytes));
-    const sig = makeReqSig(DEVICE_ID, "multi-ca-rogue", OP_PUB, FACTORY_DEV_PRIV);
-    const req = makeRequest({ nonce: "multi-ca-rogue", factory_cert: rogueCert, req_sig: sig });
+    const rogueCert = makeFactoryCert(
+      DEVICE_ID,
+      FACTORY_DEV_PUB,
+      bytesToHex(roguePrivBytes),
+    );
+    const sig = makeReqSig(
+      DEVICE_ID,
+      "multi-ca-rogue",
+      OP_PUB,
+      FACTORY_DEV_PRIV,
+    );
+    const req = makeRequest({
+      nonce: "multi-ca-rogue",
+      factory_cert: rogueCert,
+      req_sig: sig,
+    });
     const output = flow.onMessage(req, dualCAContext());
     expect(output[0].topic).toBe("te/pki/x509/req/rejected");
   });
@@ -340,15 +416,27 @@ describe("multiple factory CAs", () => {
 
 describe("rejection — missing fields", () => {
   test("missing _factory_cert → rejected", () => {
-    const sig = makeReqSig(DEVICE_ID, "n-missing-cert", OP_PUB, FACTORY_DEV_PRIV);
+    const sig = makeReqSig(
+      DEVICE_ID,
+      "n-missing-cert",
+      OP_PUB,
+      FACTORY_DEV_PRIV,
+    );
     const req = makeRequest({ nonce: "n-missing-cert", req_sig: sig });
     const output = flow.onMessage(req, makeIssuerContext());
     expect(output[0].topic).toBe("te/pki/x509/req/rejected");
   });
 
   test("missing _req_sig → rejected", () => {
-    const factoryCert = makeFactoryCert(DEVICE_ID, FACTORY_DEV_PUB, FACTORY_CA_PRIV);
-    const req = makeRequest({ nonce: "n-missing-sig", factory_cert: factoryCert });
+    const factoryCert = makeFactoryCert(
+      DEVICE_ID,
+      FACTORY_DEV_PUB,
+      FACTORY_CA_PRIV,
+    );
+    const req = makeRequest({
+      nonce: "n-missing-sig",
+      factory_cert: factoryCert,
+    });
     const output = flow.onMessage(req, makeIssuerContext());
     expect(output[0].topic).toBe("te/pki/x509/req/rejected");
   });
@@ -373,7 +461,11 @@ describe("rejection — certificate validation", () => {
       "2020-01-01T00:00:00Z",
     );
     const sig = makeReqSig(DEVICE_ID, "n-expired", OP_PUB, FACTORY_DEV_PRIV);
-    const req = makeRequest({ nonce: "n-expired", factory_cert: expiredCert, req_sig: sig });
+    const req = makeRequest({
+      nonce: "n-expired",
+      factory_cert: expiredCert,
+      req_sig: sig,
+    });
     const output = flow.onMessage(req, makeIssuerContext());
     expect(output[0].topic).toBe("te/pki/x509/req/rejected");
   });
@@ -386,15 +478,32 @@ describe("rejection — certificate validation", () => {
       "2099-01-01T00:00:00Z",
     );
     const sig = makeReqSig(DEVICE_ID, "n-future", OP_PUB, FACTORY_DEV_PRIV);
-    const req = makeRequest({ nonce: "n-future", factory_cert: futureCert, req_sig: sig });
+    const req = makeRequest({
+      nonce: "n-future",
+      factory_cert: futureCert,
+      req_sig: sig,
+    });
     const output = flow.onMessage(req, makeIssuerContext());
     expect(output[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
   });
 
   test("device_id mismatch between factory cert and request → rejected", () => {
-    const certForOther = makeFactoryCert("other-device", FACTORY_DEV_PUB, FACTORY_CA_PRIV);
-    const sig = makeReqSig(DEVICE_ID, "n-id-mismatch", OP_PUB, FACTORY_DEV_PRIV);
-    const req = makeRequest({ nonce: "n-id-mismatch", factory_cert: certForOther, req_sig: sig });
+    const certForOther = makeFactoryCert(
+      "other-device",
+      FACTORY_DEV_PUB,
+      FACTORY_CA_PRIV,
+    );
+    const sig = makeReqSig(
+      DEVICE_ID,
+      "n-id-mismatch",
+      OP_PUB,
+      FACTORY_DEV_PRIV,
+    );
+    const req = makeRequest({
+      nonce: "n-id-mismatch",
+      factory_cert: certForOther,
+      req_sig: sig,
+    });
     const output = flow.onMessage(req, makeIssuerContext());
     expect(output[0].topic).toBe("te/pki/x509/req/rejected");
   });
@@ -404,9 +513,16 @@ describe("rejection — certificate validation", () => {
     const certJson = new TextDecoder().decode(Buffer.from(orig, "base64"));
     const cert = JSON.parse(certJson);
     cert.device_id = "evil-device";
-    const tampered = uint8ToBase64(new TextEncoder().encode(JSON.stringify(cert)));
+    const tampered = uint8ToBase64(
+      new TextEncoder().encode(JSON.stringify(cert)),
+    );
     const sig = makeReqSig("evil-device", "n-tamper", OP_PUB, FACTORY_DEV_PRIV);
-    const req = makeRequest({ device_id: "evil-device", nonce: "n-tamper", factory_cert: tampered, req_sig: sig });
+    const req = makeRequest({
+      device_id: "evil-device",
+      nonce: "n-tamper",
+      factory_cert: tampered,
+      req_sig: sig,
+    });
     const output = flow.onMessage(req, makeIssuerContext());
     expect(output[0].topic).toBe("te/pki/x509/req/rejected");
   });
@@ -415,18 +531,42 @@ describe("rejection — certificate validation", () => {
 describe("rejection — request signature", () => {
   test("request signed with wrong key → rejected", () => {
     const wrongPrivBytes = ed25519.utils.randomSecretKey();
-    const factoryCert = makeFactoryCert(DEVICE_ID, FACTORY_DEV_PUB, FACTORY_CA_PRIV);
-    const sig = makeReqSig(DEVICE_ID, "n-wrongkey", OP_PUB, bytesToHex(wrongPrivBytes));
-    const req = makeRequest({ nonce: "n-wrongkey", factory_cert: factoryCert, req_sig: sig });
+    const factoryCert = makeFactoryCert(
+      DEVICE_ID,
+      FACTORY_DEV_PUB,
+      FACTORY_CA_PRIV,
+    );
+    const sig = makeReqSig(
+      DEVICE_ID,
+      "n-wrongkey",
+      OP_PUB,
+      bytesToHex(wrongPrivBytes),
+    );
+    const req = makeRequest({
+      nonce: "n-wrongkey",
+      factory_cert: factoryCert,
+      req_sig: sig,
+    });
     const output = flow.onMessage(req, makeIssuerContext());
     expect(output[0].topic).toBe("te/pki/x509/req/rejected");
   });
 
   test("tampered public_key in request after signing → rejected", () => {
-    const factoryCert = makeFactoryCert(DEVICE_ID, FACTORY_DEV_PUB, FACTORY_CA_PRIV);
+    const factoryCert = makeFactoryCert(
+      DEVICE_ID,
+      FACTORY_DEV_PUB,
+      FACTORY_CA_PRIV,
+    );
     const sig = makeReqSig(DEVICE_ID, "n-pub-tamper", OP_PUB, FACTORY_DEV_PRIV);
-    const rogueKey = uint8ToBase64(ed25519.getPublicKey(ed25519.utils.randomSecretKey()));
-    const req = makeRequest({ nonce: "n-pub-tamper", public_key: rogueKey, factory_cert: factoryCert, req_sig: sig });
+    const rogueKey = uint8ToBase64(
+      ed25519.getPublicKey(ed25519.utils.randomSecretKey()),
+    );
+    const req = makeRequest({
+      nonce: "n-pub-tamper",
+      public_key: rogueKey,
+      factory_cert: factoryCert,
+      req_sig: sig,
+    });
     const output = flow.onMessage(req, makeIssuerContext());
     expect(output[0].topic).toBe("te/pki/x509/req/rejected");
   });
@@ -439,7 +579,9 @@ describe("rejection — request signature", () => {
 describe("anti-replay nonce protection", () => {
   test("same nonce in same context → second request rejected", () => {
     const ctx = makeIssuerContext();
-    const opKey2 = uint8ToBase64(ed25519.getPublicKey(ed25519.utils.randomSecretKey()));
+    const opKey2 = uint8ToBase64(
+      ed25519.getPublicKey(ed25519.utils.randomSecretKey()),
+    );
     const out1 = flow.onMessage(makeValidRequest("replay-nonce"), ctx);
     const out2 = flow.onMessage(makeValidRequest("replay-nonce"), ctx);
     expect(out1[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
@@ -502,7 +644,11 @@ describe("require_factory_cert = false", () => {
     const msg: tedge.Message = {
       time: new Date(),
       topic: "te/pki/x509/csr",
-      payload: JSON.stringify({ device_id: DEVICE_ID, public_key: OP_PUB, nonce: "open-nonce-1" }),
+      payload: JSON.stringify({
+        device_id: DEVICE_ID,
+        public_key: OP_PUB,
+        nonce: "open-nonce-1",
+      }),
     };
     const output = flow.onMessage(msg, ctx);
     expect(output).toHaveLength(1);
@@ -514,12 +660,20 @@ describe("require_factory_cert = false", () => {
     const msg: tedge.Message = {
       time: new Date(),
       topic: "te/pki/x509/csr",
-      payload: JSON.stringify({ device_id: DEVICE_ID, public_key: OP_PUB, nonce: "open-nonce-2" }),
+      payload: JSON.stringify({
+        device_id: DEVICE_ID,
+        public_key: OP_PUB,
+        nonce: "open-nonce-2",
+      }),
     };
     const output = flow.onMessage(msg, ctx);
     const resp = JSON.parse(output[0].payload as string);
-    const deviceCert = new crypto.X509Certificate(Buffer.from(resp.cert_der, "base64"));
-    const caCert = new crypto.X509Certificate(Buffer.from(resp.ca_cert_der, "base64"));
+    const deviceCert = new crypto.X509Certificate(
+      Buffer.from(resp.cert_der, "base64"),
+    );
+    const caCert = new crypto.X509Certificate(
+      Buffer.from(resp.ca_cert_der, "base64"),
+    );
     expect(deviceCert.verify(caCert.publicKey)).toBe(true);
   });
 
@@ -528,7 +682,11 @@ describe("require_factory_cert = false", () => {
     const msg = (n: string): tedge.Message => ({
       time: new Date(),
       topic: "te/pki/x509/csr",
-      payload: JSON.stringify({ device_id: DEVICE_ID, public_key: OP_PUB, nonce: n }),
+      payload: JSON.stringify({
+        device_id: DEVICE_ID,
+        public_key: OP_PUB,
+        nonce: n,
+      }),
     });
     flow.onMessage(msg("open-replay"), ctx);
     const out2 = flow.onMessage(msg("open-replay"), ctx);
@@ -556,7 +714,11 @@ describe("require_factory_cert = false", () => {
     const msg: tedge.Message = {
       time: new Date(),
       topic: "te/pki/x509/csr",
-      payload: JSON.stringify({ device_id: DEVICE_ID, public_key: OP_PUB, nonce: "open-empty-ca" }),
+      payload: JSON.stringify({
+        device_id: DEVICE_ID,
+        public_key: OP_PUB,
+        nonce: "open-empty-ca",
+      }),
     };
     const output = flow.onMessage(msg, ctx);
     expect(output[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
@@ -567,28 +729,48 @@ describe("require_factory_cert = false", () => {
 // Server-side key generation (keygen topic)
 // ---------------------------------------------------------------------------
 
-function makeKeygenReqSig(deviceId: string, nonce: string, factoryPrivHex: string): string {
+function makeKeygenReqSig(
+  deviceId: string,
+  nonce: string,
+  factoryPrivHex: string,
+): string {
   const body = { device_id: deviceId, nonce };
   const encoder = new TextEncoder();
   const canonical = JSON.stringify(body, Object.keys(body).sort());
-  const sig = ed25519.sign(encoder.encode(canonical), hexToBytes(factoryPrivHex));
+  const sig = ed25519.sign(
+    encoder.encode(canonical),
+    hexToBytes(factoryPrivHex),
+  );
   return uint8ToBase64(sig);
 }
 
 describe("server-side key generation", () => {
-  function makeKeygenRequest(opts: { nonce?: string; factory?: boolean } = {}): tedge.Message {
+  function makeKeygenRequest(
+    opts: { nonce?: string; factory?: boolean } = {},
+  ): tedge.Message {
     const nonce = opts.nonce ?? "keygen-nonce-1";
     const payload: Record<string, string> = { device_id: DEVICE_ID, nonce };
     if (opts.factory !== false) {
-      payload._factory_cert = makeFactoryCert(DEVICE_ID, FACTORY_DEV_PUB, FACTORY_CA_PRIV);
+      payload._factory_cert = makeFactoryCert(
+        DEVICE_ID,
+        FACTORY_DEV_PUB,
+        FACTORY_CA_PRIV,
+      );
       payload._req_sig = makeKeygenReqSig(DEVICE_ID, nonce, FACTORY_DEV_PRIV);
     }
-    return { time: new Date(), topic: "te/pki/x509/keygen", payload: JSON.stringify(payload) };
+    return {
+      time: new Date(),
+      topic: "te/pki/x509/keygen",
+      payload: JSON.stringify(payload),
+    };
   }
 
   test("keygen response contains private_key_der, cert_der, ca_cert_der, device_id", () => {
     const ctx = makeIssuerContext();
-    const output = flow.onMessage(makeKeygenRequest({ nonce: "kg-fields" }), ctx);
+    const output = flow.onMessage(
+      makeKeygenRequest({ nonce: "kg-fields" }),
+      ctx,
+    );
     expect(output).toHaveLength(1);
     const resp = JSON.parse(output[0].payload as string);
     expect(resp.device_id).toBe(DEVICE_ID);
@@ -600,31 +782,49 @@ describe("server-side key generation", () => {
 
   test("keygen response is on the keygen issued topic", () => {
     const ctx = makeIssuerContext();
-    const output = flow.onMessage(makeKeygenRequest({ nonce: "kg-topic" }), ctx);
+    const output = flow.onMessage(
+      makeKeygenRequest({ nonce: "kg-topic" }),
+      ctx,
+    );
     expect(output[0].topic).toBe(`te/pki/x509/keygen/issued/${DEVICE_ID}`);
   });
 
   test("generated cert is valid and signed by CA", () => {
     const ctx = makeIssuerContext();
-    const output = flow.onMessage(makeKeygenRequest({ nonce: "kg-chain" }), ctx);
+    const output = flow.onMessage(
+      makeKeygenRequest({ nonce: "kg-chain" }),
+      ctx,
+    );
     const resp = JSON.parse(output[0].payload as string);
-    const deviceCert = new crypto.X509Certificate(Buffer.from(resp.cert_der, "base64"));
-    const caCert = new crypto.X509Certificate(Buffer.from(resp.ca_cert_der, "base64"));
+    const deviceCert = new crypto.X509Certificate(
+      Buffer.from(resp.cert_der, "base64"),
+    );
+    const caCert = new crypto.X509Certificate(
+      Buffer.from(resp.ca_cert_der, "base64"),
+    );
     expect(deviceCert.verify(caCert.publicKey)).toBe(true);
   });
 
   test("generated private key matches the public key in the cert", () => {
     const ctx = makeIssuerContext();
-    const output = flow.onMessage(makeKeygenRequest({ nonce: "kg-keypair" }), ctx);
+    const output = flow.onMessage(
+      makeKeygenRequest({ nonce: "kg-keypair" }),
+      ctx,
+    );
     const resp = JSON.parse(output[0].payload as string);
-    const deviceCert = new crypto.X509Certificate(Buffer.from(resp.cert_der, "base64"));
+    const deviceCert = new crypto.X509Certificate(
+      Buffer.from(resp.cert_der, "base64"),
+    );
 
     // Re-derive public key from the returned private key (last 32 bytes of PKCS#8 DER)
     const privBytes = Buffer.from(resp.private_key_der, "base64").slice(-32);
     const derivedPub = ed25519.getPublicKey(new Uint8Array(privBytes));
 
     // Extract raw public key from cert (last 32 bytes of SubjectPublicKeyInfo)
-    const certPubKeyDer = deviceCert.publicKey.export({ type: "spki", format: "der" }) as Buffer;
+    const certPubKeyDer = deviceCert.publicKey.export({
+      type: "spki",
+      format: "der",
+    }) as Buffer;
     const certPubKeyBytes = certPubKeyDer.slice(-32);
 
     expect(Buffer.from(derivedPub).equals(certPubKeyBytes)).toBe(true);
@@ -632,7 +832,10 @@ describe("server-side key generation", () => {
 
   test("keygen without factory cert is rejected when require_factory_cert=true (default)", () => {
     const ctx = makeIssuerContext();
-    const output = flow.onMessage(makeKeygenRequest({ nonce: "kg-no-cert", factory: false }), ctx);
+    const output = flow.onMessage(
+      makeKeygenRequest({ nonce: "kg-no-cert", factory: false }),
+      ctx,
+    );
     expect(output[0].topic).toBe("te/pki/x509/req/rejected");
   });
 
@@ -658,7 +861,10 @@ describe("server-side key generation", () => {
 
   test("custom output_keygen_topic_prefix is used", () => {
     const ctx = makeIssuerContext({ output_keygen_topic_prefix: "my/keygen" });
-    const output = flow.onMessage(makeKeygenRequest({ nonce: "kg-custom-topic" }), ctx);
+    const output = flow.onMessage(
+      makeKeygenRequest({ nonce: "kg-custom-topic" }),
+      ctx,
+    );
     expect(output[0].topic).toBe(`my/keygen/${DEVICE_ID}`);
   });
 });
@@ -671,7 +877,10 @@ describe("issuer Name DER bytes match CA subject Name DER bytes", () => {
   function toCertPEM(der: Buffer): string {
     return (
       "-----BEGIN CERTIFICATE-----\n" +
-      der.toString("base64").match(/.{1,64}/g)!.join("\n") +
+      der
+        .toString("base64")
+        .match(/.{1,64}/g)!
+        .join("\n") +
       "\n-----END CERTIFICATE-----\n"
     );
   }
@@ -681,8 +890,12 @@ describe("issuer Name DER bytes match CA subject Name DER bytes", () => {
     const output = flow.onMessage(makeValidRequest("nonce-namebytes-csr"), ctx);
     const resp = JSON.parse(output[0].payload as string);
 
-    const issuerBytes = extractIssuerNameDer(Buffer.from(resp.cert_der, "base64"));
-    const subjectBytes = extractSubjectNameDer(Buffer.from(resp.ca_cert_der, "base64"));
+    const issuerBytes = extractIssuerNameDer(
+      Buffer.from(resp.cert_der, "base64"),
+    );
+    const subjectBytes = extractSubjectNameDer(
+      Buffer.from(resp.ca_cert_der, "base64"),
+    );
 
     expect(issuerBytes.equals(subjectBytes)).toBe(true);
   });
@@ -696,15 +909,23 @@ describe("issuer Name DER bytes match CA subject Name DER bytes", () => {
       payload: JSON.stringify({
         device_id: DEVICE_ID,
         nonce,
-        _factory_cert: makeFactoryCert(DEVICE_ID, FACTORY_DEV_PUB, FACTORY_CA_PRIV),
+        _factory_cert: makeFactoryCert(
+          DEVICE_ID,
+          FACTORY_DEV_PUB,
+          FACTORY_CA_PRIV,
+        ),
         _req_sig: makeKeygenReqSig(DEVICE_ID, nonce, FACTORY_DEV_PRIV),
       }),
     };
     const output = flow.onMessage(msg, ctx);
     const resp = JSON.parse(output[0].payload as string);
 
-    const issuerBytes = extractIssuerNameDer(Buffer.from(resp.cert_der, "base64"));
-    const subjectBytes = extractSubjectNameDer(Buffer.from(resp.ca_cert_der, "base64"));
+    const issuerBytes = extractIssuerNameDer(
+      Buffer.from(resp.cert_der, "base64"),
+    );
+    const subjectBytes = extractSubjectNameDer(
+      Buffer.from(resp.ca_cert_der, "base64"),
+    );
 
     expect(issuerBytes.equals(subjectBytes)).toBe(true);
   });
@@ -716,12 +937,15 @@ describe("issuer Name DER bytes match CA subject Name DER bytes", () => {
     const path = require("path");
 
     const ctx = makeIssuerContext();
-    const output = flow.onMessage(makeValidRequest("nonce-osslverify-csr"), ctx);
+    const output = flow.onMessage(
+      makeValidRequest("nonce-osslverify-csr"),
+      ctx,
+    );
     const resp = JSON.parse(output[0].payload as string);
 
-    const tmpCA  = path.join(os.tmpdir(), "jest-ca-csr.pem");
+    const tmpCA = path.join(os.tmpdir(), "jest-ca-csr.pem");
     const tmpDev = path.join(os.tmpdir(), "jest-dev-csr.pem");
-    fs.writeFileSync(tmpCA,  CA_CERT_PEM);
+    fs.writeFileSync(tmpCA, CA_CERT_PEM);
     fs.writeFileSync(tmpDev, toCertPEM(Buffer.from(resp.cert_der, "base64")));
     try {
       execSync(`openssl verify -CAfile ${tmpCA} ${tmpDev}`, { stdio: "pipe" });
@@ -745,16 +969,20 @@ describe("issuer Name DER bytes match CA subject Name DER bytes", () => {
       payload: JSON.stringify({
         device_id: DEVICE_ID,
         nonce,
-        _factory_cert: makeFactoryCert(DEVICE_ID, FACTORY_DEV_PUB, FACTORY_CA_PRIV),
+        _factory_cert: makeFactoryCert(
+          DEVICE_ID,
+          FACTORY_DEV_PUB,
+          FACTORY_CA_PRIV,
+        ),
         _req_sig: makeKeygenReqSig(DEVICE_ID, nonce, FACTORY_DEV_PRIV),
       }),
     };
     const output = flow.onMessage(msg, ctx);
     const resp = JSON.parse(output[0].payload as string);
 
-    const tmpCA  = path.join(os.tmpdir(), "jest-ca-kg.pem");
+    const tmpCA = path.join(os.tmpdir(), "jest-ca-kg.pem");
     const tmpDev = path.join(os.tmpdir(), "jest-dev-kg.pem");
-    fs.writeFileSync(tmpCA,  CA_CERT_PEM);
+    fs.writeFileSync(tmpCA, CA_CERT_PEM);
     fs.writeFileSync(tmpDev, toCertPEM(Buffer.from(resp.cert_der, "base64")));
     try {
       execSync(`openssl verify -CAfile ${tmpCA} ${tmpDev}`, { stdio: "pipe" });
@@ -779,7 +1007,10 @@ function makeRenewalReqSig(
   const body = { device_id: deviceId, nonce, public_key: newPublicKey };
   const encoder = new TextEncoder();
   const canonical = JSON.stringify(body, Object.keys(body).sort());
-  const sig = ed25519.sign(encoder.encode(canonical), hexToBytes(currentPrivHex));
+  const sig = ed25519.sign(
+    encoder.encode(canonical),
+    hexToBytes(currentPrivHex),
+  );
   return uint8ToBase64(sig);
 }
 
@@ -824,7 +1055,14 @@ describe("certificate renewal", () => {
     const ctx = makeIssuerContext();
     const certDerB64 = issueInitialCert(ctx, "renew-init-1");
     const sig = makeRenewalReqSig(DEVICE_ID, "renew-1", OP_PUB, OP_PRIV);
-    const output = flow.onMessage(makeRenewalRequest({ nonce: "renew-1", current_cert_der_b64: certDerB64, req_sig: sig }), ctx);
+    const output = flow.onMessage(
+      makeRenewalRequest({
+        nonce: "renew-1",
+        current_cert_der_b64: certDerB64,
+        req_sig: sig,
+      }),
+      ctx,
+    );
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
   });
@@ -833,7 +1071,14 @@ describe("certificate renewal", () => {
     const ctx = makeIssuerContext();
     const certDerB64 = issueInitialCert(ctx, "renew-init-fields");
     const sig = makeRenewalReqSig(DEVICE_ID, "renew-fields", OP_PUB, OP_PRIV);
-    const output = flow.onMessage(makeRenewalRequest({ nonce: "renew-fields", current_cert_der_b64: certDerB64, req_sig: sig }), ctx);
+    const output = flow.onMessage(
+      makeRenewalRequest({
+        nonce: "renew-fields",
+        current_cert_der_b64: certDerB64,
+        req_sig: sig,
+      }),
+      ctx,
+    );
     const resp = JSON.parse(output[0].payload as string);
     expect(resp.device_id).toBe(DEVICE_ID);
     expect(resp.cert_der).toMatch(/^[A-Za-z0-9+/]+=*$/);
@@ -844,10 +1089,21 @@ describe("certificate renewal", () => {
     const ctx = makeIssuerContext();
     const certDerB64 = issueInitialCert(ctx, "renew-init-chain");
     const sig = makeRenewalReqSig(DEVICE_ID, "renew-chain", OP_PUB, OP_PRIV);
-    const output = flow.onMessage(makeRenewalRequest({ nonce: "renew-chain", current_cert_der_b64: certDerB64, req_sig: sig }), ctx);
+    const output = flow.onMessage(
+      makeRenewalRequest({
+        nonce: "renew-chain",
+        current_cert_der_b64: certDerB64,
+        req_sig: sig,
+      }),
+      ctx,
+    );
     const resp = JSON.parse(output[0].payload as string);
-    const renewedCert = new crypto.X509Certificate(Buffer.from(resp.cert_der, "base64"));
-    const caCert = new crypto.X509Certificate(Buffer.from(resp.ca_cert_der, "base64"));
+    const renewedCert = new crypto.X509Certificate(
+      Buffer.from(resp.cert_der, "base64"),
+    );
+    const caCert = new crypto.X509Certificate(
+      Buffer.from(resp.ca_cert_der, "base64"),
+    );
     expect(renewedCert.verify(caCert.publicKey)).toBe(true);
   });
 
@@ -858,7 +1114,12 @@ describe("certificate renewal", () => {
     const newPub = uint8ToBase64(ed25519.getPublicKey(newPrivBytes));
     const sig = makeRenewalReqSig(DEVICE_ID, "renew-newkey", newPub, OP_PRIV);
     const output = flow.onMessage(
-      makeRenewalRequest({ nonce: "renew-newkey", new_public_key: newPub, current_cert_der_b64: certDerB64, req_sig: sig }),
+      makeRenewalRequest({
+        nonce: "renew-newkey",
+        new_public_key: newPub,
+        current_cert_der_b64: certDerB64,
+        req_sig: sig,
+      }),
       ctx,
     );
     expect(output[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
@@ -868,24 +1129,42 @@ describe("certificate renewal", () => {
   });
 
   test("custom output_renewal_topic_prefix is used", () => {
-    const ctx = makeIssuerContext({ output_renewal_topic_prefix: "my/renewals" });
+    const ctx = makeIssuerContext({
+      output_renewal_topic_prefix: "my/renewals",
+    });
     const certDerB64 = issueInitialCert(ctx, "renew-init-topic");
     const sig = makeRenewalReqSig(DEVICE_ID, "renew-topic", OP_PUB, OP_PRIV);
-    const output = flow.onMessage(makeRenewalRequest({ nonce: "renew-topic", current_cert_der_b64: certDerB64, req_sig: sig }), ctx);
+    const output = flow.onMessage(
+      makeRenewalRequest({
+        nonce: "renew-topic",
+        current_cert_der_b64: certDerB64,
+        req_sig: sig,
+      }),
+      ctx,
+    );
     expect(output[0].topic).toBe(`my/renewals/${DEVICE_ID}`);
   });
 
   test("missing _current_cert is rejected", () => {
     const ctx = makeIssuerContext();
     const sig = makeRenewalReqSig(DEVICE_ID, "renew-no-curr", OP_PUB, OP_PRIV);
-    const output = flow.onMessage(makeRenewalRequest({ nonce: "renew-no-curr", req_sig: sig }), ctx);
+    const output = flow.onMessage(
+      makeRenewalRequest({ nonce: "renew-no-curr", req_sig: sig }),
+      ctx,
+    );
     expect(output[0].topic).toBe("te/pki/x509/req/rejected");
   });
 
   test("missing _req_sig is rejected", () => {
     const ctx = makeIssuerContext();
     const certDerB64 = issueInitialCert(ctx, "renew-init-nosig");
-    const output = flow.onMessage(makeRenewalRequest({ nonce: "renew-nosig", current_cert_der_b64: certDerB64 }), ctx);
+    const output = flow.onMessage(
+      makeRenewalRequest({
+        nonce: "renew-nosig",
+        current_cert_der_b64: certDerB64,
+      }),
+      ctx,
+    );
     expect(output[0].topic).toBe("te/pki/x509/req/rejected");
   });
 
@@ -898,7 +1177,11 @@ describe("certificate renewal", () => {
     const corruptedCertDerB64 = certBytes.toString("base64");
     const sig = makeRenewalReqSig(DEVICE_ID, "renew-foreign", OP_PUB, OP_PRIV);
     const output = flow.onMessage(
-      makeRenewalRequest({ nonce: "renew-foreign", current_cert_der_b64: corruptedCertDerB64, req_sig: sig }),
+      makeRenewalRequest({
+        nonce: "renew-foreign",
+        current_cert_der_b64: corruptedCertDerB64,
+        req_sig: sig,
+      }),
       ctx,
     );
     expect(output[0].topic).toBe("te/pki/x509/req/rejected");
@@ -910,14 +1193,30 @@ describe("certificate renewal", () => {
     const otherMsg: tedge.Message = {
       time: new Date(),
       topic: "te/pki/x509/csr",
-      payload: JSON.stringify({ device_id: "other-device", public_key: OP_PUB, nonce: "cn-mismatch-issue" }),
+      payload: JSON.stringify({
+        device_id: "other-device",
+        public_key: OP_PUB,
+        nonce: "cn-mismatch-issue",
+      }),
     };
-    const issuedResp = JSON.parse(flow.onMessage(otherMsg, ctx)[0].payload as string);
+    const issuedResp = JSON.parse(
+      flow.onMessage(otherMsg, ctx)[0].payload as string,
+    );
 
     // Try to renew claiming device_id = DEVICE_ID, but the cert's CN = "other-device"
-    const sig = makeRenewalReqSig(DEVICE_ID, "cn-mismatch-renew", OP_PUB, OP_PRIV);
+    const sig = makeRenewalReqSig(
+      DEVICE_ID,
+      "cn-mismatch-renew",
+      OP_PUB,
+      OP_PRIV,
+    );
     const output = flow.onMessage(
-      makeRenewalRequest({ device_id: DEVICE_ID, nonce: "cn-mismatch-renew", current_cert_der_b64: issuedResp.cert_der, req_sig: sig }),
+      makeRenewalRequest({
+        device_id: DEVICE_ID,
+        nonce: "cn-mismatch-renew",
+        current_cert_der_b64: issuedResp.cert_der,
+        req_sig: sig,
+      }),
       ctx,
     );
     expect(output[0].topic).toBe("te/pki/x509/req/rejected");
@@ -927,9 +1226,18 @@ describe("certificate renewal", () => {
     const ctx = makeIssuerContext();
     const certDerB64 = issueInitialCert(ctx, "renew-init-wrongsig");
     const wrongPriv = bytesToHex(ed25519.utils.randomSecretKey());
-    const sig = makeRenewalReqSig(DEVICE_ID, "renew-wrongsig", OP_PUB, wrongPriv);
+    const sig = makeRenewalReqSig(
+      DEVICE_ID,
+      "renew-wrongsig",
+      OP_PUB,
+      wrongPriv,
+    );
     const output = flow.onMessage(
-      makeRenewalRequest({ nonce: "renew-wrongsig", current_cert_der_b64: certDerB64, req_sig: sig }),
+      makeRenewalRequest({
+        nonce: "renew-wrongsig",
+        current_cert_der_b64: certDerB64,
+        req_sig: sig,
+      }),
       ctx,
     );
     expect(output[0].topic).toBe("te/pki/x509/req/rejected");
@@ -938,8 +1246,17 @@ describe("certificate renewal", () => {
   test("nonce replay in renewal is rejected", () => {
     const ctx = makeIssuerContext();
     const certDerB64 = issueInitialCert(ctx, "renew-init-replay");
-    const sig = makeRenewalReqSig(DEVICE_ID, "renew-replay-nonce", OP_PUB, OP_PRIV);
-    const req = makeRenewalRequest({ nonce: "renew-replay-nonce", current_cert_der_b64: certDerB64, req_sig: sig });
+    const sig = makeRenewalReqSig(
+      DEVICE_ID,
+      "renew-replay-nonce",
+      OP_PUB,
+      OP_PRIV,
+    );
+    const req = makeRenewalRequest({
+      nonce: "renew-replay-nonce",
+      current_cert_der_b64: certDerB64,
+      req_sig: sig,
+    });
     const out1 = flow.onMessage(req, ctx);
     const out2 = flow.onMessage(req, ctx);
     expect(out1[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
@@ -948,11 +1265,23 @@ describe("certificate renewal", () => {
 
   test("renewal_window_days rejects cert not close enough to expiry", () => {
     // cert_validity_days=365; renewal_window_days=30 → cert expires in 365 days, window is 30 → rejected
-    const ctx = makeIssuerContext({ cert_validity_days: 365, renewal_window_days: 30 });
+    const ctx = makeIssuerContext({
+      cert_validity_days: 365,
+      renewal_window_days: 30,
+    });
     const certDerB64 = issueInitialCert(ctx, "renew-init-window-far");
-    const sig = makeRenewalReqSig(DEVICE_ID, "renew-window-far", OP_PUB, OP_PRIV);
+    const sig = makeRenewalReqSig(
+      DEVICE_ID,
+      "renew-window-far",
+      OP_PUB,
+      OP_PRIV,
+    );
     const output = flow.onMessage(
-      makeRenewalRequest({ nonce: "renew-window-far", current_cert_der_b64: certDerB64, req_sig: sig }),
+      makeRenewalRequest({
+        nonce: "renew-window-far",
+        current_cert_der_b64: certDerB64,
+        req_sig: sig,
+      }),
       ctx,
     );
     expect(output[0].topic).toBe("te/pki/x509/req/rejected");
@@ -960,11 +1289,23 @@ describe("certificate renewal", () => {
 
   test("renewal_window_days accepts cert close to expiry", () => {
     // cert_validity_days=10; renewal_window_days=30 → cert expires in 10 days, within 30-day window → accepted
-    const ctx = makeIssuerContext({ cert_validity_days: 10, renewal_window_days: 30 });
+    const ctx = makeIssuerContext({
+      cert_validity_days: 10,
+      renewal_window_days: 30,
+    });
     const certDerB64 = issueInitialCert(ctx, "renew-init-window-close");
-    const sig = makeRenewalReqSig(DEVICE_ID, "renew-window-close", OP_PUB, OP_PRIV);
+    const sig = makeRenewalReqSig(
+      DEVICE_ID,
+      "renew-window-close",
+      OP_PUB,
+      OP_PRIV,
+    );
     const output = flow.onMessage(
-      makeRenewalRequest({ nonce: "renew-window-close", current_cert_der_b64: certDerB64, req_sig: sig }),
+      makeRenewalRequest({
+        nonce: "renew-window-close",
+        current_cert_der_b64: certDerB64,
+        req_sig: sig,
+      }),
       ctx,
     );
     expect(output).toHaveLength(1);
@@ -975,9 +1316,18 @@ describe("certificate renewal", () => {
     // Factory cert verification is required for CSR but should be bypassed for renewal
     const ctx = makeIssuerContext(); // require_factory_cert=true (default)
     const certDerB64 = issueInitialCert(ctx, "renew-init-factorybypass");
-    const sig = makeRenewalReqSig(DEVICE_ID, "renew-factorybypass", OP_PUB, OP_PRIV);
+    const sig = makeRenewalReqSig(
+      DEVICE_ID,
+      "renew-factorybypass",
+      OP_PUB,
+      OP_PRIV,
+    );
     const output = flow.onMessage(
-      makeRenewalRequest({ nonce: "renew-factorybypass", current_cert_der_b64: certDerB64, req_sig: sig }),
+      makeRenewalRequest({
+        nonce: "renew-factorybypass",
+        current_cert_der_b64: certDerB64,
+        req_sig: sig,
+      }),
       ctx,
     );
     expect(output).toHaveLength(1);
@@ -1095,10 +1445,17 @@ describe("Subject Alternative Names (SAN)", () => {
       san_dns_names: JSON.stringify(["device.local"]),
       san_ip_addresses: JSON.stringify(["10.1.2.3"]),
     });
-    const initCertDerB64 = JSON.parse(flow.onMessage(initMsg, ctx)[0].payload as string).cert_der as string;
+    const initCertDerB64 = JSON.parse(
+      flow.onMessage(initMsg, ctx)[0].payload as string,
+    ).cert_der as string;
 
     // Renew without providing SAN fields
-    const sig = makeRenewalReqSig(DEVICE_ID, "san-renew-inherit-1", OP_PUB, OP_PRIV);
+    const sig = makeRenewalReqSig(
+      DEVICE_ID,
+      "san-renew-inherit-1",
+      OP_PUB,
+      OP_PRIV,
+    );
     const renewMsg = makeRenewalRequest({
       nonce: "san-renew-inherit-1",
       current_cert_der_b64: initCertDerB64,
@@ -1117,10 +1474,17 @@ describe("Subject Alternative Names (SAN)", () => {
     const initMsg = makeOpenRequest("san-renew-override-init", {
       san_dns_names: JSON.stringify(["old.local"]),
     });
-    const initCertDerB64 = JSON.parse(flow.onMessage(initMsg, ctx)[0].payload as string).cert_der as string;
+    const initCertDerB64 = JSON.parse(
+      flow.onMessage(initMsg, ctx)[0].payload as string,
+    ).cert_der as string;
 
     // Renew providing different SANs
-    const sig = makeRenewalReqSig(DEVICE_ID, "san-renew-override-1", OP_PUB, OP_PRIV);
+    const sig = makeRenewalReqSig(
+      DEVICE_ID,
+      "san-renew-override-1",
+      OP_PUB,
+      OP_PRIV,
+    );
     const renewMsg: tedge.Message = {
       time: new Date(),
       topic: "te/pki/x509/renew",
@@ -1144,14 +1508,27 @@ describe("Subject Alternative Names (SAN)", () => {
 
     // Issue initial cert without SANs
     const initMsg = makeOpenRequest("san-renew-none-init");
-    const initCertDerB64 = JSON.parse(flow.onMessage(initMsg, ctx)[0].payload as string).cert_der as string;
+    const initCertDerB64 = JSON.parse(
+      flow.onMessage(initMsg, ctx)[0].payload as string,
+    ).cert_der as string;
 
     // Renew without providing SANs
-    const sig = makeRenewalReqSig(DEVICE_ID, "san-renew-none-1", OP_PUB, OP_PRIV);
-    const renewedCert = parseCertFromOutput(flow.onMessage(
-      makeRenewalRequest({ nonce: "san-renew-none-1", current_cert_der_b64: initCertDerB64, req_sig: sig }),
-      ctx,
-    ));
+    const sig = makeRenewalReqSig(
+      DEVICE_ID,
+      "san-renew-none-1",
+      OP_PUB,
+      OP_PRIV,
+    );
+    const renewedCert = parseCertFromOutput(
+      flow.onMessage(
+        makeRenewalRequest({
+          nonce: "san-renew-none-1",
+          current_cert_der_b64: initCertDerB64,
+          req_sig: sig,
+        }),
+        ctx,
+      ),
+    );
     expect(getSAN(renewedCert)).toBe("");
   });
 });

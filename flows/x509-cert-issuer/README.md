@@ -58,22 +58,22 @@ mosquitto_pub -h localhost -t te/pki/x509/csr -m '{
 
 ### Configuration
 
-| Parameter                    | Default                         | Description                                                                                                                 |
-| ---------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `ca_private_key`             | *(required)*                    | Base64-encoded 32-byte Ed25519 private key of this CA.                                                                      |
-| `ca_cert_der`                | *(required)*                    | Base64-encoded DER of the CA certificate. Included in the response so the device can install the full chain.                |
-| `factory_ca_public_keys`     | `[]`                            | JSON array of base64-encoded Ed25519 public keys. A factory certificate signed by *any* entry is accepted.                  |
-| `cert_validity_days`         | `365`                           | Validity period for issued certificates in days.                                                                            |
-| `nonce_window_hours`         | `24`                            | Time window for nonce uniqueness enforcement. Resets on flow restart.                                                       |
-| `require_factory_cert`       | `true`                          | When `false`, factory certificate and request signature checks are skipped. Only use when topic access is restricted.       |
-| `keygen_topic`               | `te/pki/x509/keygen`            | Input topic for server-side key generation — flow generates the keypair on behalf of the device.                            |
-| `output_cert_topic_prefix`   | `te/pki/x509/cert/issued`       | Issued certificates are published to `<prefix>/<device_id>`.                                                                |
-| `output_keygen_topic_prefix` | `te/pki/x509/keygen/issued`     | Keygen responses are published to `<prefix>/<device_id>`.                                                                   |
-| `renewal_topic`              | `te/pki/x509/renew`             | Input topic for certificate renewal requests. No factory certificate is required — see below.                               |
-| `output_renewal_topic_prefix`| *(same as `output_cert_topic_prefix`)* | Renewal responses are published to `<prefix>/<device_id>`.                                                         |
-| `renewal_window_days`        | *(unset)*                       | When set, only allow renewals within this many days of certificate expiry.                                                  |
-| `output_rejected_topic`      | `te/pki/x509/req/rejected`      | Topic for rejected requests. Empty string silently discards.                                                                |
-| `debug`                      | `false`                         | Log request outcomes to the console.                                                                                        |
+| Parameter                     | Default                                | Description                                                                                                           |
+| ----------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `ca_private_key`              | _(required)_                           | Base64-encoded 32-byte Ed25519 private key of this CA.                                                                |
+| `ca_cert_der`                 | _(required)_                           | Base64-encoded DER of the CA certificate. Included in the response so the device can install the full chain.          |
+| `factory_ca_public_keys`      | `[]`                                   | JSON array of base64-encoded Ed25519 public keys. A factory certificate signed by _any_ entry is accepted.            |
+| `cert_validity_days`          | `365`                                  | Validity period for issued certificates in days.                                                                      |
+| `nonce_window_hours`          | `24`                                   | Time window for nonce uniqueness enforcement. Resets on flow restart.                                                 |
+| `require_factory_cert`        | `true`                                 | When `false`, factory certificate and request signature checks are skipped. Only use when topic access is restricted. |
+| `keygen_topic`                | `te/pki/x509/keygen`                   | Input topic for server-side key generation — flow generates the keypair on behalf of the device.                      |
+| `output_cert_topic_prefix`    | `te/pki/x509/cert/issued`              | Issued certificates are published to `<prefix>/<device_id>`.                                                          |
+| `output_keygen_topic_prefix`  | `te/pki/x509/keygen/issued`            | Keygen responses are published to `<prefix>/<device_id>`.                                                             |
+| `renewal_topic`               | `te/pki/x509/renew`                    | Input topic for certificate renewal requests. No factory certificate is required — see below.                         |
+| `output_renewal_topic_prefix` | _(same as `output_cert_topic_prefix`)_ | Renewal responses are published to `<prefix>/<device_id>`.                                                            |
+| `renewal_window_days`         | _(unset)_                              | When set, only allow renewals within this many days of certificate expiry.                                            |
+| `output_rejected_topic`       | `te/pki/x509/req/rejected`             | Topic for rejected requests. Empty string silently discards.                                                          |
+| `debug`                       | `false`                                | Log request outcomes to the console.                                                                                  |
 
 ### Devices without factory certificates (`require_factory_cert = false`)
 
@@ -209,6 +209,7 @@ Publish to `te/pki/x509/renew` and subscribe to `te/pki/x509/cert/issued/<device
 `_req_sig` is an Ed25519 signature of the canonical JSON of `{device_id, nonce, public_key}` (keys sorted alphabetically) using the **current operational private key** — the one corresponding to the public key in `_current_cert`. The `public_key` field is the key to certify in the renewed certificate and may be the same as the current key or a new one (key rotation).
 
 The flow verifies that:
+
 1. `_current_cert` was signed by this CA.
 2. The CN in `_current_cert` matches `device_id`.
 3. `_current_cert` has not expired.
@@ -462,7 +463,7 @@ jq -r '.ca_cert_pem'     /tmp/keygen-response.json > ca-cert.pem
 
 #### Enrolling against a live MQTT broker with `enroll`
 
-Once the flow is running on a real thin-edge.io device you can enroll new clients with the `enroll` command in `scripts/x509-cert.sh`. It subscribes for the response *before* publishing (to avoid race conditions), then writes `device-private.pem`, `device-cert.pem`, and `ca-cert.pem` directly to disk.
+Once the flow is running on a real thin-edge.io device you can enroll new clients with the `enroll` command in `scripts/x509-cert.sh`. It subscribes for the response _before_ publishing (to avoid race conditions), then writes `device-private.pem`, `device-cert.pem`, and `ca-cert.pem` directly to disk.
 
 **Open mode (`require_factory_cert = false`) — server generates the keypair:**
 
@@ -507,62 +508,62 @@ A mosquitto broker must be already configure and running on a non-TLS endpoint.
 
 1. Create certificate for the broker
 
-    ```sh
-    ./x509-cert.sh enroll broker --broker localhost --keygen \
-    --san-dns localhost --san-dns "$HOST" \
-    --san-ip 127.0.0.1
-    ```
+   ```sh
+   ./x509-cert.sh enroll broker --broker localhost --keygen \
+   --san-dns localhost --san-dns "$HOST" \
+   --san-ip 127.0.0.1
+   ```
 
 1. Copy the certificates
 
-    ```sh
-    mkdir -p /etc/mosquitto/certs/
-    cp device-private.pem  /etc/mosquitto/certs/broker-private.pem
-    cp device-cert.pem /etc/mosquitto/certs/broker-cert.pem
-    cp ca-cert.pem /etc/mosquitto/certs/ca-cert.pem
-    ```
+   ```sh
+   mkdir -p /etc/mosquitto/certs/
+   cp device-private.pem  /etc/mosquitto/certs/broker-private.pem
+   cp device-cert.pem /etc/mosquitto/certs/broker-cert.pem
+   cp ca-cert.pem /etc/mosquitto/certs/ca-cert.pem
+   ```
 
 1. Create a mosquitto TLS listener
 
-    ```sh
-    TEDGE_CONFIG_DIR=${TEDGE_CONFIG_DIR:-/etc/tedge}
-    cat <<EOT >${TEDGE_CONFIG_DIR}/mosquitto-conf/mosquitto-tls.conf
-    # TLS listener on port 8883
-    listener 8883
+   ```sh
+   TEDGE_CONFIG_DIR=${TEDGE_CONFIG_DIR:-/etc/tedge}
+   cat <<EOT >${TEDGE_CONFIG_DIR}/mosquitto-conf/mosquitto-tls.conf
+   # TLS listener on port 8883
+   listener 8883
 
-    # CA certificate used to verify connecting client certificates.
-    # Certificates issued by the x509-cert-issuer flow are signed by this CA.
-    cafile /etc/mosquitto/certs/ca-cert.pem
+   # CA certificate used to verify connecting client certificates.
+   # Certificates issued by the x509-cert-issuer flow are signed by this CA.
+   cafile /etc/mosquitto/certs/ca-cert.pem
 
-    # Server certificate and private key.
-    certfile /etc/mosquitto/certs/broker-cert.pem
-    keyfile /etc/mosquitto/certs/broker-private.pem
+   # Server certificate and private key.
+   certfile /etc/mosquitto/certs/broker-cert.pem
+   keyfile /etc/mosquitto/certs/broker-private.pem
 
 
-    # Require clients to present a valid certificate signed by the CA above.
-    require_certificate true
+   # Require clients to present a valid certificate signed by the CA above.
+   require_certificate true
 
-    # Use the certificate's Common Name (CN) as the MQTT client username.
-    # This lets you apply per-device ACL rules based on the CN.
-    use_identity_as_username true
-    EOT
-    ```
+   # Use the certificate's Common Name (CN) as the MQTT client username.
+   # This lets you apply per-device ACL rules based on the CN.
+   use_identity_as_username true
+   EOT
+   ```
 
 1. Restart mosquitto
 
-    ```sh
-    systemctl restart mosquitto
-    ```
+   ```sh
+   systemctl restart mosquitto
+   ```
 
 1. Create a child certificate and use it to connect to the broker
 
-    ```sh
-    mosquitto_sub -h localhost -p 8883 \
-        --cafile ca-cert.pem \
-        --key device-private.pem \
-        --cert device-cert.pem \
-        -t '#' -v --debug
-    ```
+   ```sh
+   mosquitto_sub -h localhost -p 8883 \
+       --cafile ca-cert.pem \
+       --key device-private.pem \
+       --cert device-cert.pem \
+       -t '#' -v --debug
+   ```
 
 ### Related flows
 

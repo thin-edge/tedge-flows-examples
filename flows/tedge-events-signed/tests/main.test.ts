@@ -40,7 +40,10 @@ function makeCertificate(
   if (expires) certBody.expires = expires;
   const encoder = new TextEncoder();
   const canonical = JSON.stringify(certBody, Object.keys(certBody).sort());
-  const sig = ed25519.sign(encoder.encode(canonical), hexToBytes(caPrivateKeyHex));
+  const sig = ed25519.sign(
+    encoder.encode(canonical),
+    hexToBytes(caPrivateKeyHex),
+  );
   const cert = { ...certBody, _cert_sig: uint8ToBase64(sig) };
   return uint8ToBase64(encoder.encode(JSON.stringify(cert)));
 }
@@ -212,11 +215,14 @@ describe("Ed25519 signing", () => {
     );
 
     const encoder = new TextEncoder();
-    const canonical = JSON.stringify(payloadWithoutSig, Object.keys(payloadWithoutSig).sort());
-    const sigBytes = hexToBytes(
-      Buffer.from(_sig, "base64").toString("hex"),
+    const canonical = JSON.stringify(
+      payloadWithoutSig,
+      Object.keys(payloadWithoutSig).sort(),
     );
-    expect(ed25519.verify(sigBytes, encoder.encode(canonical), TEST_PUBLIC_KEY)).toBe(true);
+    const sigBytes = hexToBytes(Buffer.from(_sig, "base64").toString("hex"));
+    expect(
+      ed25519.verify(sigBytes, encoder.encode(canonical), TEST_PUBLIC_KEY),
+    ).toBe(true);
   });
 
   test("signature is invalid if payload is tampered with", () => {
@@ -237,11 +243,14 @@ describe("Ed25519 signing", () => {
     payloadWithoutSig.text = "tampered";
 
     const encoder2 = new TextEncoder();
-    const canonical2 = JSON.stringify(payloadWithoutSig, Object.keys(payloadWithoutSig).sort());
-    const sigBytes2 = hexToBytes(
-      Buffer.from(_sig, "base64").toString("hex"),
+    const canonical2 = JSON.stringify(
+      payloadWithoutSig,
+      Object.keys(payloadWithoutSig).sort(),
     );
-    expect(ed25519.verify(sigBytes2, encoder2.encode(canonical2), TEST_PUBLIC_KEY)).toBe(false);
+    const sigBytes2 = hexToBytes(Buffer.from(_sig, "base64").toString("hex"));
+    expect(
+      ed25519.verify(sigBytes2, encoder2.encode(canonical2), TEST_PUBLIC_KEY),
+    ).toBe(false);
   });
 
   test("different private keys produce different signatures", () => {
@@ -251,8 +260,14 @@ describe("Ed25519 signing", () => {
       payload: JSON.stringify({ text: "door opened" }),
     };
 
-    const out1 = flow.onMessage(msg, tedge.createContext({ private_key: TEST_PRIVATE_KEY }));
-    const out2 = flow.onMessage(msg, tedge.createContext({ private_key: CA_PRIVATE_KEY }));
+    const out1 = flow.onMessage(
+      msg,
+      tedge.createContext({ private_key: TEST_PRIVATE_KEY }),
+    );
+    const out2 = flow.onMessage(
+      msg,
+      tedge.createContext({ private_key: CA_PRIVATE_KEY }),
+    );
 
     const { _sig: sig1 } = tedge.decodeJsonPayload(out1[0].payload);
     const { _sig: sig2 } = tedge.decodeJsonPayload(out2[0].payload);
@@ -276,8 +291,15 @@ describe("PKI certificate", () => {
   }
 
   test("_cert is attached when device_cert is configured", () => {
-    const cert = makeCertificate(DEVICE_SOURCE, bytesToHex(TEST_PUBLIC_KEY), CA_PRIVATE_KEY);
-    const context = makeContext({ private_key: TEST_PRIVATE_KEY, device_cert: cert });
+    const cert = makeCertificate(
+      DEVICE_SOURCE,
+      bytesToHex(TEST_PUBLIC_KEY),
+      CA_PRIVATE_KEY,
+    );
+    const context = makeContext({
+      private_key: TEST_PRIVATE_KEY,
+      device_cert: cert,
+    });
     const output = flow.onMessage(baseMsg, context);
     const payload = tedge.decodeJsonPayload(output[0].payload);
     expect(payload._cert).toBe(cert);
@@ -292,18 +314,31 @@ describe("PKI certificate", () => {
   });
 
   test("_cert is not included in the signed canonical form", () => {
-    const cert = makeCertificate(DEVICE_SOURCE, bytesToHex(TEST_PUBLIC_KEY), CA_PRIVATE_KEY);
-    const context = makeContext({ private_key: TEST_PRIVATE_KEY, device_cert: cert });
+    const cert = makeCertificate(
+      DEVICE_SOURCE,
+      bytesToHex(TEST_PUBLIC_KEY),
+      CA_PRIVATE_KEY,
+    );
+    const context = makeContext({
+      private_key: TEST_PRIVATE_KEY,
+      device_cert: cert,
+    });
     const output = flow.onMessage(baseMsg, context);
     const { _sig, _cert, ...rest } = tedge.decodeJsonPayload(output[0].payload);
     const encoder = new TextEncoder();
     const canonical = JSON.stringify(rest, Object.keys(rest).sort());
     const sigBytes = Buffer.from(_sig, "base64");
-    expect(ed25519.verify(sigBytes, encoder.encode(canonical), TEST_PUBLIC_KEY)).toBe(true);
+    expect(
+      ed25519.verify(sigBytes, encoder.encode(canonical), TEST_PUBLIC_KEY),
+    ).toBe(true);
   });
 
   test("_cert is not attached when no private_key configured", () => {
-    const cert = makeCertificate(DEVICE_SOURCE, bytesToHex(TEST_PUBLIC_KEY), CA_PRIVATE_KEY);
+    const cert = makeCertificate(
+      DEVICE_SOURCE,
+      bytesToHex(TEST_PUBLIC_KEY),
+      CA_PRIVATE_KEY,
+    );
     const context = makeContext({ device_cert: cert });
     const output = flow.onMessage(baseMsg, context);
     const payload = tedge.decodeJsonPayload(output[0].payload);

@@ -10,7 +10,9 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 // All keypairs generated fresh each test run — never committed
 const TEST_PRIVATE_KEY_BYTES = ed25519.utils.randomSecretKey();
 const TEST_PRIVATE_KEY = bytesToHex(TEST_PRIVATE_KEY_BYTES);
-const TEST_PUBLIC_KEY = bytesToHex(ed25519.getPublicKey(TEST_PRIVATE_KEY_BYTES));
+const TEST_PUBLIC_KEY = bytesToHex(
+  ed25519.getPublicKey(TEST_PRIVATE_KEY_BYTES),
+);
 const DEVICE_SOURCE = "my-device";
 
 const CA_PRIVATE_KEY_BYTES = ed25519.utils.randomSecretKey();
@@ -19,7 +21,9 @@ const CA_PUBLIC_KEY = bytesToHex(ed25519.getPublicKey(CA_PRIVATE_KEY_BYTES));
 
 const DEVICE2_PRIVATE_KEY_BYTES = ed25519.utils.randomSecretKey();
 const DEVICE2_PRIVATE_KEY = bytesToHex(DEVICE2_PRIVATE_KEY_BYTES);
-const DEVICE2_PUBLIC_KEY = bytesToHex(ed25519.getPublicKey(DEVICE2_PRIVATE_KEY_BYTES));
+const DEVICE2_PUBLIC_KEY = bytesToHex(
+  ed25519.getPublicKey(DEVICE2_PRIVATE_KEY_BYTES),
+);
 
 function hexToBytes(hex: string): Uint8Array {
   const bytes = new Uint8Array(hex.length / 2);
@@ -48,7 +52,10 @@ function makeCertificate(
   if (expires) certBody.expires = expires;
   const encoder = new TextEncoder();
   const canonical = JSON.stringify(certBody, Object.keys(certBody).sort());
-  const sig = ed25519.sign(encoder.encode(canonical), hexToBytes(caPrivateKeyHex));
+  const sig = ed25519.sign(
+    encoder.encode(canonical),
+    hexToBytes(caPrivateKeyHex),
+  );
   const cert = { ...certBody, _cert_sig: uint8ToBase64(sig) };
   return uint8ToBase64(encoder.encode(JSON.stringify(cert)));
 }
@@ -93,14 +100,18 @@ beforeAll(() => {
   const { privateKey } = crypto.generateKeyPairSync("ed25519");
   const privDer = privateKey.export({ type: "pkcs8", format: "der" }) as Buffer;
   X509_CA_PRIV_B64 = Buffer.from(privDer.slice(-32)).toString("base64");
-  X509_CA_PUB_HEX = bytesToHex(ed25519.getPublicKey(Buffer.from(X509_CA_PRIV_B64, "base64")));
+  X509_CA_PUB_HEX = bytesToHex(
+    ed25519.getPublicKey(Buffer.from(X509_CA_PRIV_B64, "base64")),
+  );
 
   const { execSync } = require("child_process");
   execSync(
     `openssl req -new -x509 -key /dev/stdin -out /tmp/ca-verify-jest.pem -days 3650 -subj "/CN=TestCAVerify" 2>/dev/null`,
     { input: privateKey.export({ type: "pkcs8", format: "pem" }) as string },
   );
-  const derBuf = execSync(`openssl x509 -in /tmp/ca-verify-jest.pem -outform DER 2>/dev/null`) as Buffer;
+  const derBuf = execSync(
+    `openssl x509 -in /tmp/ca-verify-jest.pem -outform DER 2>/dev/null`,
+  ) as Buffer;
   X509_CA_CERT_DER_B64 = derBuf.toString("base64");
 });
 
@@ -186,7 +197,11 @@ describe("rejected messages", () => {
   });
 
   test("message signed with wrong key is rejected", () => {
-    const signed = makeSignedMessage("door opened", DEVICE_SOURCE, CA_PRIVATE_KEY);
+    const signed = makeSignedMessage(
+      "door opened",
+      DEVICE_SOURCE,
+      CA_PRIVATE_KEY,
+    );
     const output = flow.onMessage(signed, makeVerifierContext());
 
     expect(output).toHaveLength(1);
@@ -217,8 +232,16 @@ describe("multiple devices", () => {
       "device-2": DEVICE2_PUBLIC_KEY,
     });
 
-    const msg1 = makeSignedMessage("event from device 1", DEVICE_SOURCE, TEST_PRIVATE_KEY);
-    const msg2 = makeSignedMessage("event from device 2", "device-2", DEVICE2_PRIVATE_KEY);
+    const msg1 = makeSignedMessage(
+      "event from device 1",
+      DEVICE_SOURCE,
+      TEST_PRIVATE_KEY,
+    );
+    const msg2 = makeSignedMessage(
+      "event from device 2",
+      "device-2",
+      DEVICE2_PRIVATE_KEY,
+    );
 
     const out1 = flow.onMessage(msg1, context);
     const out2 = flow.onMessage(msg2, context);
@@ -229,14 +252,23 @@ describe("multiple devices", () => {
 });
 
 describe("PKI certificate mode", () => {
-  const DEVICE_CERT = makeCertificate(DEVICE_SOURCE, TEST_PUBLIC_KEY, CA_PRIVATE_KEY);
+  const DEVICE_CERT = makeCertificate(
+    DEVICE_SOURCE,
+    TEST_PUBLIC_KEY,
+    CA_PRIVATE_KEY,
+  );
 
   function makeVerifierContextPKI(extra: Record<string, unknown> = {}) {
     return tedge.createContext({ root_ca_public_key: CA_PUBLIC_KEY, ...extra });
   }
 
   test("valid cert and valid signature → verified", () => {
-    const signed = makeSignedMessage("door opened", DEVICE_SOURCE, TEST_PRIVATE_KEY, DEVICE_CERT);
+    const signed = makeSignedMessage(
+      "door opened",
+      DEVICE_SOURCE,
+      TEST_PRIVATE_KEY,
+      DEVICE_CERT,
+    );
     const output = flow.onMessage(signed, makeVerifierContextPKI());
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("te/verified/events");
@@ -250,7 +282,12 @@ describe("PKI certificate mode", () => {
   });
 
   test("tampered payload → rejected", () => {
-    const signed = makeSignedMessage("door opened", DEVICE_SOURCE, TEST_PRIVATE_KEY, DEVICE_CERT);
+    const signed = makeSignedMessage(
+      "door opened",
+      DEVICE_SOURCE,
+      TEST_PRIVATE_KEY,
+      DEVICE_CERT,
+    );
     const payload = tedge.decodeJsonPayload(signed.payload);
     payload.text = "tampered text";
     const tampered = { ...signed, payload: JSON.stringify(payload) };
@@ -260,34 +297,77 @@ describe("PKI certificate mode", () => {
   });
 
   test("cert signed by wrong CA → rejected", () => {
-    const wrongCACert = makeCertificate(DEVICE_SOURCE, TEST_PUBLIC_KEY, TEST_PRIVATE_KEY);
-    const signed = makeSignedMessage("event", DEVICE_SOURCE, TEST_PRIVATE_KEY, wrongCACert);
+    const wrongCACert = makeCertificate(
+      DEVICE_SOURCE,
+      TEST_PUBLIC_KEY,
+      TEST_PRIVATE_KEY,
+    );
+    const signed = makeSignedMessage(
+      "event",
+      DEVICE_SOURCE,
+      TEST_PRIVATE_KEY,
+      wrongCACert,
+    );
     const output = flow.onMessage(signed, makeVerifierContextPKI());
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("te/rejected/events");
   });
 
   test("expired certificate → rejected", () => {
-    const expiredCert = makeCertificate(DEVICE_SOURCE, TEST_PUBLIC_KEY, CA_PRIVATE_KEY, "2020-01-01T00:00:00Z");
-    const signed = makeSignedMessage("event", DEVICE_SOURCE, TEST_PRIVATE_KEY, expiredCert);
+    const expiredCert = makeCertificate(
+      DEVICE_SOURCE,
+      TEST_PUBLIC_KEY,
+      CA_PRIVATE_KEY,
+      "2020-01-01T00:00:00Z",
+    );
+    const signed = makeSignedMessage(
+      "event",
+      DEVICE_SOURCE,
+      TEST_PRIVATE_KEY,
+      expiredCert,
+    );
     const output = flow.onMessage(signed, makeVerifierContextPKI());
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("te/rejected/events");
   });
 
   test("future expiry is accepted", () => {
-    const futureCert = makeCertificate(DEVICE_SOURCE, TEST_PUBLIC_KEY, CA_PRIVATE_KEY, "2099-01-01T00:00:00Z");
-    const signed = makeSignedMessage("event", DEVICE_SOURCE, TEST_PRIVATE_KEY, futureCert);
+    const futureCert = makeCertificate(
+      DEVICE_SOURCE,
+      TEST_PUBLIC_KEY,
+      CA_PRIVATE_KEY,
+      "2099-01-01T00:00:00Z",
+    );
+    const signed = makeSignedMessage(
+      "event",
+      DEVICE_SOURCE,
+      TEST_PRIVATE_KEY,
+      futureCert,
+    );
     const output = flow.onMessage(signed, makeVerifierContextPKI());
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("te/verified/events");
   });
 
   test("multiple devices with separate certs from same CA", () => {
-    const cert2 = makeCertificate("device-2", DEVICE2_PUBLIC_KEY, CA_PRIVATE_KEY);
+    const cert2 = makeCertificate(
+      "device-2",
+      DEVICE2_PUBLIC_KEY,
+      CA_PRIVATE_KEY,
+    );
 
-    const msg1 = makeSignedMessage("event 1", DEVICE_SOURCE, TEST_PRIVATE_KEY, DEVICE_CERT);
-    const msg2 = makeSignedMessage("event 2", "device-2", DEVICE2_PRIVATE_KEY, cert2);
+    const msg1 = makeSignedMessage(
+      "event 1",
+      DEVICE_SOURCE,
+      TEST_PRIVATE_KEY,
+      DEVICE_CERT,
+    );
+    const msg2 = makeSignedMessage(
+      "event 2",
+      "device-2",
+      DEVICE2_PRIVATE_KEY,
+      cert2,
+    );
 
     const context = makeVerifierContextPKI();
     expect(flow.onMessage(msg1, context)[0].topic).toBe("te/verified/events");
@@ -311,7 +391,11 @@ describe("PKI X.509 certificate mode (x509-cert-issuer)", () => {
       {
         time: new Date(),
         topic: "te/pki/x509/csr",
-        payload: JSON.stringify({ device_id: DEVICE_SOURCE, public_key: uint8ToBase64(hexToBytes(devicePubHex)), nonce }),
+        payload: JSON.stringify({
+          device_id: DEVICE_SOURCE,
+          public_key: uint8ToBase64(hexToBytes(devicePubHex)),
+          nonce,
+        }),
       },
       ctx,
     );
@@ -320,12 +404,20 @@ describe("PKI X.509 certificate mode (x509-cert-issuer)", () => {
   }
 
   function makeVerifierContextX509(extra: Record<string, unknown> = {}) {
-    return tedge.createContext({ root_ca_public_key: X509_CA_PUB_HEX, ...extra });
+    return tedge.createContext({
+      root_ca_public_key: X509_CA_PUB_HEX,
+      ...extra,
+    });
   }
 
   test("valid X.509 cert + valid signature → verified", () => {
     const certDer = issueX509DeviceCert(TEST_PUBLIC_KEY, "nonce-x509-valid-1");
-    const signed = makeSignedMessage("door opened", DEVICE_SOURCE, TEST_PRIVATE_KEY, certDer);
+    const signed = makeSignedMessage(
+      "door opened",
+      DEVICE_SOURCE,
+      TEST_PRIVATE_KEY,
+      certDer,
+    );
     const output = flow.onMessage(signed, makeVerifierContextX509());
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("te/verified/events");
@@ -333,7 +425,12 @@ describe("PKI X.509 certificate mode (x509-cert-issuer)", () => {
 
   test("tampered payload → rejected", () => {
     const certDer = issueX509DeviceCert(TEST_PUBLIC_KEY, "nonce-x509-tamper-1");
-    const signed = makeSignedMessage("door opened", DEVICE_SOURCE, TEST_PRIVATE_KEY, certDer);
+    const signed = makeSignedMessage(
+      "door opened",
+      DEVICE_SOURCE,
+      TEST_PRIVATE_KEY,
+      certDer,
+    );
     const payload = tedge.decodeJsonPayload(signed.payload);
     payload.text = "tampered";
     const tampered = { ...signed, payload: JSON.stringify(payload) };
@@ -343,19 +440,37 @@ describe("PKI X.509 certificate mode (x509-cert-issuer)", () => {
   });
 
   test("cert signed by wrong CA → rejected", () => {
-    const certDer = issueX509DeviceCert(TEST_PUBLIC_KEY, "nonce-x509-wrongca-1");
-    const signed = makeSignedMessage("door opened", DEVICE_SOURCE, TEST_PRIVATE_KEY, certDer);
+    const certDer = issueX509DeviceCert(
+      TEST_PUBLIC_KEY,
+      "nonce-x509-wrongca-1",
+    );
+    const signed = makeSignedMessage(
+      "door opened",
+      DEVICE_SOURCE,
+      TEST_PRIVATE_KEY,
+      certDer,
+    );
     // Verify with a different (JSON PKI) CA public key — will fail cert sig check
-    const wrongContext = tedge.createContext({ root_ca_public_key: CA_PUBLIC_KEY });
+    const wrongContext = tedge.createContext({
+      root_ca_public_key: CA_PUBLIC_KEY,
+    });
     const output = flow.onMessage(signed, wrongContext);
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("te/rejected/events");
   });
 
   test("signed with wrong device key → rejected", () => {
-    const certDer = issueX509DeviceCert(TEST_PUBLIC_KEY, "nonce-x509-wrongkey-1");
+    const certDer = issueX509DeviceCert(
+      TEST_PUBLIC_KEY,
+      "nonce-x509-wrongkey-1",
+    );
     // Sign with a different private key than the one in the cert
-    const signed = makeSignedMessage("door opened", DEVICE_SOURCE, CA_PRIVATE_KEY, certDer);
+    const signed = makeSignedMessage(
+      "door opened",
+      DEVICE_SOURCE,
+      CA_PRIVATE_KEY,
+      certDer,
+    );
     const output = flow.onMessage(signed, makeVerifierContextX509());
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("te/rejected/events");
@@ -363,7 +478,11 @@ describe("PKI X.509 certificate mode (x509-cert-issuer)", () => {
 
   test("missing _cert in PKI mode → rejected", () => {
     // Sign without attaching a cert
-    const signed = makeSignedMessage("door opened", DEVICE_SOURCE, TEST_PRIVATE_KEY);
+    const signed = makeSignedMessage(
+      "door opened",
+      DEVICE_SOURCE,
+      TEST_PRIVATE_KEY,
+    );
     const output = flow.onMessage(signed, makeVerifierContextX509());
     expect(output).toHaveLength(1);
     expect(output[0].topic).toBe("te/rejected/events");
@@ -377,18 +496,31 @@ describe("PKI X.509 certificate mode (x509-cert-issuer)", () => {
       {
         time: new Date(),
         topic: "te/pki/x509/csr",
-        payload: JSON.stringify({ device_id: "device-2", public_key: uint8ToBase64(hexToBytes(DEVICE2_PUBLIC_KEY)), nonce: "nonce-x509-multi-2" }),
+        payload: JSON.stringify({
+          device_id: "device-2",
+          public_key: uint8ToBase64(hexToBytes(DEVICE2_PUBLIC_KEY)),
+          nonce: "nonce-x509-multi-2",
+        }),
       },
       ctx2,
     );
     const cert2 = JSON.parse(out2[0].payload as string).cert_der;
 
-    const msg1 = makeSignedMessage("event 1", DEVICE_SOURCE, TEST_PRIVATE_KEY, cert1);
-    const msg2 = makeSignedMessage("event 2", "device-2", DEVICE2_PRIVATE_KEY, cert2);
+    const msg1 = makeSignedMessage(
+      "event 1",
+      DEVICE_SOURCE,
+      TEST_PRIVATE_KEY,
+      cert1,
+    );
+    const msg2 = makeSignedMessage(
+      "event 2",
+      "device-2",
+      DEVICE2_PRIVATE_KEY,
+      cert2,
+    );
 
     const context = makeVerifierContextX509();
     expect(flow.onMessage(msg1, context)[0].topic).toBe("te/verified/events");
     expect(flow.onMessage(msg2, context)[0].topic).toBe("te/verified/events");
   });
 });
-

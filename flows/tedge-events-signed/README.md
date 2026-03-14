@@ -33,9 +33,9 @@ The signature is computed over a canonical JSON representation of the payload wh
 
 The **tedge-events-verify** flow supports two complementary verification modes:
 
-| Mode | Config in verifier | How device public key is found |
-|------|-------------------|--------------------------------|
-| **Static map** | `public_keys` JSON | Looked up by `source` field |
+| Mode                | Config in verifier   | How device public key is found                       |
+| ------------------- | -------------------- | ---------------------------------------------------- |
+| **Static map**      | `public_keys` JSON   | Looked up by `source` field                          |
 | **PKI certificate** | `root_ca_public_key` | Extracted from the `_cert` field signed by a root CA |
 
 For smaller deployments or when per-device public keys are manageable, the static map mode is simpler. For larger fleets, use PKI certificate mode — the verifier only needs to know the single root CA public key.
@@ -130,19 +130,18 @@ device_cert = "eyJkZXZpY2VfaWQiOi..."
 
 ### Configuration
 
-| Parameter             | Default                     | Description                                                                                              |
-| --------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `output_events_topic` | `c8y/mqtt/out/te/v1/events` | MQTT topic where transformed events are published                                                        |
-| `private_key`         | *(empty)*                   | Hex-encoded 32-byte Ed25519 private key for signing. Leave empty to disable.                             |
-| `device_cert`         | *(empty)*                   | Base64-encoded device certificate attached as `_cert` when signing is on. Accepts either X.509 DER (the `cert_der` field returned by **x509-cert-issuer**) or a custom JSON cert. |
-| `debug`               | `false`                     | When `true`, logs each incoming message payload to the console                                           |
+| Parameter             | Default                     | Description                                                                                                                                                                       |
+| --------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `output_events_topic` | `c8y/mqtt/out/te/v1/events` | MQTT topic where transformed events are published                                                                                                                                 |
+| `private_key`         | _(empty)_                   | Hex-encoded 32-byte Ed25519 private key for signing. Leave empty to disable.                                                                                                      |
+| `device_cert`         | _(empty)_                   | Base64-encoded device certificate attached as `_cert` when signing is on. Accepts either X.509 DER (the `cert_der` field returned by **x509-cert-issuer**) or a custom JSON cert. |
+| `debug`               | `false`                     | When `true`, logs each incoming message payload to the console                                                                                                                    |
 
 ### Related flows
 
 - **tedge-config-context** — populates `device.id` in the shared mapper context used by this flow as the event `source`.
 - **tedge-events-verify** — verifies the signatures produced by this flow.
 - **x509-cert-issuer** — issues X.509 DER device certificates; the `cert_der` response field can be used directly as `device_cert`.
-
 
 ## Example
 
@@ -152,12 +151,11 @@ device_cert = "eyJkZXZpY2VfaWQiOi..."
 echo '[te/device/main///e/foo] {"text":"hello"}' | tedge flows test --flow ./flow.toml
 ```
 
-*Output*
+_Output_
 
 ```sh
 [c8y/mqtt/out/te/v1/events] {"text":"hello (from mqtt-service)","tedgeSequence":1,"type":"foo","payloadType":"event","source":"main","_sig":"ZSSEqAkxuraa6tnN+Ro4zpQUYd7ZQt8+PC5FRQM8j5x/bLx7WSHwAoweqGkiS2pFZuXEk6duTITNaKRP+rQBAA==","_cert":"eyJkZXZpY2VfaWQiOiJteS1kZXZpY2UiLCJleHBpcmVzIjoiMjAyNy0wMS0wMVQwMDowMDowMFoiLCJwdWJsaWNfa2V5IjoiMGNhNTFlY2ViNWUwYThhNTQ2MDNkMzZkOWMxNTM1NmY3YTQyMGUzMTVmNjJmZGI0YTA3MTk3MmFmOTJjOTRkYyIsIl9jZXJ0X3NpZyI6IkYrZTEyUVBKQmgxTHgxQkd5bU11aHdKTHlRZ3lVdGFBMFpHbFNoQjVHeGQ4TWx4Qmp3NEhSYlJNNlo3aHVuemtpN0Vad2pjTUFZVmlHNzYwR2paWUNBPT0ifQo="}
 ```
-
 
 ### End to end
 

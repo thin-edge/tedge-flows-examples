@@ -1,4 +1,9 @@
-import { Message, Context, decodeJsonPayload, uint8ToBase64 } from "../../common/tedge";
+import {
+  Message,
+  Context,
+  decodeJsonPayload,
+  uint8ToBase64,
+} from "../../common/tedge";
 import { ed25519 } from "@noble/curves/ed25519.js";
 
 export interface Config {

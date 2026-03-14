@@ -1,4 +1,9 @@
-import { Message, Context, decodeJsonPayload, uint8ToBase64 } from "../../common/tedge";
+import {
+  Message,
+  Context,
+  decodeJsonPayload,
+  uint8ToBase64,
+} from "../../common/tedge";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import * as asn1 from "asn1js";
@@ -94,7 +99,8 @@ export interface FlowContext extends Context {
 
 // Base64 decode without atob (not available in QuickJS)
 function atobBytes(base64: string): Uint8Array {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   const clean = base64.replace(/[\s=]+$/g, "");
   const bytes = new Uint8Array(Math.floor((clean.length * 3) / 4));
   let byteIndex = 0;
@@ -128,7 +134,10 @@ function derToPem(label: string, der: Uint8Array): string {
  * but NOT for generating private keys in production.
  */
 function safeRandomBytes(n: number): Uint8Array {
-  if (typeof crypto !== "undefined" && typeof (crypto as any).getRandomValues === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof (crypto as any).getRandomValues === "function"
+  ) {
     return (crypto as any).getRandomValues(new Uint8Array(n));
   }
   // PRNG fallback — not cryptographically secure, only use for serial numbers
@@ -150,7 +159,10 @@ function safeRandomBytes(n: number): Uint8Array {
 
 /** Convert Uint8Array to ArrayBuffer (safe for sub-views). */
 function toAB(arr: Uint8Array): ArrayBuffer {
-  return (arr.buffer as ArrayBuffer).slice(arr.byteOffset, arr.byteOffset + arr.byteLength);
+  return (arr.buffer as ArrayBuffer).slice(
+    arr.byteOffset,
+    arr.byteOffset + arr.byteLength,
+  );
 }
 
 /** Convert ArrayBuffer to Uint8Array. */
@@ -167,27 +179,35 @@ const OID_BASIC_CONSTRAINTS = "2.5.29.19";
 const OID_SAN = "2.5.29.17";
 
 function algIdEd25519(): asn1.Sequence {
-  return new asn1.Sequence({ value: [
-    new asn1.ObjectIdentifier({ value: OID_ED25519 }),
-  ]});
+  return new asn1.Sequence({
+    value: [new asn1.ObjectIdentifier({ value: OID_ED25519 })],
+  });
 }
 
 function rdnName(cn: string): asn1.Sequence {
-  return new asn1.Sequence({ value: [
-    new asn1.Set({ value: [
-      new asn1.Sequence({ value: [
-        new asn1.ObjectIdentifier({ value: OID_CN }),
-        new asn1.Utf8String({ value: cn }),
-      ]}),
-    ]}),
-  ]});
+  return new asn1.Sequence({
+    value: [
+      new asn1.Set({
+        value: [
+          new asn1.Sequence({
+            value: [
+              new asn1.ObjectIdentifier({ value: OID_CN }),
+              new asn1.Utf8String({ value: cn }),
+            ],
+          }),
+        ],
+      }),
+    ],
+  });
 }
 
 function asnSubjectPublicKeyInfo(pubKeyBytes: Uint8Array): asn1.Sequence {
-  return new asn1.Sequence({ value: [
-    algIdEd25519(),
-    new asn1.BitString({ valueHex: toAB(pubKeyBytes) }),
-  ]});
+  return new asn1.Sequence({
+    value: [
+      algIdEd25519(),
+      new asn1.BitString({ valueHex: toAB(pubKeyBytes) }),
+    ],
+  });
 }
 
 /** SHA-256 of the raw public key bytes truncated to 160 bits (RFC 7093 Method 1). */
@@ -228,24 +248,32 @@ function buildExtensions(
   const akiValue = issuerKeyId ?? keyIdentifier(issuerPubKey);
 
   // SKI extension: extnValue wraps OCTET STRING containing the key id
-  const skiExt = new asn1.Sequence({ value: [
-    new asn1.ObjectIdentifier({ value: OID_SKI }),
-    new asn1.OctetString({
-      valueHex: new asn1.OctetString({ valueHex: toAB(skiValue) }).toBER(false),
-    }),
-  ]});
+  const skiExt = new asn1.Sequence({
+    value: [
+      new asn1.ObjectIdentifier({ value: OID_SKI }),
+      new asn1.OctetString({
+        valueHex: new asn1.OctetString({ valueHex: toAB(skiValue) }).toBER(
+          false,
+        ),
+      }),
+    ],
+  });
 
   // AKI extension: extnValue wraps SEQUENCE { [0] IMPLICIT keyIdentifier }
-  const akiBody = new asn1.Sequence({ value: [
-    new asn1.Primitive({
-      idBlock: { tagClass: 3, tagNumber: 0 },
-      valueHex: toAB(akiValue),
-    }),
-  ]});
-  const akiExt = new asn1.Sequence({ value: [
-    new asn1.ObjectIdentifier({ value: OID_AKI }),
-    new asn1.OctetString({ valueHex: akiBody.toBER(false) }),
-  ]});
+  const akiBody = new asn1.Sequence({
+    value: [
+      new asn1.Primitive({
+        idBlock: { tagClass: 3, tagNumber: 0 },
+        valueHex: toAB(akiValue),
+      }),
+    ],
+  });
+  const akiExt = new asn1.Sequence({
+    value: [
+      new asn1.ObjectIdentifier({ value: OID_AKI }),
+      new asn1.OctetString({ valueHex: akiBody.toBER(false) }),
+    ],
+  });
 
   const exts: asn1.Sequence[] = [skiExt, akiExt];
 
@@ -255,39 +283,51 @@ function buildExtensions(
   if (dnsSANs.length > 0 || ipSANs.length > 0) {
     const generalNames: asn1.AsnType[] = [];
     for (const dns of dnsSANs) {
-      generalNames.push(new asn1.Primitive({
-        idBlock: { tagClass: 3, tagNumber: 2 }, // [2] dNSName IA5String
-        valueHex: toAB(new TextEncoder().encode(dns)),
-      }));
+      generalNames.push(
+        new asn1.Primitive({
+          idBlock: { tagClass: 3, tagNumber: 2 }, // [2] dNSName IA5String
+          valueHex: toAB(new TextEncoder().encode(dns)),
+        }),
+      );
     }
     for (const ip of ipSANs) {
       const ipBytes = parseIPv4(ip);
       if (ipBytes) {
-        generalNames.push(new asn1.Primitive({
-          idBlock: { tagClass: 3, tagNumber: 7 }, // [7] iPAddress OCTET STRING
-          valueHex: toAB(ipBytes),
-        }));
+        generalNames.push(
+          new asn1.Primitive({
+            idBlock: { tagClass: 3, tagNumber: 7 }, // [7] iPAddress OCTET STRING
+            valueHex: toAB(ipBytes),
+          }),
+        );
       }
     }
     if (generalNames.length > 0) {
       const sanBody = new asn1.Sequence({ value: generalNames });
-      exts.push(new asn1.Sequence({ value: [
-        new asn1.ObjectIdentifier({ value: OID_SAN }),
-        new asn1.OctetString({ valueHex: sanBody.toBER(false) }),
-      ]}));
+      exts.push(
+        new asn1.Sequence({
+          value: [
+            new asn1.ObjectIdentifier({ value: OID_SAN }),
+            new asn1.OctetString({ valueHex: sanBody.toBER(false) }),
+          ],
+        }),
+      );
     }
   }
 
   if (isCA) {
     // BasicConstraints: critical=true, cA=true
-    const bcBody = new asn1.Sequence({ value: [
-      new asn1.Boolean({ value: true }), // cA = TRUE
-    ]});
-    const bcExt = new asn1.Sequence({ value: [
-      new asn1.ObjectIdentifier({ value: OID_BASIC_CONSTRAINTS }),
-      new asn1.Boolean({ value: true }), // critical
-      new asn1.OctetString({ valueHex: bcBody.toBER(false) }),
-    ]});
+    const bcBody = new asn1.Sequence({
+      value: [
+        new asn1.Boolean({ value: true }), // cA = TRUE
+      ],
+    });
+    const bcExt = new asn1.Sequence({
+      value: [
+        new asn1.ObjectIdentifier({ value: OID_BASIC_CONSTRAINTS }),
+        new asn1.Boolean({ value: true }), // critical
+        new asn1.OctetString({ valueHex: bcBody.toBER(false) }),
+      ],
+    });
     exts.push(bcExt);
   }
 
@@ -327,19 +367,29 @@ function buildTBS(opts: {
     throw new Error("failed to parse issuer Name DER");
   }
 
-  const tbs = new asn1.Sequence({ value: [
-    version,
-    serial,
-    algIdEd25519(),
-    issuerParsed.result,
-    new asn1.Sequence({ value: [
-      new asn1.UTCTime({ valueDate: opts.notBefore }),
-      new asn1.UTCTime({ valueDate: opts.notAfter }),
-    ]}),
-    rdnName(opts.subjectCN),
-    asnSubjectPublicKeyInfo(opts.subjectPubKey),
-    buildExtensions(opts.subjectPubKey, opts.issuerPubKey, opts.isCA, opts.issuerKeyId, opts.san),
-  ]});
+  const tbs = new asn1.Sequence({
+    value: [
+      version,
+      serial,
+      algIdEd25519(),
+      issuerParsed.result,
+      new asn1.Sequence({
+        value: [
+          new asn1.UTCTime({ valueDate: opts.notBefore }),
+          new asn1.UTCTime({ valueDate: opts.notAfter }),
+        ],
+      }),
+      rdnName(opts.subjectCN),
+      asnSubjectPublicKeyInfo(opts.subjectPubKey),
+      buildExtensions(
+        opts.subjectPubKey,
+        opts.issuerPubKey,
+        opts.isCA,
+        opts.issuerKeyId,
+        opts.san,
+      ),
+    ],
+  });
 
   return toU8(tbs.toBER(false));
 }
@@ -348,13 +398,17 @@ function buildTBS(opts: {
  * Wrap a 32-byte Ed25519 private key seed in PKCS#8 DER (RFC 8410).
  */
 function buildPrivKeyDER(privKeyBytes: Uint8Array): Uint8Array {
-  const pkcs8 = new asn1.Sequence({ value: [
-    new asn1.Integer({ value: 0 }), // version
-    algIdEd25519(),
-    new asn1.OctetString({
-      valueHex: new asn1.OctetString({ valueHex: toAB(privKeyBytes) }).toBER(false),
-    }),
-  ]});
+  const pkcs8 = new asn1.Sequence({
+    value: [
+      new asn1.Integer({ value: 0 }), // version
+      algIdEd25519(),
+      new asn1.OctetString({
+        valueHex: new asn1.OctetString({ valueHex: toAB(privKeyBytes) }).toBER(
+          false,
+        ),
+      }),
+    ],
+  });
   return toU8(pkcs8.toBER(false));
 }
 
@@ -364,11 +418,13 @@ function buildPrivKeyDER(privKeyBytes: Uint8Array): Uint8Array {
 function signCert(tbs: Uint8Array, caPrivKeyB64: string): Uint8Array {
   const sig = ed25519.sign(tbs, atobBytes(caPrivKeyB64));
   const tbsParsed = asn1.fromBER(toAB(tbs));
-  const cert = new asn1.Sequence({ value: [
-    tbsParsed.result,
-    algIdEd25519(),
-    new asn1.BitString({ valueHex: toAB(sig) }),
-  ]});
+  const cert = new asn1.Sequence({
+    value: [
+      tbsParsed.result,
+      algIdEd25519(),
+      new asn1.BitString({ valueHex: toAB(sig) }),
+    ],
+  });
   return toU8(cert.toBER(false));
 }
 
@@ -380,7 +436,9 @@ function verifyFactoryCert(
   factoryCertB64: string,
   deviceId: string,
   factoryCAPubKeys: string[],
-): { valid: false; reason: string } | { valid: true; factoryPubKeyB64: string } {
+):
+  | { valid: false; reason: string }
+  | { valid: true; factoryPubKeyB64: string } {
   let cert: Record<string, string>;
   try {
     cert = JSON.parse(atobToString(factoryCertB64));
@@ -389,19 +447,25 @@ function verifyFactoryCert(
   }
 
   const { _cert_sig, ...certBody } = cert;
-  if (!_cert_sig) return { valid: false, reason: "factory cert missing _cert_sig" };
+  if (!_cert_sig)
+    return { valid: false, reason: "factory cert missing _cert_sig" };
 
   const encoder = new TextEncoder();
   const canonical = JSON.stringify(certBody, Object.keys(certBody).sort());
 
   const certValid = factoryCAPubKeys.some((caPubKey) => {
     try {
-      return ed25519.verify(atobBytes(_cert_sig), encoder.encode(canonical), atobBytes(caPubKey));
+      return ed25519.verify(
+        atobBytes(_cert_sig),
+        encoder.encode(canonical),
+        atobBytes(caPubKey),
+      );
     } catch {
       return false;
     }
   });
-  if (!certValid) return { valid: false, reason: "factory certificate signature invalid" };
+  if (!certValid)
+    return { valid: false, reason: "factory certificate signature invalid" };
 
   if (cert.device_id !== deviceId) {
     return {
@@ -411,7 +475,10 @@ function verifyFactoryCert(
   }
 
   if (cert.expires && new Date(cert.expires) < new Date()) {
-    return { valid: false, reason: `factory certificate expired: ${cert.expires}` };
+    return {
+      valid: false,
+      reason: `factory certificate expired: ${cert.expires}`,
+    };
   }
 
   return { valid: true, factoryPubKeyB64: cert.public_key };
@@ -428,7 +495,11 @@ function verifyReqSig(
     const reqBody = { device_id: deviceId, nonce, public_key: publicKey };
     const encoder = new TextEncoder();
     const canonical = JSON.stringify(reqBody, Object.keys(reqBody).sort());
-    return ed25519.verify(atobBytes(reqSigB64), encoder.encode(canonical), atobBytes(factoryPubKeyB64));
+    return ed25519.verify(
+      atobBytes(reqSigB64),
+      encoder.encode(canonical),
+      atobBytes(factoryPubKeyB64),
+    );
   } catch {
     return false;
   }
@@ -445,7 +516,11 @@ function verifyKeygenReqSig(
     const reqBody = { device_id: deviceId, nonce };
     const encoder = new TextEncoder();
     const canonical = JSON.stringify(reqBody, Object.keys(reqBody).sort());
-    return ed25519.verify(atobBytes(reqSigB64), encoder.encode(canonical), atobBytes(factoryPubKeyB64));
+    return ed25519.verify(
+      atobBytes(reqSigB64),
+      encoder.encode(canonical),
+      atobBytes(factoryPubKeyB64),
+    );
   } catch {
     return false;
   }
@@ -462,7 +537,10 @@ function verifyKeygenReqSig(
  * TBS fields: version? | serial | sigAlg | issuer | validity | subject | SPKI | extensions?
  * Indices:     (skip)     0        1        2        3          4        5       6
  */
-function getTBSField(certDer: Uint8Array, fieldIndex: number): asn1.AsnType | null {
+function getTBSField(
+  certDer: Uint8Array,
+  fieldIndex: number,
+): asn1.AsnType | null {
   try {
     const parsed = asn1.fromBER(toAB(certDer));
     if (parsed.offset === -1) return null;
@@ -507,7 +585,8 @@ function readDerSKID(der: Uint8Array): Uint8Array | null {
     const fields = (tbs as any).valueBlock.value as asn1.AsnType[];
     // Find the [3] EXPLICIT extensions wrapper
     const extsWrapper = fields.find(
-      (f: asn1.AsnType) => f.idBlock.tagClass === 3 && f.idBlock.tagNumber === 3,
+      (f: asn1.AsnType) =>
+        f.idBlock.tagClass === 3 && f.idBlock.tagNumber === 3,
     ) as asn1.Constructed | undefined;
     if (!extsWrapper) return null;
 
@@ -525,7 +604,12 @@ function readDerSKID(der: Uint8Array): Uint8Array | null {
       if (inner.offset === -1) return null;
       const innerOctet = inner.result as asn1.OctetString;
       const view = innerOctet.valueBlock.valueHexView;
-      return toU8((view.buffer as ArrayBuffer).slice(view.byteOffset, view.byteOffset + view.byteLength));
+      return toU8(
+        (view.buffer as ArrayBuffer).slice(
+          view.byteOffset,
+          view.byteOffset + view.byteLength,
+        ),
+      );
     }
     return null;
   } catch {
@@ -556,11 +640,15 @@ function readCertPublicKeyBytes(der: Uint8Array): Uint8Array | null {
 /**
  * Verify that a DER-encoded certificate was signed by the given Ed25519 CA public key.
  */
-function verifyCertSignature(certDer: Uint8Array, caPubKey: Uint8Array): boolean {
+function verifyCertSignature(
+  certDer: Uint8Array,
+  caPubKey: Uint8Array,
+): boolean {
   try {
     const parsed = asn1.fromBER(toAB(certDer));
     if (parsed.offset === -1) return false;
-    const certFields = (parsed.result as any).valueBlock.value as asn1.AsnType[];
+    const certFields = (parsed.result as any).valueBlock
+      .value as asn1.AsnType[];
     // Certificate ::= SEQUENCE { tbs, sigAlg, signature BIT STRING }
     const tbsDer = toU8(certFields[0].toBER(false));
     // Ed25519 signature BIT STRING DER ends with 64 signature bytes
@@ -582,7 +670,10 @@ function readCertCN(der: Uint8Array): string | null {
     for (const rdn of (subject as any).valueBlock.value as asn1.Set[]) {
       for (const attr of (rdn as any).valueBlock.value as asn1.Sequence[]) {
         const attrFields = (attr as any).valueBlock.value as asn1.AsnType[];
-        if ((attrFields[0] as asn1.ObjectIdentifier).valueBlock.toString() === OID_CN) {
+        if (
+          (attrFields[0] as asn1.ObjectIdentifier).valueBlock.toString() ===
+          OID_CN
+        ) {
           return (attrFields[1] as any).valueBlock.value as string;
         }
       }
@@ -621,7 +712,8 @@ function readCertSANs(der: Uint8Array): SAN | null {
     const tbs = (cert as any).valueBlock.value[0] as asn1.Sequence;
     const fields = (tbs as any).valueBlock.value as asn1.AsnType[];
     const extsWrapper = fields.find(
-      (f: asn1.AsnType) => f.idBlock.tagClass === 3 && f.idBlock.tagNumber === 3,
+      (f: asn1.AsnType) =>
+        f.idBlock.tagClass === 3 && f.idBlock.tagNumber === 3,
     ) as asn1.Constructed | undefined;
     if (!extsWrapper) return null;
 
@@ -637,7 +729,8 @@ function readCertSANs(der: Uint8Array): SAN | null {
       const inner = asn1.fromBER(extnValue.valueBlock.valueHexView);
       if (inner.offset === -1) return null;
 
-      const generalNames = (inner.result as any).valueBlock.value as asn1.AsnType[];
+      const generalNames = (inner.result as any).valueBlock
+        .value as asn1.AsnType[];
       const dns: string[] = [];
       const ip: string[] = [];
       const decoder = new TextDecoder();
@@ -652,7 +745,7 @@ function readCertSANs(der: Uint8Array): SAN | null {
           ip.push(Array.from(hex).join("."));
         }
       }
-      return (dns.length > 0 || ip.length > 0) ? { dns, ip } : null;
+      return dns.length > 0 || ip.length > 0 ? { dns, ip } : null;
     }
     return null;
   } catch {
@@ -689,7 +782,13 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   const reject = (reason: string): Message[] => {
     if (debug) console.log(`x509-cert-issuer: rejected — ${reason}`);
     return output_rejected_topic
-      ? [{ time: message.time, topic: output_rejected_topic, payload: message.payload }]
+      ? [
+          {
+            time: message.time,
+            topic: output_rejected_topic,
+            payload: message.payload,
+          },
+        ]
       : [];
   };
 
@@ -705,11 +804,22 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     } catch {
       return reject("invalid factory_ca_public_keys — must be a JSON array");
     }
-    if (factoryCAPubKeys.length === 0) return reject("no factory CAs configured");
+    if (factoryCAPubKeys.length === 0)
+      return reject("no factory CAs configured");
   }
 
   const payload = decodeJsonPayload(message.payload);
-  const { device_id, common_name, public_key, nonce, _factory_cert, _req_sig, _current_cert, san_dns_names, san_ip_addresses } = payload;
+  const {
+    device_id,
+    common_name,
+    public_key,
+    nonce,
+    _factory_cert,
+    _req_sig,
+    _current_cert,
+    san_dns_names,
+    san_ip_addresses,
+  } = payload;
 
   if (!device_id || !nonce) {
     return reject("missing required fields: device_id, nonce");
@@ -725,7 +835,8 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   for (const n of Object.keys(nonces)) {
     if (now - nonces[n] > ttlMs) delete nonces[n];
   }
-  if (nonces[nonce as string] !== undefined) return reject("nonce already used");
+  if (nonces[nonce as string] !== undefined)
+    return reject("nonce already used");
 
   // Factory certificate verification (optional based on config, skipped for renewals)
   if (requireFactoryCert && !isRenewalRequest) {
@@ -740,8 +851,19 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     if (!_req_sig) return reject("missing required field: _req_sig");
     // Keygen requests sign {device_id, nonce}; CSR requests sign {device_id, nonce, public_key}
     const reqSigOk = isKeygenRequest
-      ? verifyKeygenReqSig(String(device_id), String(nonce), _req_sig as string, factoryResult.factoryPubKeyB64)
-      : verifyReqSig(String(device_id), String(nonce), String(public_key), _req_sig as string, factoryResult.factoryPubKeyB64);
+      ? verifyKeygenReqSig(
+          String(device_id),
+          String(nonce),
+          _req_sig as string,
+          factoryResult.factoryPubKeyB64,
+        )
+      : verifyReqSig(
+          String(device_id),
+          String(nonce),
+          String(public_key),
+          _req_sig as string,
+          factoryResult.factoryPubKeyB64,
+        );
     if (!reqSigOk) return reject("request signature invalid");
   } else if (isRenewalRequest) {
     // Renewal: device proves possession of a valid CA-issued certificate by signing
@@ -757,7 +879,9 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     }
 
     // Verify cert was issued by this CA (prevents use of self-signed or third-party certs)
-    const caPubKeyBytesForRenew = ed25519.getPublicKey(atobBytes(ca_private_key));
+    const caPubKeyBytesForRenew = ed25519.getPublicKey(
+      atobBytes(ca_private_key),
+    );
     if (!verifyCertSignature(currentCertDer, caPubKeyBytesForRenew)) {
       return reject("current certificate not issued by this CA");
     }
@@ -765,7 +889,9 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     // Verify the certificate CN matches the claimed device_id
     const certCN = readCertCN(currentCertDer);
     if (certCN !== String(device_id)) {
-      return reject(`certificate CN "${certCN}" does not match device_id "${device_id}"`);
+      return reject(
+        `certificate CN "${certCN}" does not match device_id "${device_id}"`,
+      );
     }
 
     // Verify the certificate has not expired
@@ -778,14 +904,25 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     if (renewal_window_days !== undefined) {
       const windowMs = Number(renewal_window_days) * 86_400_000;
       if (currentCertNotAfter.getTime() - Date.now() > windowMs) {
-        return reject(`renewal only allowed within ${renewal_window_days} days of certificate expiry`);
+        return reject(
+          `renewal only allowed within ${renewal_window_days} days of certificate expiry`,
+        );
       }
     }
 
     // Verify request signature with the current certificate's public key (proof of possession)
     const certPubKeyBytes = readCertPublicKeyBytes(currentCertDer);
-    if (!certPubKeyBytes) return reject("failed to extract public key from current certificate");
-    if (!verifyReqSig(String(device_id), String(nonce), String(public_key), _req_sig as string, uint8ToBase64(certPubKeyBytes))) {
+    if (!certPubKeyBytes)
+      return reject("failed to extract public key from current certificate");
+    if (
+      !verifyReqSig(
+        String(device_id),
+        String(nonce),
+        String(public_key),
+        _req_sig as string,
+        uint8ToBase64(certPubKeyBytes),
+      )
+    ) {
       return reject("request signature invalid");
     }
   }
@@ -799,7 +936,8 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   // This is required for OpenSSL (and RFC 5280) name matching during chain verification.
   const caCertDer = atobBytes(caCertDerB64);
   const issuerNameDer = readDerSubjectBytes(caCertDer);
-  if (!issuerNameDer) return reject("failed to parse subject name from CA certificate");
+  if (!issuerNameDer)
+    return reject("failed to parse subject name from CA certificate");
   // Extract the CA cert's verbatim SKID so we can embed it as the AKI in the issued cert.
   // OpenSSL compares AKI↔SKID bytes directly; re-computing with a different algorithm breaks the chain.
   const issuerKeyId = readDerSKID(caCertDer) ?? undefined;
@@ -810,13 +948,23 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   // Derive serial from CA key + device_id + nonce + timestamp.
   // Using a hash avoids depending on crypto.getRandomValues while still giving
   // a unique, collision-resistant value per request (nonce is anti-replayed).
-  const serialInput = new TextEncoder().encode(ca_private_key + "|" + String(device_id) + "|" + String(nonce) + "|" + String(now));
+  const serialInput = new TextEncoder().encode(
+    ca_private_key +
+      "|" +
+      String(device_id) +
+      "|" +
+      String(nonce) +
+      "|" +
+      String(now),
+  );
   const serial = sha256(serialInput).slice(0, 19);
   serial[0] &= 0x7f; // keep positive
 
   // Validity window
   const notBefore = new Date();
-  const notAfter = new Date(notBefore.getTime() + Number(cert_validity_days) * 86_400_000);
+  const notAfter = new Date(
+    notBefore.getTime() + Number(cert_validity_days) * 86_400_000,
+  );
 
   // Determine the key to certify — either provided by device (CSR) or generated here (keygen)
   let devicePubKeyBytes: Uint8Array;
@@ -835,8 +983,12 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   // For renewals: if no SANs are provided, carry them forward from the current certificate.
   let san: SAN | undefined;
   try {
-    const dnsList: string[] = san_dns_names ? JSON.parse(String(san_dns_names)) : [];
-    const ipList: string[] = san_ip_addresses ? JSON.parse(String(san_ip_addresses)) : [];
+    const dnsList: string[] = san_dns_names
+      ? JSON.parse(String(san_dns_names))
+      : [];
+    const ipList: string[] = san_ip_addresses
+      ? JSON.parse(String(san_ip_addresses))
+      : [];
     if (dnsList.length > 0 || ipList.length > 0) {
       san = { dns: dnsList, ip: ipList };
     } else if (isRenewalRequest) {
@@ -845,7 +997,9 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
       san = readCertSANs(currentCertForSAN) ?? undefined;
     }
   } catch {
-    return reject("invalid san_dns_names or san_ip_addresses — must be JSON arrays");
+    return reject(
+      "invalid san_dns_names or san_ip_addresses — must be JSON arrays",
+    );
   }
 
   const tbs = buildTBS({
@@ -864,7 +1018,11 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   const certDer = signCert(tbs, ca_private_key);
 
   if (debug) {
-    const mode = isKeygenRequest ? "keygen" : isRenewalRequest ? "renew" : "csr";
+    const mode = isKeygenRequest
+      ? "keygen"
+      : isRenewalRequest
+        ? "renew"
+        : "csr";
     console.log(
       `x509-cert-issuer: issued cert [${mode}] CN="${subjectCN}" expires=${notAfter.toISOString()}`,
     );
@@ -885,8 +1043,17 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   };
   if (isKeygenRequest) {
     responsePayload.private_key_der = generatedPrivKeyDer!;
-    responsePayload.private_key_pem = derToPem("PRIVATE KEY", atobBytes(generatedPrivKeyDer!));
+    responsePayload.private_key_pem = derToPem(
+      "PRIVATE KEY",
+      atobBytes(generatedPrivKeyDer!),
+    );
   }
 
-  return [{ time: new Date(), topic: outputTopic, payload: JSON.stringify(responsePayload) }];
+  return [
+    {
+      time: new Date(),
+      topic: outputTopic,
+      payload: JSON.stringify(responsePayload),
+    },
+  ];
 }

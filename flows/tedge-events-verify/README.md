@@ -13,10 +13,10 @@ Two verification modes are supported:
 
 Two certificate formats are accepted in PKI mode, auto-detected by the first byte of the decoded `_cert` value:
 
-| Format | Issued by | Detection |
-|---|---|---|
+| Format    | Issued by                 | Detection                            |
+| --------- | ------------------------- | ------------------------------------ |
 | X.509 DER | **x509-cert-issuer** flow | First byte = `0x30` (ASN.1 SEQUENCE) |
-| JSON cert | Custom / manual | All other bytes (JSON `{...}`) |
+| JSON cert | Custom / manual           | All other bytes (JSON `{...}`)       |
 
 ### Signature verification
 
@@ -65,13 +65,13 @@ Optionally, certificates can include an `expires` field (ISO 8601). Expired cert
 
 ### Configuration
 
-| Parameter               | Default                          | Description                                                                                               |
-| ----------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `root_ca_public_key`    | *(empty)*                        | Hex-encoded Ed25519 root CA public key. When set, enables PKI certificate mode (takes priority over `public_keys`). |
-| `public_keys`           | `{}`                             | JSON object mapping `source` (device ID) to its hex-encoded Ed25519 public key. Used in static map mode. |
-| `output_verified_topic` | `te/verified/events`             | Topic for messages with a valid signature. Set to empty string to silently discard.                       |
-| `output_rejected_topic` | `te/rejected/events`             | Topic for messages with a missing or invalid signature. Set to empty string to silently discard.          |
-| `debug`                 | `false`                          | When `true`, logs verification results to the console.                                                    |
+| Parameter               | Default              | Description                                                                                                         |
+| ----------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `root_ca_public_key`    | _(empty)_            | Hex-encoded Ed25519 root CA public key. When set, enables PKI certificate mode (takes priority over `public_keys`). |
+| `public_keys`           | `{}`                 | JSON object mapping `source` (device ID) to its hex-encoded Ed25519 public key. Used in static map mode.            |
+| `output_verified_topic` | `te/verified/events` | Topic for messages with a valid signature. Set to empty string to silently discard.                                 |
+| `output_rejected_topic` | `te/rejected/events` | Topic for messages with a missing or invalid signature. Set to empty string to silently discard.                    |
+| `debug`                 | `false`              | When `true`, logs verification results to the console.                                                              |
 
 ### Static map mode setup
 
