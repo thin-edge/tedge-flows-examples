@@ -134,17 +134,6 @@ function safeRandomBytes(n: number): Uint8Array {
   return buf;
 }
 
-function concat(...arrays: Uint8Array[]): Uint8Array {
-  const total = arrays.reduce((n, a) => n + a.length, 0);
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const a of arrays) {
-    out.set(a, offset);
-    offset += a.length;
-  }
-  return out;
-}
-
 // ---------------------------------------------------------------------------
 // ASN.1 / DER helpers using asn1js
 // ---------------------------------------------------------------------------
@@ -320,18 +309,6 @@ function signCert(tbs: Uint8Array, caPrivKeyHex: string): Uint8Array {
   return toU8(cert.toBER(false));
 }
 
-/**
- * Encode a DER byte array as a PEM string.
- */
-function toPEM(label: string, der: Uint8Array): string {
-  const b64 = uint8ToBase64(der);
-  const lines: string[] = [];
-  for (let i = 0; i < b64.length; i += 64) {
-    lines.push(b64.slice(i, i + 64));
-  }
-  return `-----BEGIN ${label}-----\n${lines.join("\n")}\n-----END ${label}-----`;
-}
-
 // ---------------------------------------------------------------------------
 // Factory certificate verification (same format as pki-issuer)
 // ---------------------------------------------------------------------------
@@ -486,35 +463,6 @@ function readDerSKID(der: Uint8Array): Uint8Array | null {
       const innerOctet = inner.result as asn1.OctetString;
       const view = innerOctet.valueBlock.valueHexView;
       return toU8((view.buffer as ArrayBuffer).slice(view.byteOffset, view.byteOffset + view.byteLength));
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Extract the issuer CN from a DER certificate.
- */
-function readDerCN(der: Uint8Array): string | null {
-  try {
-    const issuerName = getTBSField(der, 2); // issuer is field index 2
-    if (!issuerName) return null;
-    // Name → SET (RDN) → SEQUENCE (AttributeTypeAndValue) → value
-    const rdnSets = (issuerName as any).valueBlock.value as asn1.Set[];
-    for (const rdnSet of rdnSets) {
-      const atvSeqs = (rdnSet as any).valueBlock.value as asn1.Sequence[];
-      for (const atv of atvSeqs) {
-        const atvFields = (atv as any).valueBlock.value as asn1.AsnType[];
-        const oid = atvFields[0] as asn1.ObjectIdentifier;
-        if (oid.valueBlock.toString() !== OID_CN) continue;
-        const val = atvFields[1];
-        // Works for Utf8String, PrintableString, etc.
-        if ("value" in val.valueBlock && typeof (val.valueBlock as any).value === "string") {
-          return (val.valueBlock as any).value;
-        }
-        return new TextDecoder().decode((val as any).valueBlock.valueHexView);
-      }
     }
     return null;
   } catch {
