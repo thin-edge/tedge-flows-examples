@@ -1,6 +1,6 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Helper script for the x509-cert-issuer flow.
-# Requires: openssl (Ed25519 support), jq
+# Requires: openssl (Ed25519 support), base64, tr, awk, mktemp
 #
 # Commands:
 #   setup-ca             Generate CA + factory CA and write params.toml (one-time)
@@ -11,9 +11,12 @@
 #   reenroll             Renew an existing CA-issued certificate over MQTT (no factory cert needed)
 #   decode-cert          Decode and display an issued X.509 certificate (base64 DER)
 
-set -euo pipefail
+set -eu
 
 COMMAND="${1:-}"
+# Portable newline constant for use in variable appends
+NL='
+'
 
 usage() {
   cat <<'EOF'
@@ -105,7 +108,7 @@ decode-cert
 enroll
   Full first-boot enrollment over a live MQTT broker. Sends the certificate request,
   waits for the signed response, and writes the private key and certificates to disk.
-  Requires: openssl, jq, mosquitto_pub, mosquitto_sub
+  Requires: openssl, mosquitto_pub, mosquitto_sub
 
   <device-id>                    Device identifier
   --broker <host>                MQTT broker hostname or IP (required)
@@ -201,8 +204,6 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || { echo "Error: '$1' is required but not found" >&2; exit 1; }
 }
 
-require_cmd openssl
-require_cmd jq
 # ─── enroll helpers ──────────────────────────────────────────────────────────
 
 # Parse --key value pairs from remaining args into variables.
@@ -221,7 +222,7 @@ parse_enroll_flags() {
   ENROLL_SAN_DNS=""
   ENROLL_SAN_IP=""
 
-  while [[ $# -gt 0 ]]; do
+  while [ $# -gt 0 ]; do
     case "$1" in
       --broker)        ENROLL_BROKER="$2";                    shift 2 ;;
       --port)          ENROLL_PORT="$2";                      shift 2 ;;
@@ -233,22 +234,56 @@ parse_enroll_flags() {
       --timeout)       ENROLL_TIMEOUT="$2";                   shift 2 ;;
       --csr-topic)     ENROLL_CSR_TOPIC="$2";                 shift 2 ;;
       --keygen-topic)  ENROLL_KEYGEN_TOPIC="$2";              shift 2 ;;
-      --san-dns)       ENROLL_SAN_DNS+=$'\n'"$2";            shift 2 ;;
-      --san-ip)        ENROLL_SAN_IP+=$'\n'"$2";             shift 2 ;;
+      --san-dns)       ENROLL_SAN_DNS="${ENROLL_SAN_DNS}${NL}$2"; shift 2 ;;
+      --san-ip)        ENROLL_SAN_IP="${ENROLL_SAN_IP}${NL}$2";   shift 2 ;;
       *) echo "Error: unknown flag '$1'" >&2; exit 1 ;;
     esac
   done
 }
 sign_file() {
-  local priv_pem="$1"
-  local data_file="$2"
-  openssl pkeyutl -sign -inkey "$priv_pem" -rawin -in "$data_file" | base64 | tr -d '\n'
+  openssl pkeyutl -sign -inkey "$1" -rawin -in "$2" | base64 | tr -d '\n'
+}
+
+# Generate a 16-byte random hex nonce (32 hex chars).
+# Uses openssl if available, otherwise falls back to od + /dev/urandom (busybox-safe).
+gen_nonce() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 16
+  else
+    od -vN 16 -An -tx1 /dev/urandom | tr -d ' \n'
+  fi
 }
 
 # Convert a newline-separated list of strings to a JSON array string.
-# Empty or blank input returns '[]'.
+# Empty or blank input returns '[]'. No jq required.
 build_json_str_array() {
-  printf '%s\n' "$1" | jq -Rsc '[split("\n")[] | select(length > 0)]'
+  result=""
+  while IFS= read -r item; do
+    [ -n "$item" ] || continue
+    result="${result:+$result,}\"$item\""
+  done <<_ARRAY_INPUT_
+$1
+_ARRAY_INPUT_
+  printf '[%s]' "$result"
+}
+
+# Extract a JSON string field value from a file, converting \n escapes to real newlines.
+# Safe for fields whose values contain no embedded double-quote characters (PEM, base64, hex).
+# Usage: json_str_field <field-name> <file>
+json_str_field() {
+  awk -v key="\"${1}\":" '
+    {
+      idx = index($0, key)
+      if (!idx) next
+      s = substr($0, idx + length(key))
+      sub(/^[[:space:]]*"/, "", s)
+      q = index(s, "\"")
+      if (!q) next
+      s = substr(s, 1, q - 1)
+      gsub(/\\n/, "\n", s)
+      printf "%s", s
+    }
+  ' "$2"
 }
 
 parse_reenroll_flags() {
@@ -265,7 +300,7 @@ parse_reenroll_flags() {
   REENROLL_SAN_DNS=""
   REENROLL_SAN_IP=""
 
-  while [[ $# -gt 0 ]]; do
+  while [ $# -gt 0 ]; do
     case "$1" in
       --broker)           REENROLL_BROKER="$2";               shift 2 ;;
       --port)             REENROLL_PORT="$2";                 shift 2 ;;
@@ -277,8 +312,8 @@ parse_reenroll_flags() {
       --timeout)          REENROLL_TIMEOUT="$2";               shift 2 ;;
       --renewal-topic)    REENROLL_RENEWAL_TOPIC="$2";         shift 2 ;;
       --response-prefix)  REENROLL_RESPONSE_PREFIX="$2";       shift 2 ;;
-      --san-dns)          REENROLL_SAN_DNS+=$'\n'"$2";        shift 2 ;;
-      --san-ip)           REENROLL_SAN_IP+=$'\n'"$2";         shift 2 ;;
+      --san-dns)          REENROLL_SAN_DNS="${REENROLL_SAN_DNS}${NL}$2"; shift 2 ;;
+      --san-ip)           REENROLL_SAN_IP="${REENROLL_SAN_IP}${NL}$2";   shift 2 ;;
       *) echo "Error: unknown flag '$1'" >&2; exit 1 ;;
     esac
   done
@@ -288,6 +323,7 @@ case "$COMMAND" in
 
   # ─── setup-ca ────────────────────────────────────────────────────────────────
   setup-ca)
+    require_cmd openssl
     PREFIX="${2:-x509-ca}"
     CA_PRIV_PEM="${PREFIX}-private.pem"
     CA_CERT_PEM="${PREFIX}-cert.pem"
@@ -328,14 +364,15 @@ EOF
 
   # ─── create-factory-cert ─────────────────────────────────────────────────────
   create-factory-cert)
+    require_cmd openssl
     DEVICE_ID="${2:?'device-id required'}"
     FACTORY_CA_PRIV_PEM="${3:?'factory-ca-private.pem required'}"
     FACTORY_DEV_PEM="${4:-factory-device-private.pem}"
 
-    [[ -f "$FACTORY_CA_PRIV_PEM" ]] || { echo "Error: $FACTORY_CA_PRIV_PEM not found" >&2; exit 1; }
+    [ -f "$FACTORY_CA_PRIV_PEM" ] || { echo "Error: $FACTORY_CA_PRIV_PEM not found" >&2; exit 1; }
 
     # Generate per-device factory keypair if not supplied
-    if [[ ! -f "$FACTORY_DEV_PEM" ]]; then
+    if [ ! -f "$FACTORY_DEV_PEM" ]; then
       openssl genpkey -algorithm ed25519 -out "$FACTORY_DEV_PEM" 2>/dev/null
       echo "Generated factory device private key: $FACTORY_DEV_PEM" >&2
       echo "  → burn both this key and the factory certificate onto the device's secure storage" >&2
@@ -346,10 +383,7 @@ EOF
       | tail -c 32 | openssl base64 -A)
 
     # Build canonical cert body (keys sorted alphabetically: device_id, public_key)
-    CERT_BODY=$(jq -cn \
-      --arg id  "$DEVICE_ID" \
-      --arg pub "$FACTORY_DEV_PUB" \
-      '{device_id: $id, public_key: $pub} | to_entries | sort_by(.key) | from_entries')
+    CERT_BODY="{\"device_id\":\"${DEVICE_ID}\",\"public_key\":\"${FACTORY_DEV_PUB}\"}"
 
     # Sign canonical body with factory CA
     TMP=$(mktemp)
@@ -358,42 +392,36 @@ EOF
     CERT_SIG=$(sign_file "$FACTORY_CA_PRIV_PEM" "$TMP")
 
     # Assemble and base64-encode the factory certificate (stdout)
-    jq -cn \
-      --argjson body "$CERT_BODY" \
-      --arg     sig  "$CERT_SIG" \
-      '$body + {_cert_sig: $sig}' \
+    printf '%s' "{\"device_id\":\"${DEVICE_ID}\",\"public_key\":\"${FACTORY_DEV_PUB}\",\"_cert_sig\":\"${CERT_SIG}\"}" \
       | base64 | tr -d '\n'
     ;;
 
   # ─── create-csr ──────────────────────────────────────────────────────────────
   create-csr)
+    require_cmd openssl
     DEVICE_ID="${2:?'device-id required'}"
     FACTORY_DEV_PRIV="${3:?'factory-device-private.pem required'}"
     FACTORY_CERT_B64="${4:?'factory-cert-base64 required'}"
+    shift 4
 
-    # Optional 5th arg is op-private.pem unless it starts with '--' (a flag)
-    if [[ "${5:-}" == --* ]]; then
-      OP_PEM="op-private.pem"
-      _san_start=5
-    else
-      OP_PEM="${5:-op-private.pem}"
-      _san_start=6
-    fi
+    # Optional next arg is op-private.pem unless it starts with '--' (a flag) or is absent
+    case "${1:-}" in
+      --*|'') OP_PEM="op-private.pem" ;;
+      *)      OP_PEM="$1"; shift ;;
+    esac
     CSR_SAN_DNS=""; CSR_SAN_IP=""
-    _i=$_san_start
-    while [[ $_i -le $# ]]; do
-      _arg="${!_i}"; _i=$((_i + 1))
-      case "$_arg" in
-        --san-dns) CSR_SAN_DNS+=$'\n'"${!_i}"; _i=$((_i + 1)) ;;
-        --san-ip)  CSR_SAN_IP+=$'\n'"${!_i}";  _i=$((_i + 1)) ;;
-        *) echo "Error: unknown option '$_arg'" >&2; exit 1 ;;
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --san-dns) CSR_SAN_DNS="${CSR_SAN_DNS}${NL}$2"; shift 2 ;;
+        --san-ip)  CSR_SAN_IP="${CSR_SAN_IP}${NL}$2";  shift 2 ;;
+        *) echo "Error: unknown option '$1'" >&2; exit 1 ;;
       esac
     done
 
-    [[ -f "$FACTORY_DEV_PRIV" ]] || { echo "Error: $FACTORY_DEV_PRIV not found" >&2; exit 1; }
+    [ -f "$FACTORY_DEV_PRIV" ] || { echo "Error: $FACTORY_DEV_PRIV not found" >&2; exit 1; }
 
     # Generate operational keypair if not supplied
-    if [[ ! -f "$OP_PEM" ]]; then
+    if [ ! -f "$OP_PEM" ]; then
       openssl genpkey -algorithm ed25519 -out "$OP_PEM" 2>/dev/null
       echo "Generated operational private key: $OP_PEM" >&2
     fi
@@ -402,14 +430,10 @@ EOF
     OP_PUB=$(openssl pkey -in "$OP_PEM" -pubout -outform DER | tail -c 32 | openssl base64 -A)
 
     # Random nonce
-    NONCE=$(openssl rand -hex 16)
+    NONCE=$(gen_nonce)
 
-    # Build canonical request body (keys sorted: device_id, nonce, public_key)
-    REQ_BODY=$(jq -cn \
-      --arg id  "$DEVICE_ID" \
-      --arg n   "$NONCE" \
-      --arg pub "$OP_PUB" \
-      '{device_id: $id, nonce: $n, public_key: $pub} | to_entries | sort_by(.key) | from_entries')
+    # Build canonical request body (keys sorted alphabetically: device_id, nonce, public_key)
+    REQ_BODY="{\"device_id\":\"${DEVICE_ID}\",\"nonce\":\"${NONCE}\",\"public_key\":\"${OP_PUB}\"}"
 
     # Sign with factory device private key
     TMP=$(mktemp)
@@ -420,45 +444,35 @@ EOF
     # Output CSR JSON to stdout (with optional SAN fields)
     _dns_json=$(build_json_str_array "$CSR_SAN_DNS")
     _ip_json=$(build_json_str_array "$CSR_SAN_IP")
-    jq -cn \
-      --arg id   "$DEVICE_ID" \
-      --arg pub  "$OP_PUB" \
-      --arg n    "$NONCE" \
-      --arg cert "$FACTORY_CERT_B64" \
-      --arg sig  "$REQ_SIG" \
-      --arg dns  "$_dns_json" \
-      --arg ip   "$_ip_json" \
-      '{device_id: $id, public_key: $pub, nonce: $n, _factory_cert: $cert, _req_sig: $sig}
-       | if $dns != "[]" then . + {san_dns_names: $dns} else . end
-       | if $ip  != "[]" then . + {san_ip_addresses: $ip} else . end'
+    PAYLOAD="{\"device_id\":\"${DEVICE_ID}\",\"public_key\":\"${OP_PUB}\",\"nonce\":\"${NONCE}\",\"_factory_cert\":\"${FACTORY_CERT_B64}\",\"_req_sig\":\"${REQ_SIG}\"}"
+    [ "$_dns_json" != "[]" ] && PAYLOAD="${PAYLOAD%\}},\"san_dns_names\":${_dns_json}}"
+    [ "$_ip_json"  != "[]" ] && PAYLOAD="${PAYLOAD%\}},\"san_ip_addresses\":${_ip_json}}"
+    printf '%s\n' "$PAYLOAD"
     ;;
 
   # ─── create-keygen-req ───────────────────────────────────────────────────────
   create-keygen-req)
+    require_cmd openssl
     DEVICE_ID="${2:?'device-id required'}"
     FACTORY_DEV_PRIV="${3:?'factory-device-private.pem required'}"
     FACTORY_CERT_B64="${4:?'factory-cert-base64 required'}"
+    shift 4
     KEYGEN_SAN_DNS=""; KEYGEN_SAN_IP=""
-    _i=5
-    while [[ $_i -le $# ]]; do
-      _arg="${!_i}"; _i=$((_i + 1))
-      case "$_arg" in
-        --san-dns) KEYGEN_SAN_DNS+=$'\n'"${!_i}"; _i=$((_i + 1)) ;;
-        --san-ip)  KEYGEN_SAN_IP+=$'\n'"${!_i}";  _i=$((_i + 1)) ;;
-        *) echo "Error: unknown option '$_arg'" >&2; exit 1 ;;
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --san-dns) KEYGEN_SAN_DNS="${KEYGEN_SAN_DNS}${NL}$2"; shift 2 ;;
+        --san-ip)  KEYGEN_SAN_IP="${KEYGEN_SAN_IP}${NL}$2";  shift 2 ;;
+        *) echo "Error: unknown option '$1'" >&2; exit 1 ;;
       esac
     done
 
-    [[ -f "$FACTORY_DEV_PRIV" ]] || { echo "Error: $FACTORY_DEV_PRIV not found" >&2; exit 1; }
+    [ -f "$FACTORY_DEV_PRIV" ] || { echo "Error: $FACTORY_DEV_PRIV not found" >&2; exit 1; }
 
     # Random nonce
-    NONCE=$(openssl rand -hex 16)
+    NONCE=$(gen_nonce)
 
-    # Build canonical request body (keys sorted: device_id, nonce) — no public_key
-    REQ_BODY=$(jq -cn \
-      --arg id "$DEVICE_ID" \
-      --arg n  "$NONCE" \
-      '{device_id: $id, nonce: $n} | to_entries | sort_by(.key) | from_entries')
+    # Build canonical request body (keys sorted alphabetically: device_id, nonce) — no public_key
+    REQ_BODY="{\"device_id\":\"${DEVICE_ID}\",\"nonce\":\"${NONCE}\"}"
 
     # Sign with factory device private key
     TMP=$(mktemp)
@@ -469,16 +483,10 @@ EOF
     # Output keygen request JSON to stdout (with optional SAN fields)
     _dns_json=$(build_json_str_array "$KEYGEN_SAN_DNS")
     _ip_json=$(build_json_str_array "$KEYGEN_SAN_IP")
-    jq -cn \
-      --arg id   "$DEVICE_ID" \
-      --arg n    "$NONCE" \
-      --arg cert "$FACTORY_CERT_B64" \
-      --arg sig  "$REQ_SIG" \
-      --arg dns  "$_dns_json" \
-      --arg ip   "$_ip_json" \
-      '{device_id: $id, nonce: $n, _factory_cert: $cert, _req_sig: $sig}
-       | if $dns != "[]" then . + {san_dns_names: $dns} else . end
-       | if $ip  != "[]" then . + {san_ip_addresses: $ip} else . end'
+    PAYLOAD="{\"device_id\":\"${DEVICE_ID}\",\"nonce\":\"${NONCE}\",\"_factory_cert\":\"${FACTORY_CERT_B64}\",\"_req_sig\":\"${REQ_SIG}\"}"
+    [ "$_dns_json" != "[]" ] && PAYLOAD="${PAYLOAD%\}},\"san_dns_names\":${_dns_json}}"
+    [ "$_ip_json"  != "[]" ] && PAYLOAD="${PAYLOAD%\}},\"san_ip_addresses\":${_ip_json}}"
+    printf '%s\n' "$PAYLOAD"
     ;;
 
   # ─── enroll ──────────────────────────────────────────────────────────────────
@@ -489,11 +497,15 @@ EOF
 
     require_cmd mosquitto_pub
     require_cmd mosquitto_sub
+    # openssl is required for CSR mode and keygen+factory-cert mode; not needed for open keygen
+    if ! $ENROLL_KEYGEN || [ -n "$ENROLL_FACTORY_CERT" ]; then
+      require_cmd openssl
+    fi
 
-    [[ -n "$ENROLL_BROKER" ]] || { echo "Error: --broker is required" >&2; exit 1; }
+    [ -n "$ENROLL_BROKER" ] || { echo "Error: --broker is required" >&2; exit 1; }
     mkdir -p "$ENROLL_OUT_DIR"
 
-    NONCE=$(openssl rand -hex 16)
+    NONCE=$(gen_nonce)
     RESPONSE_FILE=$(mktemp)
     trap 'rm -f "$RESPONSE_FILE"' EXIT
 
@@ -502,27 +514,18 @@ EOF
       TOPIC="$ENROLL_KEYGEN_TOPIC"
       ISSUED_TOPIC_PREFIX="te/pki/x509/keygen/issued"
 
-      if [[ -n "$ENROLL_FACTORY_CERT" ]]; then
-        [[ -n "$ENROLL_FACTORY_KEY" ]] || { echo "Error: --factory-key required when --factory-cert is set" >&2; exit 1; }
-        [[ -f "$ENROLL_FACTORY_KEY" ]] || { echo "Error: $ENROLL_FACTORY_KEY not found" >&2; exit 1; }
+      if [ -n "$ENROLL_FACTORY_CERT" ]; then
+        [ -n "$ENROLL_FACTORY_KEY" ] || { echo "Error: --factory-key required when --factory-cert is set" >&2; exit 1; }
+        [ -f "$ENROLL_FACTORY_KEY" ] || { echo "Error: $ENROLL_FACTORY_KEY not found" >&2; exit 1; }
 
-        REQ_BODY=$(jq -cn \
-          --arg id "$ENROLL_DEVICE_ID" --arg n "$NONCE" \
-          '{device_id: $id, nonce: $n} | to_entries | sort_by(.key) | from_entries')
+        REQ_BODY="{\"device_id\":\"${ENROLL_DEVICE_ID}\",\"nonce\":\"${NONCE}\"}"
         TMP_BODY=$(mktemp); trap 'rm -f "$TMP_BODY" "$RESPONSE_FILE"' EXIT
         printf '%s' "$REQ_BODY" > "$TMP_BODY"
         REQ_SIG=$(sign_file "$ENROLL_FACTORY_KEY" "$TMP_BODY")
 
-        PAYLOAD=$(jq -cn \
-          --arg id   "$ENROLL_DEVICE_ID" \
-          --arg n    "$NONCE" \
-          --arg cert "$ENROLL_FACTORY_CERT" \
-          --arg sig  "$REQ_SIG" \
-          '{device_id: $id, nonce: $n, _factory_cert: $cert, _req_sig: $sig}')
+        PAYLOAD="{\"device_id\":\"${ENROLL_DEVICE_ID}\",\"nonce\":\"${NONCE}\",\"_factory_cert\":\"${ENROLL_FACTORY_CERT}\",\"_req_sig\":\"${REQ_SIG}\"}"
       else
-        PAYLOAD=$(jq -cn \
-          --arg id "$ENROLL_DEVICE_ID" --arg n "$NONCE" \
-          '{device_id: $id, nonce: $n}')
+        PAYLOAD="{\"device_id\":\"${ENROLL_DEVICE_ID}\",\"nonce\":\"${NONCE}\"}"
       fi
     else
       # ── CSR mode: device supplies its own public key ──
@@ -530,46 +533,32 @@ EOF
       ISSUED_TOPIC_PREFIX="te/pki/x509/cert/issued"
 
       OP_KEY_FILE="${ENROLL_OP_KEY:-${ENROLL_OUT_DIR}/device-private.pem}"
-      if [[ ! -f "$OP_KEY_FILE" ]]; then
+      if [ ! -f "$OP_KEY_FILE" ]; then
         openssl genpkey -algorithm ed25519 -out "$OP_KEY_FILE" 2>/dev/null
         echo "Generated operational private key: $OP_KEY_FILE" >&2
       fi
       OP_PUB=$(openssl pkey -in "$OP_KEY_FILE" -pubout -outform DER | tail -c 32 | openssl base64 -A)
 
-      if [[ -n "$ENROLL_FACTORY_CERT" ]]; then
-        [[ -n "$ENROLL_FACTORY_KEY" ]] || { echo "Error: --factory-key required when --factory-cert is set" >&2; exit 1; }
-        [[ -f "$ENROLL_FACTORY_KEY" ]] || { echo "Error: $ENROLL_FACTORY_KEY not found" >&2; exit 1; }
+      if [ -n "$ENROLL_FACTORY_CERT" ]; then
+        [ -n "$ENROLL_FACTORY_KEY" ] || { echo "Error: --factory-key required when --factory-cert is set" >&2; exit 1; }
+        [ -f "$ENROLL_FACTORY_KEY" ] || { echo "Error: $ENROLL_FACTORY_KEY not found" >&2; exit 1; }
 
-        REQ_BODY=$(jq -cn \
-          --arg id "$ENROLL_DEVICE_ID" --arg n "$NONCE" --arg pub "$OP_PUB" \
-          '{device_id: $id, nonce: $n, public_key: $pub} | to_entries | sort_by(.key) | from_entries')
+        REQ_BODY="{\"device_id\":\"${ENROLL_DEVICE_ID}\",\"nonce\":\"${NONCE}\",\"public_key\":\"${OP_PUB}\"}"
         TMP_BODY=$(mktemp); trap 'rm -f "$TMP_BODY" "$RESPONSE_FILE"' EXIT
         printf '%s' "$REQ_BODY" > "$TMP_BODY"
         REQ_SIG=$(sign_file "$ENROLL_FACTORY_KEY" "$TMP_BODY")
 
-        PAYLOAD=$(jq -cn \
-          --arg id   "$ENROLL_DEVICE_ID" \
-          --arg pub  "$OP_PUB" \
-          --arg n    "$NONCE" \
-          --arg cert "$ENROLL_FACTORY_CERT" \
-          --arg sig  "$REQ_SIG" \
-          '{device_id: $id, public_key: $pub, nonce: $n, _factory_cert: $cert, _req_sig: $sig}')
+        PAYLOAD="{\"device_id\":\"${ENROLL_DEVICE_ID}\",\"public_key\":\"${OP_PUB}\",\"nonce\":\"${NONCE}\",\"_factory_cert\":\"${ENROLL_FACTORY_CERT}\",\"_req_sig\":\"${REQ_SIG}\"}"
       else
-        PAYLOAD=$(jq -cn \
-          --arg id "$ENROLL_DEVICE_ID" --arg pub "$OP_PUB" --arg n "$NONCE" \
-          '{device_id: $id, public_key: $pub, nonce: $n}')
+        PAYLOAD="{\"device_id\":\"${ENROLL_DEVICE_ID}\",\"public_key\":\"${OP_PUB}\",\"nonce\":\"${NONCE}\"}"
       fi
     fi
 
     # Inject SAN fields into payload if specified
     _dns_json=$(build_json_str_array "$ENROLL_SAN_DNS")
     _ip_json=$(build_json_str_array "$ENROLL_SAN_IP")
-    if [[ "$_dns_json" != "[]" || "$_ip_json" != "[]" ]]; then
-      PAYLOAD=$(jq -c \
-        --arg dns "$_dns_json" --arg ip "$_ip_json" \
-        'if $dns != "[]" then . + {san_dns_names: $dns} else . end
-         | if $ip != "[]" then . + {san_ip_addresses: $ip} else . end' <<< "$PAYLOAD")
-    fi
+    [ "$_dns_json" != "[]" ] && PAYLOAD="${PAYLOAD%\}},\"san_dns_names\":${_dns_json}}"
+    [ "$_ip_json"  != "[]" ] && PAYLOAD="${PAYLOAD%\}},\"san_ip_addresses\":${_ip_json}}"
 
     # Subscribe for the response before publishing (avoid race)
     RESPONSE_TOPIC="${ISSUED_TOPIC_PREFIX}/${ENROLL_DEVICE_ID}"
@@ -591,9 +580,9 @@ EOF
     wait "$SUB_PID" || { echo "Error: timed out waiting for response on $RESPONSE_TOPIC" >&2; exit 1; }
 
     # Validate response
-    CERT_PEM=$(jq -r '.cert_pem    // empty' "$RESPONSE_FILE")
-    CA_PEM=$(jq   -r '.ca_cert_pem // empty' "$RESPONSE_FILE")
-    [[ -n "$CERT_PEM" ]] || { echo "Error: response missing cert_pem — $(cat "$RESPONSE_FILE")" >&2; exit 1; }
+    CERT_PEM=$(json_str_field "cert_pem" "$RESPONSE_FILE")
+    CA_PEM=$(json_str_field "ca_cert_pem" "$RESPONSE_FILE")
+    [ -n "$CERT_PEM" ] || { echo "Error: response missing cert_pem — $(cat "$RESPONSE_FILE")" >&2; exit 1; }
 
     # Write certificate and CA cert
     printf '%s\n' "$CERT_PEM" > "${ENROLL_OUT_DIR}/device-cert.pem"
@@ -601,8 +590,8 @@ EOF
 
     # Write private key (keygen only — CSR mode key was already written above)
     if $ENROLL_KEYGEN; then
-      PRIV_PEM=$(jq -r '.private_key_pem // empty' "$RESPONSE_FILE")
-      [[ -n "$PRIV_PEM" ]] || { echo "Error: response missing private_key_pem" >&2; exit 1; }
+      PRIV_PEM=$(json_str_field "private_key_pem" "$RESPONSE_FILE")
+      [ -n "$PRIV_PEM" ] || { echo "Error: response missing private_key_pem" >&2; exit 1; }
       printf '%s\n' "$PRIV_PEM" > "${ENROLL_OUT_DIR}/device-private.pem"
     fi
 
@@ -610,7 +599,8 @@ EOF
     echo "  device-private.pem  — private key (keep secret)" >&2
     echo "  device-cert.pem     — TLS client certificate" >&2
     echo "  ca-cert.pem         — CA certificate (install on broker as trusted CA)" >&2
-    openssl verify -CAfile "${ENROLL_OUT_DIR}/ca-cert.pem" "${ENROLL_OUT_DIR}/device-cert.pem" >&2
+    command -v openssl >/dev/null 2>&1 && \
+      openssl verify -CAfile "${ENROLL_OUT_DIR}/ca-cert.pem" "${ENROLL_OUT_DIR}/device-cert.pem" >&2
     ;;
 
   # ─── reenroll ────────────────────────────────────────────────────────────────
@@ -619,15 +609,16 @@ EOF
     shift 2
     parse_reenroll_flags "$@"
 
+    require_cmd openssl
     require_cmd mosquitto_pub
     require_cmd mosquitto_sub
 
-    [[ -n "$REENROLL_BROKER" ]]       || { echo "Error: --broker is required" >&2; exit 1; }
-    [[ -f "$REENROLL_CURRENT_CERT" ]] || { echo "Error: --current-cert: $REENROLL_CURRENT_CERT not found" >&2; exit 1; }
-    [[ -f "$REENROLL_CURRENT_KEY" ]]  || { echo "Error: --current-key: $REENROLL_CURRENT_KEY not found" >&2; exit 1; }
+    [ -n "$REENROLL_BROKER" ]        || { echo "Error: --broker is required" >&2; exit 1; }
+    [ -f "$REENROLL_CURRENT_CERT" ]  || { echo "Error: --current-cert: $REENROLL_CURRENT_CERT not found" >&2; exit 1; }
+    [ -f "$REENROLL_CURRENT_KEY" ]   || { echo "Error: --current-key: $REENROLL_CURRENT_KEY not found" >&2; exit 1; }
 
     # Default out-dir to the directory containing the current cert
-    [[ -n "$REENROLL_OUT_DIR" ]] || REENROLL_OUT_DIR="$(dirname "$REENROLL_CURRENT_CERT")"
+    [ -n "$REENROLL_OUT_DIR" ] || REENROLL_OUT_DIR="$(dirname "$REENROLL_CURRENT_CERT")"
     mkdir -p "$REENROLL_OUT_DIR"
 
     # Convert current cert to base64 DER (handles both PEM and DER input)
@@ -635,12 +626,16 @@ EOF
 
     # Determine the key for the renewed certificate
     WRITE_NEW_KEY=false
-    if [[ -n "$REENROLL_NEW_KEY" ]]; then
-      [[ -f "$REENROLL_NEW_KEY" ]] || { echo "Error: $REENROLL_NEW_KEY not found" >&2; exit 1; }
+    NEW_KEY_TMP=""
+    if [ -n "$REENROLL_NEW_KEY" ]; then
+      [ -f "$REENROLL_NEW_KEY" ] || { echo "Error: $REENROLL_NEW_KEY not found" >&2; exit 1; }
       OP_PEM="$REENROLL_NEW_KEY"
     elif $REENROLL_ROTATE; then
       OP_PEM="${REENROLL_OUT_DIR}/device-private.pem"
-      openssl genpkey -algorithm ed25519 -out "$OP_PEM" 2>/dev/null
+      # Generate to a temp file — writing directly to device-private.pem would overwrite
+      # the current key before we sign the proof-of-possession request with it.
+      NEW_KEY_TMP=$(mktemp)
+      openssl genpkey -algorithm ed25519 -out "$NEW_KEY_TMP" 2>/dev/null
       echo "Generated new operational private key: $OP_PEM" >&2
       WRITE_NEW_KEY=true
     else
@@ -648,40 +643,27 @@ EOF
       OP_PEM="$REENROLL_CURRENT_KEY"
     fi
 
-    OP_PUB=$(openssl pkey -in "$OP_PEM" -pubout -outform DER | tail -c 32 | openssl base64 -A)
-    NONCE=$(openssl rand -hex 16)
+    # When rotating, extract the new public key from the temp file; current key stays intact for signing
+    OP_PUB=$(openssl pkey -in "${NEW_KEY_TMP:-$OP_PEM}" -pubout -outform DER | tail -c 32 | openssl base64 -A)
+    NONCE=$(gen_nonce)
 
-    # Build canonical request body (keys sorted: device_id, nonce, public_key)
-    REQ_BODY=$(jq -cn \
-      --arg id  "$REENROLL_DEVICE_ID" \
-      --arg n   "$NONCE" \
-      --arg pub "$OP_PUB" \
-      '{device_id: $id, nonce: $n, public_key: $pub} | to_entries | sort_by(.key) | from_entries')
+    # Build canonical request body (keys sorted alphabetically: device_id, nonce, public_key)
+    REQ_BODY="{\"device_id\":\"${REENROLL_DEVICE_ID}\",\"nonce\":\"${NONCE}\",\"public_key\":\"${OP_PUB}\"}"
 
     # Sign with the CURRENT operational private key (proof of possession)
     TMP_BODY=$(mktemp)
     RESPONSE_FILE=$(mktemp)
-    trap 'rm -f "$TMP_BODY" "$RESPONSE_FILE"' EXIT
+    trap 'rm -f "$TMP_BODY" "$RESPONSE_FILE" "${NEW_KEY_TMP:-}"' EXIT
     printf '%s' "$REQ_BODY" > "$TMP_BODY"
     REQ_SIG=$(sign_file "$REENROLL_CURRENT_KEY" "$TMP_BODY")
 
-    PAYLOAD=$(jq -cn \
-      --arg id   "$REENROLL_DEVICE_ID" \
-      --arg pub  "$OP_PUB" \
-      --arg n    "$NONCE" \
-      --arg cert "$CURRENT_CERT_DER_B64" \
-      --arg sig  "$REQ_SIG" \
-      '{device_id: $id, public_key: $pub, nonce: $n, _current_cert: $cert, _req_sig: $sig}')
+    PAYLOAD="{\"device_id\":\"${REENROLL_DEVICE_ID}\",\"public_key\":\"${OP_PUB}\",\"nonce\":\"${NONCE}\",\"_current_cert\":\"${CURRENT_CERT_DER_B64}\",\"_req_sig\":\"${REQ_SIG}\"}"
 
     # Inject SAN fields into payload if specified
     _dns_json=$(build_json_str_array "$REENROLL_SAN_DNS")
     _ip_json=$(build_json_str_array "$REENROLL_SAN_IP")
-    if [[ "$_dns_json" != "[]" || "$_ip_json" != "[]" ]]; then
-      PAYLOAD=$(jq -c \
-        --arg dns "$_dns_json" --arg ip "$_ip_json" \
-        'if $dns != "[]" then . + {san_dns_names: $dns} else . end
-         | if $ip != "[]" then . + {san_ip_addresses: $ip} else . end' <<< "$PAYLOAD")
-    fi
+    [ "$_dns_json" != "[]" ] && PAYLOAD="${PAYLOAD%\}},\"san_dns_names\":${_dns_json}}"
+    [ "$_ip_json"  != "[]" ] && PAYLOAD="${PAYLOAD%\}},\"san_ip_addresses\":${_ip_json}}"
 
     # Subscribe before publishing to avoid race
     RESPONSE_TOPIC="${REENROLL_RESPONSE_PREFIX}/${REENROLL_DEVICE_ID}"
@@ -702,9 +684,12 @@ EOF
     wait "$SUB_PID" || { echo "Error: timed out waiting for response on $RESPONSE_TOPIC" >&2; exit 1; }
 
     # Validate response
-    CERT_PEM=$(jq -r '.cert_pem    // empty' "$RESPONSE_FILE")
-    CA_PEM=$(jq   -r '.ca_cert_pem // empty' "$RESPONSE_FILE")
-    [[ -n "$CERT_PEM" ]] || { echo "Error: response missing cert_pem — $(cat "$RESPONSE_FILE")" >&2; exit 1; }
+    CERT_PEM=$(json_str_field "cert_pem" "$RESPONSE_FILE")
+    CA_PEM=$(json_str_field "ca_cert_pem" "$RESPONSE_FILE")
+    [ -n "$CERT_PEM" ] || { echo "Error: response missing cert_pem — $(cat "$RESPONSE_FILE")" >&2; exit 1; }
+
+    # Commit the new key now that we have a valid response (rotation only)
+    [ -n "$NEW_KEY_TMP" ] && mv "$NEW_KEY_TMP" "$OP_PEM"
 
     printf '%s\n' "$CERT_PEM" > "${REENROLL_OUT_DIR}/device-cert.pem"
     printf '%s\n' "$CA_PEM"   > "${REENROLL_OUT_DIR}/ca-cert.pem"
@@ -715,19 +700,21 @@ EOF
     if $WRITE_NEW_KEY; then
       echo "  $(basename "$OP_PEM")  — new private key (keep secret)" >&2
     fi
-    openssl verify -CAfile "${REENROLL_OUT_DIR}/ca-cert.pem" "${REENROLL_OUT_DIR}/device-cert.pem" >&2
+    command -v openssl >/dev/null 2>&1 && \
+      openssl verify -CAfile "${REENROLL_OUT_DIR}/ca-cert.pem" "${REENROLL_OUT_DIR}/device-cert.pem" >&2
     ;;
 
   # ─── decode-cert ─────────────────────────────────────────────────────────────
   decode-cert)
+    require_cmd openssl
     CERT_B64="${2:--}"  # '-' means read from stdin
 
-    if [[ "$CERT_B64" == "-" ]]; then
+    if [ "$CERT_B64" = "-" ]; then
       # Read and strip any newlines from stdin
       CERT_B64=$(cat | tr -d '\n')
     fi
 
-    [[ -n "$CERT_B64" ]] || { echo "Error: no certificate data provided" >&2; exit 1; }
+    [ -n "$CERT_B64" ] || { echo "Error: no certificate data provided" >&2; exit 1; }
 
     printf '%s' "$CERT_B64" | base64 -d | openssl x509 -inform DER -text -noout
     ;;
