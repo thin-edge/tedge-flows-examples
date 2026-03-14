@@ -42,7 +42,27 @@ For smaller deployments or when per-device public keys are manageable, the stati
 
 ### PKI certificate mode
 
-In PKI mode, a root CA key pair is held offline (e.g. at manufacturing time). Each device is issued a **device certificate** — a JSON blob signed by the root CA — containing the device's public key:
+In PKI mode, the device holds a certificate that binds its public key to its identity. When signing, the flow attaches the certificate to every outgoing message as `_cert`. The **tedge-events-verify** flow checks the certificate's signature against the root CA public key, then uses the embedded device public key to verify the payload signature.
+
+Two certificate formats are supported:
+
+#### Option A — X.509 DER certificate (from x509-cert-issuer)
+
+Request a certificate from the **x509-cert-issuer** flow. The `cert_der` field in the response is already base64-encoded DER and can be used directly as `device_cert`. The matching `root_ca_public_key` for the verifier is extracted from the CA cert:
+
+```sh
+openssl pkey -in ca.pem -pubout -outform DER | tail -c 32 | xxd -p -c 32
+```
+
+```toml
+# params.toml
+private_key = "<hex-ed25519-private-key>"
+device_cert = "<cert_der from x509-cert-issuer response>"
+```
+
+#### Option B — Custom JSON certificate
+
+A lightweight JSON blob signed by any CA Ed25519 key, containing the device's public key:
 
 ```json
 {
@@ -53,7 +73,7 @@ In PKI mode, a root CA key pair is held offline (e.g. at manufacturing time). Ea
 }
 ```
 
-This certificate is provisioned onto the device (base64-encoded) as `device_cert` in `params.toml`. When signing, the flow attaches it to every outgoing message as `_cert`. The verifier decodes the certificate, checks its signature against the root CA public key, then uses the embedded device public key to verify the payload signature.
+This certificate is provisioned onto the device (base64-encoded) as `device_cert` in `params.toml`.
 
 #### Generating a key pair per device
 
@@ -114,13 +134,14 @@ device_cert = "eyJkZXZpY2VfaWQiOi..."
 | --------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `output_events_topic` | `c8y/mqtt/out/te/v1/events` | MQTT topic where transformed events are published                                                        |
 | `private_key`         | *(empty)*                   | Hex-encoded 32-byte Ed25519 private key for signing. Leave empty to disable.                             |
-| `device_cert`         | *(empty)*                   | Base64-encoded device certificate JSON signed by the root CA. Attached as `_cert` when signing is on. |
+| `device_cert`         | *(empty)*                   | Base64-encoded device certificate attached as `_cert` when signing is on. Accepts either X.509 DER (the `cert_der` field returned by **x509-cert-issuer**) or a custom JSON cert. |
 | `debug`               | `false`                     | When `true`, logs each incoming message payload to the console                                           |
 
 ### Related flows
 
 - **tedge-config-context** — populates `device.id` in the shared mapper context used by this flow as the event `source`.
 - **tedge-events-verify** — verifies the signatures produced by this flow.
+- **x509-cert-issuer** — issues X.509 DER device certificates; the `cert_der` response field can be used directly as `device_cert`.
 
 
 ## Example
