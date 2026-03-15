@@ -640,11 +640,15 @@ EOF
 
     # Subscribe for the response before publishing (avoid race)
     RESPONSE_TOPIC="${ISSUED_TOPIC_PREFIX}/${ENROLL_DEVICE_ID}"
+    REJECTED_TOPIC="te/pki/x509/req/rejected"
+    RAW_RESPONSE=$(mktemp)
+    trap 'rm -f "$RESPONSE_FILE" "$RAW_RESPONSE"' EXIT
     echo "Subscribing to $RESPONSE_TOPIC ..." >&2
     mosquitto_sub \
       -h "$ENROLL_BROKER" -p "$ENROLL_PORT" \
       -t "$RESPONSE_TOPIC" \
-      -C 1 -W "$ENROLL_TIMEOUT" > "$RESPONSE_FILE" &
+      -t "$REJECTED_TOPIC" \
+      -v -C 1 -W "$ENROLL_TIMEOUT" > "$RAW_RESPONSE" &
     SUB_PID=$!
 
     # Small delay to ensure the subscription is active before publishing
@@ -656,6 +660,20 @@ EOF
       -t "$TOPIC" -s
 
     wait "$SUB_PID" || { echo "Error: timed out waiting for response on $RESPONSE_TOPIC" >&2; exit 1; }
+
+    # Parse topic and payload from verbose output (format: "<topic> <payload>")
+    RECV_TOPIC=$(awk '{print $1; exit}' "$RAW_RESPONSE")
+    awk '{sub(/^[^ ]+ /, ""); print; exit}' "$RAW_RESPONSE" > "$RESPONSE_FILE"
+
+    if [ "$RECV_TOPIC" = "$REJECTED_TOPIC" ]; then
+      REASON=$(json_str_field "_rejection_reason" "$RESPONSE_FILE")
+      if [ -n "$REASON" ]; then
+        echo "Error: enrollment request rejected — $REASON" >&2
+      else
+        echo "Error: enrollment request was rejected (check broker logs for details)" >&2
+      fi
+      exit 1
+    fi
 
     # Validate response
     CERT_PEM=$(json_str_field "cert_pem" "$RESPONSE_FILE")
@@ -745,11 +763,15 @@ EOF
 
     # Subscribe before publishing to avoid race
     RESPONSE_TOPIC="${REENROLL_RESPONSE_PREFIX}/${REENROLL_DEVICE_ID}"
+    REJECTED_TOPIC="te/pki/x509/req/rejected"
+    RAW_RESPONSE=$(mktemp)
+    trap 'rm -f "$TMP_BODY" "$RESPONSE_FILE" "$RAW_RESPONSE" "${NEW_KEY_TMP:-}"' EXIT
     echo "Subscribing to $RESPONSE_TOPIC ..." >&2
     mosquitto_sub \
       -h "$REENROLL_BROKER" -p "$REENROLL_PORT" \
       -t "$RESPONSE_TOPIC" \
-      -C 1 -W "$REENROLL_TIMEOUT" > "$RESPONSE_FILE" &
+      -t "$REJECTED_TOPIC" \
+      -v -C 1 -W "$REENROLL_TIMEOUT" > "$RAW_RESPONSE" &
     SUB_PID=$!
 
     sleep 0.3
@@ -760,6 +782,20 @@ EOF
       -t "$REENROLL_RENEWAL_TOPIC" -s
 
     wait "$SUB_PID" || { echo "Error: timed out waiting for response on $RESPONSE_TOPIC" >&2; exit 1; }
+
+    # Parse topic and payload from verbose output (format: "<topic> <payload>")
+    RECV_TOPIC=$(awk '{print $1; exit}' "$RAW_RESPONSE")
+    awk '{sub(/^[^ ]+ /, ""); print; exit}' "$RAW_RESPONSE" > "$RESPONSE_FILE"
+
+    if [ "$RECV_TOPIC" = "$REJECTED_TOPIC" ]; then
+      REASON=$(json_str_field "_rejection_reason" "$RESPONSE_FILE")
+      if [ -n "$REASON" ]; then
+        echo "Error: renewal request rejected — $REASON" >&2
+      else
+        echo "Error: renewal request was rejected (check broker logs for details)" >&2
+      fi
+      exit 1
+    fi
 
     # Validate response
     CERT_PEM=$(json_str_field "cert_pem" "$RESPONSE_FILE")

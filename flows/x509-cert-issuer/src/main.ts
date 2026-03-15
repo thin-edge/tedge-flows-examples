@@ -779,15 +779,18 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
 
   const reject = (reason: string): Message[] => {
     console.log(`x509-cert-issuer: rejected — ${reason}`);
-    return output_rejected_topic
-      ? [
-          {
-            time: message.time,
-            topic: output_rejected_topic,
-            payload: message.payload,
-          },
-        ]
-      : [];
+    if (!output_rejected_topic) return [];
+    let rejPayload: string;
+    try {
+      const orig =
+        typeof message.payload === "string"
+          ? JSON.parse(message.payload)
+          : JSON.parse(new TextDecoder().decode(message.payload));
+      rejPayload = JSON.stringify({ ...orig, _rejection_reason: reason });
+    } catch {
+      rejPayload = JSON.stringify({ _rejection_reason: reason });
+    }
+    return [{ time: message.time, topic: output_rejected_topic, payload: rejPayload }];
   };
 
   if (!ca_private_key) return reject("ca_private_key not configured");
