@@ -147,3 +147,6 @@ vite.config.ts.timestamp-*
 # test files
 *.pem
 params.toml
+*.b64
+*.csr
+*.srl

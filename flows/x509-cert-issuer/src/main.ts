@@ -9,7 +9,6 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import * as asn1 from "asn1js";
 
 export interface Config {
-  debug?: boolean;
   /**
    * Base64-encoded 32-byte Ed25519 private key of this CA.
    * Generate with: openssl pkey -in ca.pem -outform DER | tail -c 32 | openssl base64 -A
@@ -759,7 +758,6 @@ function readCertSANs(der: Uint8Array): SAN | null {
 
 export function onMessage(message: Message, context: FlowContext): Message[] {
   const {
-    debug = false,
     ca_private_key,
     ca_cert_der: caCertDerB64,
     cert_validity_days = 365,
@@ -780,7 +778,7 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   const isRenewalRequest = message.topic === renewal_topic;
 
   const reject = (reason: string): Message[] => {
-    if (debug) console.log(`x509-cert-issuer: rejected — ${reason}`);
+    console.log(`x509-cert-issuer: rejected — ${reason}`);
     return output_rejected_topic
       ? [
           {
@@ -984,10 +982,14 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   let san: SAN | undefined;
   try {
     const dnsList: string[] = san_dns_names
-      ? JSON.parse(String(san_dns_names))
+      ? Array.isArray(san_dns_names)
+        ? san_dns_names
+        : JSON.parse(String(san_dns_names))
       : [];
     const ipList: string[] = san_ip_addresses
-      ? JSON.parse(String(san_ip_addresses))
+      ? Array.isArray(san_ip_addresses)
+        ? san_ip_addresses
+        : JSON.parse(String(san_ip_addresses))
       : [];
     if (dnsList.length > 0 || ipList.length > 0) {
       san = { dns: dnsList, ip: ipList };
@@ -1017,16 +1019,10 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
 
   const certDer = signCert(tbs, ca_private_key);
 
-  if (debug) {
-    const mode = isKeygenRequest
-      ? "keygen"
-      : isRenewalRequest
-        ? "renew"
-        : "csr";
-    console.log(
-      `x509-cert-issuer: issued cert [${mode}] CN="${subjectCN}" expires=${notAfter.toISOString()}`,
-    );
-  }
+  const mode = isKeygenRequest ? "keygen" : isRenewalRequest ? "renew" : "csr";
+  console.log(
+    `x509-cert-issuer: issued cert [${mode}] CN="${subjectCN}" expires=${notAfter.toISOString()}`,
+  );
 
   const outputTopic = isKeygenRequest
     ? `${output_keygen_topic_prefix}/${device_id}`

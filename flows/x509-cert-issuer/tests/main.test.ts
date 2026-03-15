@@ -1417,6 +1417,27 @@ describe("Subject Alternative Names (SAN)", () => {
     expect(getSAN(cert)).toMatch(/DNS:keygen-device\.local/);
   });
 
+  test("CSR with san_dns_names as native JSON array produces dNSName SANs", () => {
+    const ctx = makeIssuerContext({ require_factory_cert: false });
+    const msg = makeOpenRequest("san-dns-native-1", {
+      // Native JSON array (not a JSON-encoded string) — sent by x509-cert.sh
+      san_dns_names: ["device.local", "device.example.com"],
+    });
+    const cert = parseCertFromOutput(flow.onMessage(msg, ctx));
+    const san = getSAN(cert);
+    expect(san).toMatch(/DNS:device\.local/);
+    expect(san).toMatch(/DNS:device\.example\.com/);
+  });
+
+  test("CSR with san_ip_addresses as native JSON array produces iPAddress SANs", () => {
+    const ctx = makeIssuerContext({ require_factory_cert: false });
+    const msg = makeOpenRequest("san-ip-native-1", {
+      san_ip_addresses: ["192.168.1.42"],
+    });
+    const cert = parseCertFromOutput(flow.onMessage(msg, ctx));
+    expect(getSAN(cert)).toMatch(/IP Address:192\.168\.1\.42/i);
+  });
+
   test("invalid san_dns_names JSON is rejected", () => {
     const ctx = makeIssuerContext({ require_factory_cert: false });
     const msg = makeOpenRequest("san-invalid-dns-1", {

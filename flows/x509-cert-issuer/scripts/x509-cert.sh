@@ -4,6 +4,7 @@
 #
 # Commands:
 #   setup-ca             Generate CA + factory CA and write params.toml (one-time)
+#   renew-ca             Re-issue the CA certificate from the existing private key and update params.toml
 #   create-factory-cert  Build a per-device factory certificate (Phase 1, manufacturer)
 #   create-csr           Build and sign a CSR request (Phase 2, device first boot)
 #   create-keygen-req    Build a signed keygen request (for constrained devices)
@@ -22,6 +23,7 @@ usage() {
   cat <<'EOF'
 Usage:
   x509-cert.sh setup-ca             [output-prefix]
+  x509-cert.sh renew-ca             <ca-private.pem> [ca-cert.pem] [--days <n>] [--params <toml>]
   x509-cert.sh create-factory-cert  <device-id> <factory-ca-private.pem> [factory-device-private.pem]
   x509-cert.sh create-csr           <device-id> <factory-device-private.pem> <factory-cert-base64> [op-private.pem] [--san-dns <name>]... [--san-ip <addr>]...
   x509-cert.sh create-keygen-req    <device-id> <factory-device-private.pem> <factory-cert-base64> [--san-dns <name>]... [--san-ip <addr>]...
@@ -44,6 +46,19 @@ setup-ca
   Example:
     ./x509-cert.sh setup-ca my-ca
 
+renew-ca
+  Re-issues the CA certificate from the existing private key, then updates ca_cert_der in
+  params.toml in place. The private key is unchanged, so all previously issued device
+  certificates remain valid. Install the refreshed CA cert on the broker afterwards.
+
+  <ca-private.pem>   Existing CA private key PEM (required)
+  [ca-cert.pem]      Where to write the new CA certificate (default: derived from private key filename)
+  --days <n>         Validity period in days (default: 3650)
+  --params <toml>    params.toml to update (default: params.toml)
+
+  Example:
+    ./x509-cert.sh renew-ca my-ca-private.pem my-ca-cert.pem
+
 create-factory-cert
   Builds a base64-encoded factory certificate for a specific device. Run once per device
   at manufacturing time. The cert and factory private key must both be stored on the device.
@@ -51,12 +66,14 @@ create-factory-cert
   <device-id>                    Device identifier
   <factory-ca-private.pem>       Factory CA private key (from setup-ca)
   [factory-device-private.pem]   Device factory private key (generated if not supplied,
-                                  written to factory-device-private.pem in cwd)
+                                  written to <device-id>-factory-device-private.pem in cwd)
 
   Outputs the factory certificate (base64) to stdout. Informational messages go to stderr.
 
   Example:
     FACTORY_CERT=$(./x509-cert.sh create-factory-cert my-device-001 factory-ca-private.pem 2>/dev/null)
+    # or write to a file named after the device:
+    ./x509-cert.sh create-factory-cert my-device-001 factory-ca-private.pem > my-device-001-factory-cert.b64 2>/dev/null
 
 create-csr
   Builds and signs a certificate signing request. Run at first boot on the device.
@@ -112,8 +129,9 @@ enroll
 
   <device-id>                    Device identifier
   --broker <host>                MQTT broker hostname or IP (required)
-  --port <port>                  MQTT broker port (default: 1883)
-  --factory-cert <base64>        Factory certificate (required when require_factory_cert=true)
+  --port <port>                  MQTT broker port (default: 2883)
+  --factory-cert <base64|file>   Factory certificate — base64 string or path to a .b64 file
+                                 (required when require_factory_cert=true)
   --factory-key <pem>            Factory private key PEM (required when --factory-cert is set)
   --keygen                       Server generates the keypair (omit to supply your own)
   --op-key <pem>                 Existing operational private key PEM (CSR mode; generated if absent)
@@ -149,7 +167,7 @@ reenroll
 
   <device-id>                    Device identifier
   --broker <host>                MQTT broker hostname or IP (required)
-  --port <port>                  MQTT broker port (default: 1883)
+  --port <port>                  MQTT broker port (default: 2883)
   --current-cert <pem>           Currently held certificate in PEM or DER format (default: device-cert.pem)
   --current-key <pem>            Current operational private key PEM (default: device-private.pem)
   --rotate                       Generate a fresh Ed25519 keypair for the renewed certificate
@@ -239,6 +257,10 @@ parse_enroll_flags() {
       *) echo "Error: unknown flag '$1'" >&2; exit 1 ;;
     esac
   done
+  # --factory-cert accepts either a raw base64 string or a path to a file containing it
+  if [ -n "$ENROLL_FACTORY_CERT" ] && [ -f "$ENROLL_FACTORY_CERT" ]; then
+    ENROLL_FACTORY_CERT=$(cat "$ENROLL_FACTORY_CERT")
+  fi
 }
 sign_file() {
   openssl pkeyutl -sign -inkey "$1" -rawin -in "$2" | base64 | tr -d '\n'
@@ -362,12 +384,68 @@ EOF
     echo "  FACTORY_CERT=\$(./x509-cert.sh create-factory-cert <device-id> $FACTORY_CA_PRIV_PEM 2>/dev/null)" >&2
     ;;
 
+  # ─── renew-ca ─────────────────────────────────────────────────────────────────
+  renew-ca)
+    require_cmd openssl
+    CA_PRIV_PEM="${2:?'ca-private.pem required'}"
+    [ -f "$CA_PRIV_PEM" ] || { echo "Error: $CA_PRIV_PEM not found" >&2; exit 1; }
+
+    # Derive default cert output path from the private key filename
+    _base=$(basename "$CA_PRIV_PEM" .pem)
+    _base=$(echo "$_base" | sed 's/-private$//')
+    CA_CERT_PEM="${3:-${_base}-cert.pem}"
+
+    RENEW_DAYS="3650"
+    RENEW_PARAMS="params.toml"
+    shift 2 2>/dev/null || shift $#  
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --days)   RENEW_DAYS="$2";   shift 2 ;;
+        --params) RENEW_PARAMS="$2"; shift 2 ;;
+        # positional cert path already handled above; skip if re-encountered
+        *) shift ;;
+      esac
+    done
+
+    # Derive subject CN from the existing cert if it exists, otherwise use the key file base name
+    if [ -f "$CA_CERT_PEM" ]; then
+      CN=$(openssl x509 -in "$CA_CERT_PEM" -noout -subject 2>/dev/null \
+        | sed 's/.*CN *= *//' | sed 's/[,\/].*//')
+    else
+      CN="$_base"
+    fi
+
+    openssl req -new -x509 -key "$CA_PRIV_PEM" -out "$CA_CERT_PEM" \
+      -days "$RENEW_DAYS" -subj "/CN=${CN}" 2>/dev/null
+
+    NEW_CA_CERT_DER=$(openssl x509 -in "$CA_CERT_PEM" -outform DER | base64 | tr -d '\n')
+
+    # Update ca_cert_der in params.toml if it exists
+    if [ -f "$RENEW_PARAMS" ]; then
+      TMP=$(mktemp)
+      trap 'rm -f "$TMP"' EXIT
+      sed "s|^ca_cert_der *=.*|ca_cert_der = \"${NEW_CA_CERT_DER}\"|" "$RENEW_PARAMS" > "$TMP"
+      mv "$TMP" "$RENEW_PARAMS"
+      echo "Updated ca_cert_der in $RENEW_PARAMS" >&2
+    else
+      echo "Note: $RENEW_PARAMS not found — ca_cert_der not updated" >&2
+      echo "New ca_cert_der value:" >&2
+      echo "  ca_cert_der = \"$NEW_CA_CERT_DER\"" >&2
+    fi
+
+    echo "CA certificate renewed: $CA_CERT_PEM (valid ${RENEW_DAYS} days)" >&2
+    echo "Next steps:" >&2
+    echo "  1. Copy the updated params.toml to the flow working directory and restart the flow" >&2
+    echo "  2. Update the broker's cafile with the new $CA_CERT_PEM and restart the broker" >&2
+    echo "  3. Push the new CA cert to any devices that have it cached" >&2
+    ;;
+
   # ─── create-factory-cert ─────────────────────────────────────────────────────
   create-factory-cert)
     require_cmd openssl
     DEVICE_ID="${2:?'device-id required'}"
     FACTORY_CA_PRIV_PEM="${3:?'factory-ca-private.pem required'}"
-    FACTORY_DEV_PEM="${4:-factory-device-private.pem}"
+    FACTORY_DEV_PEM="${4:-${DEVICE_ID}-factory-device-private.pem}"
 
     [ -f "$FACTORY_CA_PRIV_PEM" ] || { echo "Error: $FACTORY_CA_PRIV_PEM not found" >&2; exit 1; }
 
