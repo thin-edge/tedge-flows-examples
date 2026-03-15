@@ -43,9 +43,6 @@
     },
     "flows/tedge-events-verify": {
       "component": "tedge-events-verify"
-    },
-    "flows/x509-cert-issuer": {
-      "component": "x509-cert-issuer"
     }
   }
 }
