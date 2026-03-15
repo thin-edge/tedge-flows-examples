@@ -35,3 +35,6 @@ keygen_topic = "te/pki/x509/keygen"
 
 # topic prefix for keygen responses — device_id is appended: <prefix>/<device_id>
 output_keygen_topic_prefix = "te/pki/x509/keygen/issued"
+
+# only allow renewals within this many days of certificate expiry (unset = always allow)
+# renewal_window_days = 30

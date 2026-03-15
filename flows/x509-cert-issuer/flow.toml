@@ -15,6 +15,7 @@ output_cert_topic_prefix = "${.params.output_cert_topic_prefix}"
 output_keygen_topic_prefix = "${.params.output_keygen_topic_prefix}"
 output_renewal_topic_prefix = "${.params.output_renewal_topic_prefix}"
 output_rejected_topic = "${.params.output_rejected_topic}"
+renewal_window_days = "${.params.renewal_window_days}"
 
 [[steps]]
 script = "lib/main.js"
