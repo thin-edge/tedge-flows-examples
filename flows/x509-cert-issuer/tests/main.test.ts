@@ -628,6 +628,53 @@ describe("configuration errors", () => {
     const output = flow.onMessage(msg, ctx);
     expect(output).toHaveLength(0);
   });
+
+  test("denied device_id → CSR rejected", () => {
+    const ctx = makeIssuerContext({
+      denied_device_ids: JSON.stringify([DEVICE_ID]),
+    });
+    const output = flow.onMessage(makeValidRequest("n-deny-csr"), ctx);
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
+    expect(JSON.parse(output[0].payload as string)._rejection_reason).toMatch(
+      /denied/,
+    );
+  });
+
+  test("denied device_id → renewal rejected", () => {
+    const ctx = makeIssuerContext({ require_factory_cert: false });
+    const certDerB64 = issueInitialCert(ctx, "n-deny-renew-init");
+    const denyCtx = makeIssuerContext({
+      require_factory_cert: false,
+      denied_device_ids: JSON.stringify([DEVICE_ID]),
+    });
+    const sig = makeRenewalReqSig(DEVICE_ID, "n-deny-renew", OP_PUB, OP_PRIV);
+    const output = flow.onMessage(
+      makeRenewalRequest({
+        nonce: "n-deny-renew",
+        current_cert_der_b64: certDerB64,
+        req_sig: sig,
+      }),
+      denyCtx,
+    );
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
+    expect(JSON.parse(output[0].payload as string)._rejection_reason).toMatch(
+      /denied/,
+    );
+  });
+
+  test("non-denied device_id is still accepted", () => {
+    const ctx = makeIssuerContext({
+      denied_device_ids: JSON.stringify(["some-other-device"]),
+    });
+    const output = flow.onMessage(makeValidRequest("n-deny-other"), ctx);
+    expect(output[0].topic).toMatch(/^te\/pki\/x509\/cert\/issued\//);
+  });
+
+  test("invalid denied_device_ids JSON → rejected", () => {
+    const ctx = makeIssuerContext({ denied_device_ids: "not-json" });
+    const output = flow.onMessage(makeValidRequest("n-deny-bad-json"), ctx);
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
+  });
 });
 
 // ---------------------------------------------------------------------------

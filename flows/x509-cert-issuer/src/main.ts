@@ -37,7 +37,7 @@ export interface Config {
    * prove device identity before a certificate is issued.
    * Example: '["<base64-pubkey>", "<base64-pubkey>"]'
    */
-  factory_ca_public_keys?: string;
+  factory_ca_public_keys?: string[] | string;
   /**
    * Topic prefix for issued certificate responses.
    * The device_id is appended: <prefix>/<device_id>
@@ -86,6 +86,12 @@ export interface Config {
    * Unset (default) means renewal is accepted at any time the certificate is still valid.
    */
   renewal_window_days?: number;
+  /**
+   * JSON array of device_id strings that are explicitly denied.
+   * Matching requests are rejected regardless of factory certificate validity.
+   * Default: []
+   */
+  denied_device_ids?: string[] | string;
 }
 
 export interface FlowContext extends Context {
@@ -762,7 +768,7 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     ca_cert_der: caCertDerB64,
     cert_validity_days = 365,
     nonce_window_hours = 24,
-    factory_ca_public_keys: factoryKeysJson = "[]",
+    factory_ca_public_keys: factoryKeysRaw = "[]",
     require_factory_cert = true,
     keygen_topic = "te/pki/x509/keygen",
     renewal_topic = "te/pki/x509/renew",
@@ -771,6 +777,7 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     output_renewal_topic_prefix,
     output_rejected_topic = "te/pki/x509/req/rejected",
     renewal_window_days,
+    denied_device_ids: deniedDeviceIdsRaw = "[]",
   } = context.config;
 
   const requireFactoryCert = require_factory_cert !== false;
@@ -801,15 +808,23 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   if (!ca_private_key) return reject("ca_private_key not configured");
   if (!caCertDerB64) return reject("ca_cert_der not configured");
 
+  // Coerce a config value that may be a native array or a legacy JSON-encoded string.
+  const toStringArray = (raw: string[] | string): string[] | null => {
+    if (Array.isArray(raw)) return raw;
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as string[]) : null;
+    } catch {
+      return null;
+    }
+  };
+
   let factoryCAPubKeys: string[] = [];
   if (requireFactoryCert) {
-    try {
-      const parsed = JSON.parse(factoryKeysJson);
-      if (!Array.isArray(parsed)) throw new Error("not an array");
-      factoryCAPubKeys = parsed as string[];
-    } catch {
-      return reject("invalid factory_ca_public_keys — must be a JSON array");
-    }
+    const parsed = toStringArray(factoryKeysRaw);
+    if (!parsed)
+      return reject("invalid factory_ca_public_keys — must be an array");
+    factoryCAPubKeys = parsed;
     if (factoryCAPubKeys.length === 0)
       return reject("no factory CAs configured");
   }
@@ -830,6 +845,13 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   if (!device_id) {
     return reject("missing required field: device_id");
   }
+
+  // Denylist check — applied to all request types
+  const deniedList = toStringArray(deniedDeviceIdsRaw);
+  if (!deniedList)
+    return reject("invalid denied_device_ids — must be an array");
+  if (deniedList.includes(String(device_id)))
+    return reject(`device_id "${device_id}" is denied`);
   // Nonce is optional but strongly recommended for anti-replay protection.
   // It is required only when signature verification is needed (factory cert or renewal).
   if (!nonce && (requireFactoryCert || isRenewalRequest)) {

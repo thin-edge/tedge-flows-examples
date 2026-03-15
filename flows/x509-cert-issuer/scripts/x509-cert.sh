@@ -369,7 +369,7 @@ case "$COMMAND" in
     cat > params.toml <<EOF
 ca_private_key = "$CA_PRIV_B64"
 ca_cert_der = "$CA_CERT_DER"
-factory_ca_public_keys = "[\"$FACTORY_CA_PUB\"]"
+factory_ca_public_keys = ["$FACTORY_CA_PUB"]
 require_factory_cert = true
 cert_validity_days = 365
 EOF

@@ -10,8 +10,8 @@ ca_cert_der = ""
 
 # JSON array of trusted factory CA public keys (base64-encoded Ed25519).
 # a device must present a factory certificate signed by one of these CAs.
-# example: '["<base64-pubkey>", "<base64-pubkey>"]'
-factory_ca_public_keys = "[]"
+# example: factory_ca_public_keys = ["<base64-pubkey>", "<base64-pubkey>"]
+factory_ca_public_keys = []
 
 # issued certificate validity period in days
 cert_validity_days = 365
@@ -38,3 +38,6 @@ output_keygen_topic_prefix = "te/pki/x509/keygen/issued"
 
 # only allow renewals within this many days of certificate expiry (unset = always allow)
 # renewal_window_days = 30
+
+# JSON array of device_id strings to explicitly deny (denylist)
+# denied_device_ids = ["compromised-device-001"]
