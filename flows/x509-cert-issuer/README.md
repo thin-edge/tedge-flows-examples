@@ -24,6 +24,8 @@ Publish to `te/pki/x509/csr` and subscribe to `te/pki/x509/cert/issued/<device_i
 }
 ```
 
+`nonce` is strongly recommended — it provides anti-replay protection by ensuring each request is unique. It is required when `_req_sig` verification is performed (i.e. when `require_factory_cert = true`), and optional otherwise. Omitting it disables the anti-replay check for that request.
+
 `_req_sig` is an Ed25519 signature of the canonical JSON of `{device_id, nonce, public_key}` (keys sorted alphabetically) using the **factory private key** embedded in `_factory_cert`. An optional `common_name` field can be included to control the certificate subject CN; it defaults to `device_id`.
 
 **Response payload** (published to `te/pki/x509/cert/issued/<device_id>`):
@@ -40,21 +42,7 @@ Publish to `te/pki/x509/csr` and subscribe to `te/pki/x509/cert/issued/<device_i
 
 `cert_der` is the device's TLS client certificate in base64-encoded DER format. `ca_cert_der` is the CA certificate — install this on the broker as a trusted CA so it accepts the device cert. To convert to PEM: `echo "$cert_der" | base64 -d | openssl x509 -inform DER -out cert.pem`.
 
-**Example using mosquitto:**
-
-```sh
-# Subscribe to receive the issued certificate
-mosquitto_sub -h localhost -t "te/pki/x509/cert/issued/my-device-001" &
-
-# Publish a certificate signing request
-mosquitto_pub -h localhost -t te/pki/x509/csr -m '{
-  "device_id": "my-device-001",
-  "public_key": "<base64-operational-public-key>",
-  "nonce": "<unique-random-value>",
-  "_factory_cert": "<base64-factory-cert>",
-  "_req_sig": "<base64-request-signature>"
-}'
-```
+For runnable examples — including CA setup, generating factory certificates, and enrolling a device — see the [Child device enrollment example](#child-device-enrollment-example) section below.
 
 ### Configuration
 
@@ -64,7 +52,7 @@ mosquitto_pub -h localhost -t te/pki/x509/csr -m '{
 | `ca_cert_der`                 | _(required)_                           | Base64-encoded DER of the CA certificate. Included in the response so the device can install the full chain.          |
 | `factory_ca_public_keys`      | `[]`                                   | JSON array of base64-encoded Ed25519 public keys. A factory certificate signed by _any_ entry is accepted.            |
 | `cert_validity_days`          | `365`                                  | Validity period for issued certificates in days.                                                                      |
-| `nonce_window_hours`          | `24`                                   | Time window for nonce uniqueness enforcement. Resets on flow restart.                                                 |
+| `nonce_window_hours`          | `24`                                   | Time window for nonce uniqueness enforcement. Only applies to requests that include a nonce. Resets on flow restart.  |
 | `require_factory_cert`        | `true`                                 | When `false`, factory certificate and request signature checks are skipped. Only use when topic access is restricted. |
 | `keygen_topic`                | `te/pki/x509/keygen`                   | Input topic for server-side key generation — flow generates the keypair on behalf of the device.                      |
 | `output_cert_topic_prefix`    | `te/pki/x509/cert/issued`              | Issued certificates are published to `<prefix>/<device_id>`.                                                          |
@@ -73,21 +61,20 @@ mosquitto_pub -h localhost -t te/pki/x509/csr -m '{
 | `output_renewal_topic_prefix` | _(same as `output_cert_topic_prefix`)_ | Renewal responses are published to `<prefix>/<device_id>`.                                                            |
 | `renewal_window_days`         | _(unset)_                              | When set, only allow renewals within this many days of certificate expiry.                                            |
 | `output_rejected_topic`       | `te/pki/x509/req/rejected`             | Topic for rejected requests. Empty string silently discards.                                                          |
-| `debug`                       | `false`                                | Log request outcomes to the console.                                                                                  |
 
 ### Devices without factory certificates (`require_factory_cert = false`)
 
-For deployments where every device on the network is trusted (e.g. an isolated factory floor segment), factory certificate verification can be disabled. Any device that can publish to `te/pki/x509/csr` and provide its own keypair receives a cert — no `_factory_cert` or `_req_sig` required:
+For deployments where every device on the network is trusted (e.g. an isolated factory floor segment), factory certificate verification can be disabled. Any device that can publish to `te/pki/x509/csr` and provide its own keypair receives a cert — no `_factory_cert`, `_req_sig`, or even `nonce` required. Including a nonce is still encouraged where possible, as it enables anti-replay protection.
 
 ```sh
 # Minimal CSR — no factory credential needed
 DEVICE_ID="child-001"
 openssl genpkey -algorithm ed25519 -out op-private.pem
-OP_PUB=$(openssl pkey -in op-private.pem -pubout -outform DER | tail -c 32 | openssl base64 -A)
+OP_PUB=$(openssl pkey -in op-private.pem -pubout -outform DER | tail -c 32 | base64 | tr -d '\n')
 NONCE=$(openssl rand -hex 16)
 
-jq -cn --arg id "$DEVICE_ID" --arg pub "$OP_PUB" --arg n "$NONCE" \
-  '{device_id: $id, public_key: $pub, nonce: $n}' \
+printf '{"device_id":"%s","nonce":"%s","public_key":"%s"}' \
+  "$DEVICE_ID" "$NONCE" "$OP_PUB" \
   | mosquitto_pub -h localhost -t te/pki/x509/csr -s
 ```
 
@@ -96,25 +83,13 @@ jq -cn --arg id "$DEVICE_ID" --arg pub "$OP_PUB" --arg n "$NONCE" \
 ```sh
 DEVICE_ID="child-001"
 openssl genpkey -algorithm ed25519 -out op-private.pem
-OP_PUB=$(openssl pkey -in op-private.pem -pubout -outform DER | tail -c 32 | openssl base64 -A)
+OP_PUB=$(openssl pkey -in op-private.pem -pubout -outform DER | tail -c 32 | base64 | tr -d '\n')
 NONCE=$(openssl rand -hex 16)
 
-echo "[te/pki/x509/csr] $(jq -cn --arg id "$DEVICE_ID" --arg pub "$OP_PUB" --arg n "$NONCE" \
-  '{device_id: $id, public_key: $pub, nonce: $n}')" \
+PAYLOAD=$(printf '{"device_id":"%s","nonce":"%s","public_key":"%s"}' \
+  "$DEVICE_ID" "$NONCE" "$OP_PUB")
+echo "[te/pki/x509/csr] $PAYLOAD" \
   | tedge flows test --flow ./flow.toml
-```
-
-To extract the cert from the output:
-
-```sh
-# Pipe the output through jq to decode the cert_der field into a PEM file
-echo "[te/pki/x509/csr] $(jq -cn --arg id "$DEVICE_ID" --arg pub "$OP_PUB" --arg n "$NONCE2" \
-  '{device_id: $id, public_key: $pub, nonce: $n}')" \
-  | tedge flows test --flow ./flow.toml \
-  | sed 's/^\[.*\] //' \
-  | jq -r '.cert_der' \
-  | base64 -d \
-  | openssl x509 -inform DER -text -noout
 ```
 
 > **Warning:** set `require_factory_cert = false` only when the MQTT broker ACLs prevent unauthorized clients from publishing to the CSR topic.

@@ -819,22 +819,29 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     san_ip_addresses,
   } = payload;
 
-  if (!device_id || !nonce) {
-    return reject("missing required fields: device_id, nonce");
+  if (!device_id) {
+    return reject("missing required field: device_id");
+  }
+  // Nonce is optional but strongly recommended for anti-replay protection.
+  // It is required only when signature verification is needed (factory cert or renewal).
+  if (!nonce && (requireFactoryCert || isRenewalRequest)) {
+    return reject("missing required field: nonce");
   }
   if (!isKeygenRequest && !public_key) {
     return reject("missing required field: public_key");
   }
 
-  // Anti-replay nonce check
+  // Anti-replay nonce check (skipped when no nonce is provided)
   const nonces: Record<string, number> = context.script.get("nonces") || {};
   const now = Date.now();
-  const ttlMs = Number(nonce_window_hours) * 3600_000;
-  for (const n of Object.keys(nonces)) {
-    if (now - nonces[n] > ttlMs) delete nonces[n];
+  if (nonce) {
+    const ttlMs = Number(nonce_window_hours) * 3600_000;
+    for (const n of Object.keys(nonces)) {
+      if (now - nonces[n] > ttlMs) delete nonces[n];
+    }
+    if (nonces[nonce as string] !== undefined)
+      return reject("nonce already used");
   }
-  if (nonces[nonce as string] !== undefined)
-    return reject("nonce already used");
 
   // Factory certificate verification (optional based on config, skipped for renewals)
   if (requireFactoryCert && !isRenewalRequest) {
@@ -925,9 +932,11 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     }
   }
 
-  // Record nonce
-  nonces[nonce as string] = now;
-  context.script.set("nonces", nonces);
+  // Record nonce (only when one was provided)
+  if (nonce) {
+    nonces[nonce as string] = now;
+    context.script.set("nonces", nonces);
+  }
 
   // Extract issuer name bytes verbatim from the CA cert so that the issued cert's
   // issuer field is byte-for-byte identical to the CA cert's subject field.
