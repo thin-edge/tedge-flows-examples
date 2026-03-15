@@ -46,21 +46,21 @@ For runnable examples — including CA setup, generating factory certificates, a
 
 ### Configuration
 
-| Parameter                     | Default                                | Description                                                                                                           |
-| ----------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `ca_private_key`              | _(required)_                           | Base64-encoded 32-byte Ed25519 private key of this CA.                                                                |
-| `ca_cert_der`                 | _(required)_                           | Base64-encoded DER of the CA certificate. Included in the response so the device can install the full chain.          |
-| `factory_ca_public_keys`      | `[]`                                   | JSON array of base64-encoded Ed25519 public keys. A factory certificate signed by _any_ entry is accepted.            |
-| `cert_validity_days`          | `365`                                  | Validity period for issued certificates in days.                                                                      |
-| `nonce_window_hours`          | `24`                                   | Time window for nonce uniqueness enforcement. Only applies to requests that include a nonce. Resets on flow restart.  |
-| `require_factory_cert`        | `true`                                 | When `false`, factory certificate and request signature checks are skipped. Only use when topic access is restricted. |
-| `keygen_topic`                | `te/pki/x509/keygen`                   | Input topic for server-side key generation — flow generates the keypair on behalf of the device.                      |
-| `output_cert_topic_prefix`    | `te/pki/x509/cert/issued`              | Issued certificates are published to `<prefix>/<device_id>`.                                                          |
-| `output_keygen_topic_prefix`  | `te/pki/x509/keygen/issued`            | Keygen responses are published to `<prefix>/<device_id>`.                                                             |
-| `renewal_topic`               | `te/pki/x509/renew`                    | Input topic for certificate renewal requests. No factory certificate is required — see below.                         |
-| `output_renewal_topic_prefix` | _(same as `output_cert_topic_prefix`)_ | Renewal responses are published to `<prefix>/<device_id>`.                                                            |
-| `renewal_window_days`         | _(unset)_                              | When set, only allow renewals within this many days of certificate expiry.                                            |
-| `output_rejected_topic`       | `te/pki/x509/req/rejected`             | Topic for rejected requests. Empty string silently discards.                                                          |
+| Parameter                     | Default                                | Description                                                                                                                 |
+| ----------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `ca_private_key`              | _(required)_                           | Base64-encoded 32-byte Ed25519 private key of this CA.                                                                      |
+| `ca_cert_der`                 | _(required)_                           | Base64-encoded DER of the CA certificate. Included in the response so the device can install the full chain.                |
+| `factory_ca_public_keys`      | `[]`                                   | JSON array of base64-encoded Ed25519 public keys. A factory certificate signed by _any_ entry is accepted.                  |
+| `cert_validity_days`          | `365`                                  | Validity period for issued certificates in days.                                                                            |
+| `nonce_window_hours`          | `24`                                   | Time window for nonce uniqueness enforcement. Only applies to requests that include a nonce. Resets on flow restart.        |
+| `require_factory_cert`        | `true`                                 | When `false`, factory certificate and request signature checks are skipped. Only use when topic access is restricted.       |
+| `keygen_topic`                | `te/pki/x509/keygen`                   | Input topic for server-side key generation — flow generates the keypair on behalf of the device.                            |
+| `output_cert_topic_prefix`    | `te/pki/x509/cert/issued`              | Issued certificates are published to `<prefix>/<device_id>`.                                                                |
+| `output_keygen_topic_prefix`  | `te/pki/x509/keygen/issued`            | Keygen responses are published to `<prefix>/<device_id>`.                                                                   |
+| `renewal_topic`               | `te/pki/x509/renew`                    | Input topic for certificate renewal requests. No factory certificate is required — see below.                               |
+| `output_renewal_topic_prefix` | _(same as `output_cert_topic_prefix`)_ | Renewal responses are published to `<prefix>/<device_id>`.                                                                  |
+| `renewal_window_days`         | _(unset)_                              | When set, only allow renewals within this many days of certificate expiry.                                                  |
+| `output_rejected_topic`       | `te/pki/x509/req/rejected`             | Prefix for rejected requests — device_id is appended when present (`<prefix>/<device_id>`). Empty string silently discards. |
 
 ### CA setup
 

@@ -406,7 +406,7 @@ describe("multiple factory CAs", () => {
       req_sig: sig,
     });
     const output = flow.onMessage(req, dualCAContext());
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 });
 
@@ -424,7 +424,7 @@ describe("rejection — missing fields", () => {
     );
     const req = makeRequest({ nonce: "n-missing-cert", req_sig: sig });
     const output = flow.onMessage(req, makeIssuerContext());
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("missing _req_sig → rejected", () => {
@@ -438,7 +438,7 @@ describe("rejection — missing fields", () => {
       factory_cert: factoryCert,
     });
     const output = flow.onMessage(req, makeIssuerContext());
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("missing public_key → rejected", () => {
@@ -448,7 +448,7 @@ describe("rejection — missing fields", () => {
       payload: JSON.stringify({ device_id: DEVICE_ID, nonce: "n-no-pubkey" }),
     };
     const output = flow.onMessage(msg, makeIssuerContext());
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 });
 
@@ -467,7 +467,7 @@ describe("rejection — certificate validation", () => {
       req_sig: sig,
     });
     const output = flow.onMessage(req, makeIssuerContext());
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("future expiry on factory cert is accepted", () => {
@@ -505,7 +505,7 @@ describe("rejection — certificate validation", () => {
       req_sig: sig,
     });
     const output = flow.onMessage(req, makeIssuerContext());
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("tampered factory cert body → rejected", () => {
@@ -524,7 +524,7 @@ describe("rejection — certificate validation", () => {
       req_sig: sig,
     });
     const output = flow.onMessage(req, makeIssuerContext());
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe("te/pki/x509/req/rejected/evil-device");
   });
 });
 
@@ -548,7 +548,7 @@ describe("rejection — request signature", () => {
       req_sig: sig,
     });
     const output = flow.onMessage(req, makeIssuerContext());
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("tampered public_key in request after signing → rejected", () => {
@@ -568,7 +568,7 @@ describe("rejection — request signature", () => {
       req_sig: sig,
     });
     const output = flow.onMessage(req, makeIssuerContext());
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 });
 
@@ -585,7 +585,7 @@ describe("anti-replay nonce protection", () => {
     const out1 = flow.onMessage(makeValidRequest("replay-nonce"), ctx);
     const out2 = flow.onMessage(makeValidRequest("replay-nonce"), ctx);
     expect(out1[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
-    expect(out2[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(out2[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 });
 
@@ -600,7 +600,7 @@ describe("configuration errors", () => {
       factory_ca_public_keys: JSON.stringify([FACTORY_CA_PUB]),
     });
     const output = flow.onMessage(makeValidRequest("n-no-priv"), ctx);
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("missing ca_cert_der → rejected", () => {
@@ -609,13 +609,13 @@ describe("configuration errors", () => {
       factory_ca_public_keys: JSON.stringify([FACTORY_CA_PUB]),
     });
     const output = flow.onMessage(makeValidRequest("n-no-der"), ctx);
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("empty factory_ca_public_keys → rejected", () => {
     const ctx = makeIssuerContext({ factory_ca_public_keys: "[]" });
     const output = flow.onMessage(makeValidRequest("n-empty-ca"), ctx);
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("rejected message discarded when output_rejected_topic empty", () => {
@@ -690,7 +690,7 @@ describe("require_factory_cert = false", () => {
     });
     flow.onMessage(msg("open-replay"), ctx);
     const out2 = flow.onMessage(msg("open-replay"), ctx);
-    expect(out2[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(out2[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("missing public_key is still rejected", () => {
@@ -701,7 +701,7 @@ describe("require_factory_cert = false", () => {
       payload: JSON.stringify({ device_id: DEVICE_ID, nonce: "open-no-pub" }),
     };
     const output = flow.onMessage(msg, ctx);
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("empty factory_ca_public_keys does not block when require_factory_cert=false", () => {
@@ -836,7 +836,7 @@ describe("server-side key generation", () => {
       makeKeygenRequest({ nonce: "kg-no-cert", factory: false }),
       ctx,
     );
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("keygen without factory cert accepted when require_factory_cert=false", () => {
@@ -856,7 +856,7 @@ describe("server-side key generation", () => {
     const ctx = makeIssuerContext();
     flow.onMessage(makeKeygenRequest({ nonce: "kg-replay" }), ctx);
     const out2 = flow.onMessage(makeKeygenRequest({ nonce: "kg-replay" }), ctx);
-    expect(out2[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(out2[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("custom output_keygen_topic_prefix is used", () => {
@@ -1152,7 +1152,7 @@ describe("certificate renewal", () => {
       makeRenewalRequest({ nonce: "renew-no-curr", req_sig: sig }),
       ctx,
     );
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("missing _req_sig is rejected", () => {
@@ -1165,7 +1165,7 @@ describe("certificate renewal", () => {
       }),
       ctx,
     );
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("certificate not issued by this CA is rejected", () => {
@@ -1184,7 +1184,7 @@ describe("certificate renewal", () => {
       }),
       ctx,
     );
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("certificate CN mismatch with device_id is rejected", () => {
@@ -1219,7 +1219,7 @@ describe("certificate renewal", () => {
       }),
       ctx,
     );
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("request signature signed with wrong key is rejected", () => {
@@ -1240,7 +1240,7 @@ describe("certificate renewal", () => {
       }),
       ctx,
     );
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("nonce replay in renewal is rejected", () => {
@@ -1260,7 +1260,7 @@ describe("certificate renewal", () => {
     const out1 = flow.onMessage(req, ctx);
     const out2 = flow.onMessage(req, ctx);
     expect(out1[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
-    expect(out2[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(out2[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("renewal_window_days rejects cert not close enough to expiry", () => {
@@ -1284,7 +1284,7 @@ describe("certificate renewal", () => {
       }),
       ctx,
     );
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("renewal_window_days accepts cert close to expiry", () => {
@@ -1444,7 +1444,7 @@ describe("Subject Alternative Names (SAN)", () => {
       san_dns_names: "not-valid-json",
     });
     const output = flow.onMessage(msg, ctx);
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   test("invalid san_ip_addresses JSON is rejected", () => {
@@ -1453,7 +1453,7 @@ describe("Subject Alternative Names (SAN)", () => {
       san_ip_addresses: "{bad}",
     });
     const output = flow.onMessage(msg, ctx);
-    expect(output[0].topic).toBe("te/pki/x509/req/rejected");
+    expect(output[0].topic).toBe(`te/pki/x509/req/rejected/${DEVICE_ID}`);
   });
 
   // ── SAN retention during renewal ─────────────────────────────────────────

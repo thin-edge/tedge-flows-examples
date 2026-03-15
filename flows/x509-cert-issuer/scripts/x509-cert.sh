@@ -640,7 +640,7 @@ EOF
 
     # Subscribe for the response before publishing (avoid race)
     RESPONSE_TOPIC="${ISSUED_TOPIC_PREFIX}/${ENROLL_DEVICE_ID}"
-    REJECTED_TOPIC="te/pki/x509/req/rejected"
+    REJECTED_TOPIC="te/pki/x509/req/rejected/${ENROLL_DEVICE_ID}"
     RAW_RESPONSE=$(mktemp)
     trap 'rm -f "$RESPONSE_FILE" "$RAW_RESPONSE"' EXIT
     echo "Subscribing to $RESPONSE_TOPIC ..." >&2
@@ -763,7 +763,7 @@ EOF
 
     # Subscribe before publishing to avoid race
     RESPONSE_TOPIC="${REENROLL_RESPONSE_PREFIX}/${REENROLL_DEVICE_ID}"
-    REJECTED_TOPIC="te/pki/x509/req/rejected"
+    REJECTED_TOPIC="te/pki/x509/req/rejected/${REENROLL_DEVICE_ID}"
     RAW_RESPONSE=$(mktemp)
     trap 'rm -f "$TMP_BODY" "$RESPONSE_FILE" "$RAW_RESPONSE" "${NEW_KEY_TMP:-}"' EXIT
     echo "Subscribing to $RESPONSE_TOPIC ..." >&2
