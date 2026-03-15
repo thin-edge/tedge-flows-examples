@@ -790,7 +790,9 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     } catch {
       rejPayload = JSON.stringify({ _rejection_reason: reason });
     }
-    return [{ time: message.time, topic: output_rejected_topic, payload: rejPayload }];
+    return [
+      { time: message.time, topic: output_rejected_topic, payload: rejPayload },
+    ];
   };
 
   if (!ca_private_key) return reject("ca_private_key not configured");
