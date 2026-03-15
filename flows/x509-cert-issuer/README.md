@@ -16,7 +16,7 @@ Publish to `te/pki/x509/csr` and subscribe to `te/pki/x509/cert/issued/<device_i
 
 ```json
 {
-  "device_id": "my-device-001",
+  "device_id": "child-001",
   "public_key": "<base64-ed25519-public-key-for-the-new-cert>",
   "nonce": "<unique-random-string>",
   "_factory_cert": "<base64-encoded-factory-certificate-json>",
@@ -32,7 +32,7 @@ Publish to `te/pki/x509/csr` and subscribe to `te/pki/x509/cert/issued/<device_i
 
 ```json
 {
-  "device_id": "my-device-001",
+  "device_id": "child-001",
   "cert_der": "<base64-encoded-DER>",
   "cert_pem": "-----BEGIN CERTIFICATE-----\n...",
   "ca_cert_der": "<base64-encoded-DER>",
@@ -62,23 +62,152 @@ For runnable examples — including CA setup, generating factory certificates, a
 | `renewal_window_days`         | _(unset)_                              | When set, only allow renewals within this many days of certificate expiry.                                            |
 | `output_rejected_topic`       | `te/pki/x509/req/rejected`             | Topic for rejected requests. Empty string silently discards.                                                          |
 
-### Devices without factory certificates (`require_factory_cert = false`)
+### CA setup
 
-For deployments where every device on the network is trusted (e.g. an isolated factory floor segment), factory certificate verification can be disabled. Any device that can publish to `te/pki/x509/csr` and provide its own keypair receives a cert — no `_factory_cert`, `_req_sig`, or even `nonce` required. Including a nonce is still encouraged where possible, as it enables anti-replay protection.
+The `setup-ca` command handles the one-time CA setup. It generates a CA key pair, a self-signed CA certificate, and a factory CA key, then writes a `params.toml` ready to use:
 
 ```sh
-# Minimal CSR — no factory credential needed
-DEVICE_ID="child-001"
-openssl genpkey -algorithm ed25519 -out op-private.pem
-OP_PUB=$(openssl pkey -in op-private.pem -pubout -outform DER | tail -c 32 | base64 | tr -d '\n')
-NONCE=$(openssl rand -hex 16)
-
-printf '{"device_id":"%s","nonce":"%s","public_key":"%s"}' \
-  "$DEVICE_ID" "$NONCE" "$OP_PUB" \
-  | mosquitto_pub -h localhost -t te/pki/x509/csr -s
+cd flows/x509-cert-issuer
+./scripts/x509-cert.sh setup-ca my-ca
 ```
 
-**Local testing with `tedge flows test`:**
+This creates `my-ca-private.pem`, `my-ca-cert.pem`, `factory-ca-private.pem`, and `params.toml`.
+
+Configure the broker to trust the CA for client authentication. For Mosquitto, add to `mosquitto.conf`:
+
+```
+cafile /etc/mosquitto/ca-cert.pem
+require_certificate true
+use_identity_as_username true
+```
+
+### Enrolling devices
+
+The full enrollment workflow has two phases: factory provisioning (done once per device by the manufacturer) and first-boot enrollment (run on the device itself). The `scripts/x509-cert.sh` helper handles both. Requires `openssl` and `mosquitto_pub`/`mosquitto_sub` for live broker enrollment.
+
+#### Phase 1 — Factory provisioning (done once per device)
+
+```sh
+cd flows/x509-cert-issuer
+
+DEVICE_ID="child-001"
+
+# One-time CA setup (skip if params.toml already exists):
+./scripts/x509-cert.sh setup-ca my-ca
+
+# Generate a factory certificate for this device.
+# Each device gets its own files, named by device_id to avoid overwriting when batching.
+./scripts/x509-cert.sh create-factory-cert "$DEVICE_ID" factory-ca-private.pem \
+  > "${DEVICE_ID}-factory-cert.b64" 2>/dev/null
+
+echo "Burn onto the device: ${DEVICE_ID}-factory-cert.b64 + ${DEVICE_ID}-factory-device-private.pem"
+```
+
+#### Phase 2 — First-boot enrollment (run on the device)
+
+```sh
+DEVICE_ID="child-001"
+BROKER="localhost"
+
+# Enroll: subscribes for the response, generates the operational keypair, then writes the cert files.
+./scripts/x509-cert.sh enroll "$DEVICE_ID" --broker "$BROKER" \
+  --factory-cert "${DEVICE_ID}-factory-cert.b64" \
+  --factory-key "${DEVICE_ID}-factory-device-private.pem"
+
+echo "Enrollment complete. Use device-private.pem + device-cert.pem for TLS client auth."
+```
+
+The device now has `device-private.pem` (private key) and `device-cert.pem` (TLS client certificate). `ca-cert.pem` is the CA certificate to install on the MQTT broker as a trusted CA.
+
+#### Additional `enroll` modes
+
+**Open mode — device generates its own keypair (CSR mode, no factory cert):**
+
+```sh
+./scripts/x509-cert.sh enroll child-001 --broker localhost
+# Generates a new Ed25519 key at ./device-private.pem if not found.
+# Pass --op-key /path/to/existing-private.pem to reuse an existing keypair.
+```
+
+**Open mode — server generates the keypair (keygen mode, no factory cert):**
+
+```sh
+./scripts/x509-cert.sh enroll child-001 --broker localhost --keygen
+```
+
+**Factory cert mode — server generates the keypair:**
+
+```sh
+./scripts/x509-cert.sh enroll child-001 --broker mqtt.local --keygen \
+  --factory-cert child-001-factory-cert.b64 \
+  --factory-key child-001-factory-device-private.pem \
+  --out-dir ./certs
+```
+
+Full flag reference: `./scripts/x509-cert.sh enroll --help`.
+
+### Certificate renewal
+
+Devices that already hold a valid certificate issued by this flow can renew without presenting their factory certificate again. The device proves it still holds the corresponding private key by signing the renewal request (**proof of possession**).
+
+```sh
+# Renew with the same key:
+./scripts/x509-cert.sh reenroll child-001 --broker localhost \
+  --current-cert device-cert.pem --current-key device-private.pem
+
+# Renew and rotate to a fresh keypair:
+./scripts/x509-cert.sh reenroll child-001 --broker localhost \
+  --current-cert device-cert.pem --current-key device-private.pem --rotate
+```
+
+**Optional: restrict renewals to a window before expiry**
+
+Set `renewal_window_days = 30` in `params.toml` to only allow renewals within 30 days of the certificate's expiry date:
+
+```toml
+renewal_window_days = 30
+```
+
+### Local testing with `tedge flows test`
+
+`tedge flows test` runs the flow against a single message without needing a live broker. Requires `openssl`.
+
+#### Open mode (`require_factory_cert = false`)
+
+Open mode skips factory certificate verification — any device that can reach the broker gets a cert. It's the easiest starting point and useful for isolated networks or local testing.
+
+Run `setup-ca` once to generate the CA key pair and a `params.toml`, then switch to open mode:
+
+```sh
+cd flows/x509-cert-issuer
+./scripts/x509-cert.sh setup-ca my-ca
+# Edit params.toml and set: require_factory_cert = false
+```
+
+> **Warning:** use open mode only when MQTT broker ACLs prevent unauthorized clients from publishing to the CSR topic.
+
+**Keygen mode** — the flow generates the device keypair (no device-side crypto required):
+
+```sh
+DEVICE_ID="child-001"
+NONCE=$(openssl rand -hex 16)
+
+printf '[te/pki/x509/keygen] {"device_id":"%s","nonce":"%s"}' "$DEVICE_ID" "$NONCE" \
+  | tedge flows test --flow ./flow.toml \
+  | sed 's/^\[.*\] //' \
+  | tee /tmp/keygen-response.json \
+  | jq -r '.cert_pem' \
+  | ./scripts/x509-cert.sh decode-cert -
+
+# Save the generated private key and certificates:
+jq -r '.private_key_pem' /tmp/keygen-response.json > device-private.pem
+jq -r '.cert_pem'        /tmp/keygen-response.json > device-cert.pem
+jq -r '.ca_cert_pem'     /tmp/keygen-response.json > ca-cert.pem
+```
+
+> **Warning:** the keygen response contains an unencrypted private key. In production, ensure the `te/pki/x509/keygen/issued/<device_id>` topic has strict broker ACLs so only the target device can subscribe to it.
+
+**CSR mode** — the device generates its own keypair:
 
 ```sh
 DEVICE_ID="child-001"
@@ -92,285 +221,22 @@ echo "[te/pki/x509/csr] $PAYLOAD" \
   | tedge flows test --flow ./flow.toml
 ```
 
-> **Warning:** set `require_factory_cert = false` only when the MQTT broker ACLs prevent unauthorized clients from publishing to the CSR topic.
+#### Factory certificate mode (`require_factory_cert = true`)
 
-### Devices that cannot generate a secure keypair (server-side keygen)
+Factory mode requires each device to present a certificate signed by a known factory CA — cryptographic proof that the device was provisioned at manufacture time. This is the default and recommended setting for production.
 
-For very constrained devices that cannot produce a cryptographically secure private key, publish to `te/pki/x509/keygen` instead. The flow generates the Ed25519 keypair and returns the private key together with the signed certificate:
-
-**Request** (topic `te/pki/x509/keygen`):
-
-```json
-{
-  "device_id": "child-001",
-  "nonce": "<unique-random-string>",
-  "_factory_cert": "<base64-factory-cert>",
-  "_req_sig": "<base64-ed25519-signature>"
-}
-```
-
-`_req_sig` covers canonical `{device_id, nonce}` (keys sorted alphabetically) — no `public_key` because the device has none yet. Omit `_factory_cert`/`_req_sig` if `require_factory_cert = false`.
-
-**Response** (topic `te/pki/x509/keygen/issued/<device_id>`):
-
-```json
-{
-  "device_id": "child-001",
-  "private_key_der": "<base64-encoded-DER>",
-  "private_key_pem": "-----BEGIN PRIVATE KEY-----\n...",
-  "cert_der": "<base64-encoded-DER>",
-  "cert_pem": "-----BEGIN CERTIFICATE-----\n...",
-  "ca_cert_der": "<base64-encoded-DER>",
-  "ca_cert_pem": "-----BEGIN CERTIFICATE-----\n..."
-}
-```
-
-The `_pem` fields are convenience copies — they contain the same data as the corresponding `_der` fields, already converted to PEM format for direct use with Mosquitto and OpenSSL.
-
-Shell example (with factory cert):
-
-```sh
-DEVICE_ID="child-001"
-NONCE=$(openssl rand -hex 16)
-
-# Build and sign {device_id, nonce} (sorted) with the factory private key
-REQ_BODY=$(jq -cn --arg id "$DEVICE_ID" --arg n "$NONCE" \
-  '{device_id: $id, nonce: $n} | to_entries | sort_by(.key) | from_entries')
-REQ_SIG=$(printf '%s' "$REQ_BODY" \
-  | openssl pkeyutl -sign -inkey factory-device-private.pem -rawin \
-  | base64 | tr -d '\n')
-
-# Subscribe for the response
-mosquitto_sub -h localhost -t "te/pki/x509/keygen/issued/$DEVICE_ID" -C 1 -W 30 \
-  > /tmp/keygen-response.json &
-
-# Publish the keygen request
-jq -cn \
-  --arg id   "$DEVICE_ID" \
-  --arg n    "$NONCE" \
-  --arg cert "$FACTORY_CERT" \
-  --arg sig  "$REQ_SIG" \
-  '{device_id: $id, nonce: $n, _factory_cert: $cert, _req_sig: $sig}' \
-  | mosquitto_pub -h localhost -t te/pki/x509/keygen -s
-
-wait
-# Extract and store the private key and certificates
-jq -r '.private_key_pem' /tmp/keygen-response.json > device-private.pem
-jq -r '.cert_pem'        /tmp/keygen-response.json > device-cert.pem
-jq -r '.ca_cert_pem'     /tmp/keygen-response.json > ca-cert.pem
-echo "Private key saved to device-private.pem (store securely)"
-```
-
-> **Warning:** the keygen response contains an unencrypted private key. Ensure the `te/pki/x509/keygen/issued/<device_id>` topic has strict broker ACLs so only the target device can subscribe to it.
-
-### Certificate renewal
-
-Devices that already have a valid certificate issued by this flow can renew it without presenting their factory certificate again. The device proves it still holds the corresponding private key by signing the renewal request with it (**proof of possession**).
-
-Publish to `te/pki/x509/renew` and subscribe to `te/pki/x509/cert/issued/<device_id>` for the response.
-
-**Request payload:**
-
-```json
-{
-  "device_id": "my-device-001",
-  "public_key": "<base64-ed25519-public-key-for-the-new-cert>",
-  "nonce": "<unique-random-string>",
-  "_current_cert": "<base64-DER-of-currently-held-certificate>",
-  "_req_sig": "<base64-ed25519-signature>"
-}
-```
-
-`_req_sig` is an Ed25519 signature of the canonical JSON of `{device_id, nonce, public_key}` (keys sorted alphabetically) using the **current operational private key** — the one corresponding to the public key in `_current_cert`. The `public_key` field is the key to certify in the renewed certificate and may be the same as the current key or a new one (key rotation).
-
-The flow verifies that:
-
-1. `_current_cert` was signed by this CA.
-2. The CN in `_current_cert` matches `device_id`.
-3. `_current_cert` has not expired.
-4. `_req_sig` is valid under the public key embedded in `_current_cert` (proof of possession).
-
-**Response payload** (published to `te/pki/x509/cert/issued/<device_id>`):
-
-Same format as a regular CSR response — `cert_der` and `ca_cert_der`.
-
-**Using the helper script:**
-
-The `x509-cert.sh` helper script provides a `reenroll` command that handles this automatically:
-
-```sh
-# Renew with the same key:
-./x509-cert.sh reenroll my-device-001 --broker localhost \
-  --current-cert device-cert.pem --current-key device-private.pem
-
-# Renew and rotate to a fresh keypair:
-./x509-cert.sh reenroll my-device-001 --broker localhost \
-  --current-cert device-cert.pem --current-key device-private.pem --rotate
-```
-
-**Shell example (manual renewal with the same key):**
-
-```sh
-DEVICE_ID="my-device-001"
-NONCE=$(openssl rand -hex 16)
-NEW_PUB=$(openssl pkey -in op-private.pem -pubout -outform DER | tail -c 32 | openssl base64 -A)
-CURRENT_CERT=$(cat device-cert.pem | openssl x509 -outform DER | base64 | tr -d '\n')
-
-# Sign {device_id, nonce, public_key} (sorted) with the CURRENT operational private key
-REQ_BODY=$(jq -cn --arg id "$DEVICE_ID" --arg n "$NONCE" --arg pub "$NEW_PUB" \
-  '{device_id: $id, nonce: $n, public_key: $pub} | to_entries | sort_by(.key) | from_entries')
-REQ_SIG=$(printf '%s' "$REQ_BODY" \
-  | openssl pkeyutl -sign -inkey op-private.pem -rawin \
-  | base64 | tr -d '\n')
-
-mosquitto_sub -h localhost -t "te/pki/x509/cert/issued/$DEVICE_ID" -C 1 -W 30 &
-jq -cn \
-  --arg id   "$DEVICE_ID" \
-  --arg pub  "$NEW_PUB" \
-  --arg n    "$NONCE" \
-  --arg cert "$CURRENT_CERT" \
-  --arg sig  "$REQ_SIG" \
-  '{device_id: $id, public_key: $pub, nonce: $n, _current_cert: $cert, _req_sig: $sig}' \
-  | mosquitto_pub -h localhost -t te/pki/x509/renew -s
-wait
-```
-
-**Optional: restrict renewals to a window before expiry**
-
-Set `renewal_window_days = 30` in `params.toml` to only allow renewals within 30 days of the certificate's expiry date. This limits unnecessary renewals while still allowing timely rotation:
-
-```toml
-renewal_window_days = 30
-```
-
-### CA setup
-
-Generate a CA key pair and write the `params.toml` config file (one-time operation):
-
-```sh
-# Generate CA private key and self-signed certificate
-openssl genpkey -algorithm ed25519 -out ca-private.pem
-openssl req -new -x509 -key ca-private.pem -out ca-cert.pem -days 3650 -subj "/CN=MyDeviceCA"
-
-# Generate factory CA (skip if using require_factory_cert = false)
-openssl genpkey -algorithm ed25519 -out factory-ca-private.pem
-
-# Extract values for params.toml
-CA_PRIV_B64=$(openssl pkey -in ca-private.pem -outform DER | tail -c 32 | openssl base64 -A)
-CA_CERT_DER=$(openssl x509 -in ca-cert.pem -outform DER | base64 | tr -d '\n')
-FACTORY_CA_PUB=$(openssl pkey -in factory-ca-private.pem -pubout -outform DER | tail -c 32 | openssl base64 -A)
-
-# Write params.toml
-cat > params.toml <<EOF
-ca_private_key = "$CA_PRIV_B64"
-ca_cert_der = "$CA_CERT_DER"
-factory_ca_public_keys = "[\\"$FACTORY_CA_PUB\\"]"
-require_factory_cert = true
-cert_validity_days = 365
-EOF
-```
-
-For the open mode (`require_factory_cert = false`), omit `factory_ca_public_keys` and set `require_factory_cert = false` instead.
-
-#### Renewing the CA certificate
-
-The CA certificate expires after the validity period set at generation time (`setup-ca` uses 10 years). When it approaches expiry, re-issue it from the **same private key** — all previously issued device certificates remain valid because they were signed by that key:
+Run `setup-ca` to generate the CA and factory CA together:
 
 ```sh
 cd flows/x509-cert-issuer
-
-./scripts/x509-cert.sh renew-ca my-ca-private.pem my-ca-cert.pem
-```
-
-This overwrites `my-ca-cert.pem` with a fresh cert and updates `ca_cert_der` in `params.toml` in place. Then:
-
-1. Copy the updated `params.toml` to the flow working directory and restart the flow.
-2. Replace the broker's `cafile` with the new `my-ca-cert.pem` and restart the broker.
-3. Push the new CA cert to any devices that have it cached (e.g. update `ca-cert.pem` on each device).
-
-> Rotating the **CA private key** is a different and more disruptive operation — all issued device certificates become invalid and every device must re-enroll from scratch.
-
-Configure the broker to trust this CA for client authentication. For Mosquitto, add to `mosquitto.conf`:
-
-```
-cafile /etc/mosquitto/ca-cert.pem
-require_certificate true
-use_identity_as_username true
-```
-
-### Child device enrollment example
-
-The full workflow has two phases: factory provisioning (done once per device by the manufacturer) and first-boot enrollment (run on the device itself). The examples below use the `scripts/x509-cert.sh` helper from this directory. Requires `openssl` and `mosquitto_pub`/`mosquitto_sub`.
-
-#### Phase 1 — Factory provisioning (manufacturer, done once per device)
-
-```sh
-cd flows/x509-cert-issuer
-
-DEVICE_ID="child-001"
-
-# --- One-time CA setup: generates CA key+cert, factory CA key, writes params.toml ---
-./scripts/x509-cert.sh setup-ca my-ca
-
-# --- Per-device factory certificate ---
-# Each device gets its own files; named by device_id to avoid overwriting when batching
-./scripts/x509-cert.sh create-factory-cert "$DEVICE_ID" factory-ca-private.pem > "${DEVICE_ID}-factory-cert.b64" 2>/dev/null
-
-echo "Files to burn onto the device: ${DEVICE_ID}-factory-cert.b64 + ${DEVICE_ID}-factory-device-private.pem"
-```
-
-#### Phase 2 — First-boot enrollment (run on the device)
-
-```sh
-DEVICE_ID="child-001"
-BROKER="localhost"
-
-# ${DEVICE_ID}-factory-cert.b64 and ${DEVICE_ID}-factory-device-private.pem were provisioned at manufacturing time (Phase 1)
-# enroll subscribes before publishing, generates the op keypair, then writes the files below
-./scripts/x509-cert.sh enroll "$DEVICE_ID" --broker "$BROKER" \
-  --factory-cert "${DEVICE_ID}-factory-cert.b64" --factory-key "${DEVICE_ID}-factory-device-private.pem"
-
-echo "Enrollment complete. Use device-private.pem + device-cert.pem for TLS client auth."
-```
-
-The device now has `device-private.pem` (private key) and `device-cert.pem` (TLS client certificate) ready to use. `ca-cert.pem` is the CA certificate that should be installed on the MQTT broker as a trusted CA.
-
-#### Local testing with `tedge flows test`
-
-The simplest way to test locally is to set `require_factory_cert = false` in `params.toml` and use the keygen topic — the flow generates the keypair, so only a `device_id` and `nonce` are needed:
-
-```sh
-cd flows/x509-cert-issuer
-
-DEVICE_ID="child-001"
-NONCE=$(openssl rand -hex 16)
-
-echo "[te/pki/x509/keygen] $(jq -cn --arg id "$DEVICE_ID" --arg n "$NONCE" \
-  '{device_id: $id, nonce: $n}')" \
-  | tedge flows test --flow ./flow.toml \
-  | sed 's/^\[.*\] //' \
-  | tee /tmp/keygen-response.json \
-  | jq -r '.cert_pem' \
-  | ./scripts/x509-cert.sh decode-cert -
-```
-
-Save the generated private key and certificate from the same response:
-
-```sh
-jq -r '.private_key_pem' /tmp/keygen-response.json > device-private.pem
-jq -r '.cert_pem'        /tmp/keygen-response.json > device-cert.pem
-jq -r '.ca_cert_pem'     /tmp/keygen-response.json > ca-cert.pem
-```
-
-**With a factory certificate (`require_factory_cert = true`):**
-
-Uses the helper script to build the factory cert and signed keygen request. Run `setup-ca` first if you don't already have a `params.toml`:
-
-```sh
-cd flows/x509-cert-issuer
-
 ./scripts/x509-cert.sh setup-ca my-ca    # writes params.toml with require_factory_cert = true
+```
 
+Create a factory certificate for the test device, then build and send the request:
+
+**Keygen mode:**
+
+```sh
 DEVICE_ID="child-001"
 FACTORY_CERT=$(./scripts/x509-cert.sh create-factory-cert "$DEVICE_ID" factory-ca-private.pem 2>/dev/null)
 REQUEST=$(./scripts/x509-cert.sh create-keygen-req "$DEVICE_ID" factory-device-private.pem "$FACTORY_CERT")
@@ -381,89 +247,56 @@ echo "[te/pki/x509/keygen] $REQUEST" \
   | tee /tmp/keygen-response.json \
   | jq -r '.cert_pem' \
   | ./scripts/x509-cert.sh decode-cert -
-```
 
-Save the generated private key and certificate from the same response:
-
-```sh
 jq -r '.private_key_pem' /tmp/keygen-response.json > device-private.pem
 jq -r '.cert_pem'        /tmp/keygen-response.json > device-cert.pem
 jq -r '.ca_cert_pem'     /tmp/keygen-response.json > ca-cert.pem
 ```
 
-#### Enrolling against a live MQTT broker with `enroll`
-
-The `enroll` command supports several modes. Additional examples:
-
-**Open mode (`require_factory_cert = false`) — server generates the keypair:**
+**CSR mode** (against a live broker — use the `enroll` command):
 
 ```sh
-cd flows/x509-cert-issuer
+DEVICE_ID="child-001"
+./scripts/x509-cert.sh create-factory-cert "$DEVICE_ID" factory-ca-private.pem \
+  > "${DEVICE_ID}-factory-cert.b64" 2>/dev/null
 
-./scripts/x509-cert.sh enroll child-001 --broker localhost --keygen
+./scripts/x509-cert.sh enroll "$DEVICE_ID" --broker localhost \
+  --factory-cert "${DEVICE_ID}-factory-cert.b64" \
+  --factory-key "${DEVICE_ID}-factory-device-private.pem"
 ```
 
-**Factory cert mode (`require_factory_cert = true`) — server generates the keypair:**
+### Advanced topics
 
-```sh
-cd flows/x509-cert-issuer
+#### Using with Mosquitto to enable TLS
 
-# One-time CA setup (skip if params.toml already exists)
-./scripts/x509-cert.sh setup-ca my-ca
+A Mosquitto broker must already be running on a non-TLS endpoint.
 
-# Create the factory certificate for this device ID
-./scripts/x509-cert.sh create-factory-cert child-001 factory-ca-private.pem > child-001-factory-cert.b64 2>/dev/null
-
-# Enroll — writes device-private.pem, device-cert.pem, ca-cert.pem to ./certs/
-./scripts/x509-cert.sh enroll child-001 --broker mqtt.local --keygen \
-  --factory-cert child-001-factory-cert.b64 --factory-key child-001-factory-device-private.pem \
-  --out-dir ./certs
-```
-
-**Device supplies its own keypair (CSR mode):**
-
-```sh
-./scripts/x509-cert.sh enroll child-001 --broker mqtt.local \
-  --factory-cert child-001-factory-cert.b64 --factory-key child-001-factory-device-private.pem \
-  --out-dir ./certs
-# A new Ed25519 key is generated at ./certs/device-private.pem if not found.
-# Pass --op-key /path/to/existing-private.pem to reuse an existing keypair.
-```
-
-Full flag reference: `./scripts/x509-cert.sh enroll --help` or see the usage header in the script.
-
-### Using with mosquitto to enable TLS
-
-A mosquitto broker must be already configure and running on a non-TLS endpoint.
-
-1. Create a bootstrap key
-
-  ```sh
-  DEVICE_ID="broker"
-  BROKER="localhost"
-
-  ./scripts/x509-cert.sh create-factory-cert "$DEVICE_ID" factory-ca-private.pem > "${DEVICE_ID}-factory-cert.b64" 2>/dev/null
-  ```
-1. Create certificate for the broker
+1. Enroll the broker itself to get a server certificate (include SANs for its hostname and IP):
 
    ```sh
+   DEVICE_ID="broker"
+   BROKER="localhost"
+
+   ./scripts/x509-cert.sh create-factory-cert "$DEVICE_ID" factory-ca-private.pem \
+     > "${DEVICE_ID}-factory-cert.b64" 2>/dev/null
+
    ./scripts/x509-cert.sh enroll "$DEVICE_ID" --broker "$BROKER" --keygen \
-    --san-dns localhost --san-dns "$HOST" \
-    --san-ip 127.0.0.1 \
-    --factory-cert "${DEVICE_ID}-factory-cert.b64" \
-    --factory-key "${DEVICE_ID}-factory-device-private.pem"
+     --san-dns localhost --san-dns "$HOST" \
+     --san-ip 127.0.0.1 \
+     --factory-cert "${DEVICE_ID}-factory-cert.b64" \
+     --factory-key "${DEVICE_ID}-factory-device-private.pem"
    ```
 
-1. Copy the certificates
+1. Copy the certificates into place:
 
    ```sh
    mkdir -p /etc/mosquitto/certs/
-   cp device-private.pem  /etc/mosquitto/certs/broker-private.pem
-   cp device-cert.pem /etc/mosquitto/certs/broker-cert.pem
-   cp ca-cert.pem /etc/mosquitto/certs/ca-cert.pem
+   cp device-private.pem /etc/mosquitto/certs/broker-private.pem
+   cp device-cert.pem    /etc/mosquitto/certs/broker-cert.pem
+   cp ca-cert.pem        /etc/mosquitto/certs/ca-cert.pem
    ```
 
-1. Create a mosquitto TLS listener
+1. Create a Mosquitto TLS listener:
 
    ```sh
    TEDGE_CONFIG_DIR=${TEDGE_CONFIG_DIR:-/etc/tedge}
@@ -472,39 +305,159 @@ A mosquitto broker must be already configure and running on a non-TLS endpoint.
    listener 8883
 
    # CA certificate used to verify connecting client certificates.
-   # Certificates issued by the x509-cert-issuer flow are signed by this CA.
    cafile /etc/mosquitto/certs/ca-cert.pem
 
    # Server certificate and private key.
    certfile /etc/mosquitto/certs/broker-cert.pem
    keyfile /etc/mosquitto/certs/broker-private.pem
 
-
-   # Require clients to present a valid certificate signed by the CA above.
+   # Require clients to present a valid certificate signed by the CA.
    require_certificate true
 
-   # Use the certificate's Common Name (CN) as the MQTT client username.
-   # This lets you apply per-device ACL rules based on the CN.
+   # Use the certificate CN as the MQTT client username (enables per-device ACLs).
    use_identity_as_username true
    EOT
    ```
 
-1. Restart mosquitto
+1. Restart Mosquitto:
 
    ```sh
    systemctl restart mosquitto
    ```
 
-1. Create a child certificate and use it to connect to the broker
+1. Connect using a device certificate:
 
    ```sh
    mosquitto_sub -h localhost -p 8883 \
        --cafile ca-cert.pem \
        --key device-private.pem \
        --cert device-cert.pem \
-       -t '#' -v --debug
+       -t '#' -v
    ```
 
-### Related flows
+#### Renewing the CA certificate
 
-- **pki-issuer** — issues a simpler application-layer JSON certificate for payload signing, without needing a full X.509 CA.
+The CA certificate expires after the validity period set at generation time (`setup-ca` uses 10 years). When it approaches expiry, re-issue it from the **same private key** — all previously issued device certificates remain valid because they were signed by that key:
+
+```sh
+cd flows/x509-cert-issuer
+./scripts/x509-cert.sh renew-ca my-ca-private.pem my-ca-cert.pem
+```
+
+This overwrites `my-ca-cert.pem` with a fresh cert and updates `ca_cert_der` in `params.toml` in place. Then:
+
+1. Copy the updated `params.toml` to the flow working directory and restart the flow.
+2. Replace the broker's `cafile` with the new `my-ca-cert.pem` and restart the broker.
+3. Push the new CA cert to any devices that have it cached.
+
+> Rotating the **CA private key** is more disruptive — all issued device certificates become invalid and every device must re-enroll from scratch.
+
+#### MQTT protocol reference
+
+The following documents the raw MQTT request/response format for clients that do not use the `x509-cert.sh` helper.
+
+**CSR request** (publish to `te/pki/x509/csr`, subscribe to `te/pki/x509/cert/issued/<device_id>`):
+
+```json
+{
+  "device_id": "child-001",
+  "public_key": "<base64-ed25519-public-key>",
+  "nonce": "<unique-random-string>",
+  "_factory_cert": "<base64-encoded-factory-certificate-json>",
+  "_req_sig": "<base64-ed25519-signature>"
+}
+```
+
+`_factory_cert` and `_req_sig` are only required when `require_factory_cert = true`. `nonce` is recommended for anti-replay protection; it is required when `_req_sig` is present.
+
+`_req_sig` is an Ed25519 signature of the canonical JSON of `{device_id, nonce, public_key}` (keys sorted alphabetically) using the factory private key.
+
+**Keygen request** (publish to `te/pki/x509/keygen`, subscribe to `te/pki/x509/keygen/issued/<device_id>`):
+
+```json
+{
+  "device_id": "child-001",
+  "nonce": "<unique-random-string>",
+  "_factory_cert": "<base64-factory-cert>",
+  "_req_sig": "<base64-ed25519-signature>"
+}
+```
+
+No `public_key` field — the flow generates the keypair. `_req_sig` covers `{device_id, nonce}` (sorted). Omit `_factory_cert`/`_req_sig` if `require_factory_cert = false`.
+
+**Renewal request** (publish to `te/pki/x509/renew`, subscribe to `te/pki/x509/cert/issued/<device_id>`):
+
+```json
+{
+  "device_id": "child-001",
+  "public_key": "<base64-ed25519-public-key-for-new-cert>",
+  "nonce": "<unique-random-string>",
+  "_current_cert": "<base64-DER-of-currently-held-certificate>",
+  "_req_sig": "<base64-ed25519-signature>"
+}
+```
+
+`_req_sig` covers `{device_id, nonce, public_key}` (sorted) signed with the **current operational private key** — the one matching the public key in `_current_cert`. The flow verifies that `_current_cert` was issued by this CA, the CN matches `device_id`, the cert has not expired, and the signature is valid.
+
+**CSR/Renewal response** (published to `te/pki/x509/cert/issued/<device_id>`):
+
+```json
+{
+  "device_id": "child-001",
+  "cert_der": "<base64-encoded-DER>",
+  "cert_pem": "-----BEGIN CERTIFICATE-----\n...",
+  "ca_cert_der": "<base64-encoded-DER>",
+  "ca_cert_pem": "-----BEGIN CERTIFICATE-----\n..."
+}
+```
+
+**Keygen response** (published to `te/pki/x509/keygen/issued/<device_id>`):
+
+Same as above plus `private_key_der` and `private_key_pem` containing the generated private key.
+
+#### Manual CA setup (without the helper script)
+
+```sh
+# Generate CA private key and self-signed certificate
+openssl genpkey -algorithm ed25519 -out ca-private.pem
+openssl req -new -x509 -key ca-private.pem -out ca-cert.pem -days 3650 -subj "/CN=MyDeviceCA"
+
+# Generate factory CA
+openssl genpkey -algorithm ed25519 -out factory-ca-private.pem
+
+# Extract values for params.toml
+CA_PRIV_B64=$(openssl pkey -in ca-private.pem -outform DER | tail -c 32 | base64 | tr -d '\n')
+CA_CERT_DER=$(openssl x509 -in ca-cert.pem -outform DER | base64 | tr -d '\n')
+FACTORY_CA_PUB=$(openssl pkey -in factory-ca-private.pem -pubout -outform DER | tail -c 32 | base64 | tr -d '\n')
+
+cat > params.toml <<EOF
+ca_private_key = "$CA_PRIV_B64"
+ca_cert_der = "$CA_CERT_DER"
+factory_ca_public_keys = "[\\"$FACTORY_CA_PUB\\"]"
+require_factory_cert = true
+cert_validity_days = 365
+EOF
+```
+
+For open mode, omit `factory_ca_public_keys` and set `require_factory_cert = false`.
+
+#### Manual renewal example (without the helper script)
+
+```sh
+DEVICE_ID="child-001"
+NONCE=$(openssl rand -hex 16)
+NEW_PUB=$(openssl pkey -in op-private.pem -pubout -outform DER | tail -c 32 | base64 | tr -d '\n')
+CURRENT_CERT=$(openssl x509 -in device-cert.pem -outform DER | base64 | tr -d '\n')
+
+# Sign {device_id, nonce, public_key} (sorted) with the CURRENT operational private key
+REQ_BODY=$(printf '{"device_id":"%s","nonce":"%s","public_key":"%s"}' "$DEVICE_ID" "$NONCE" "$NEW_PUB")
+REQ_SIG=$(printf '%s' "$REQ_BODY" \
+  | openssl pkeyutl -sign -inkey op-private.pem -rawin \
+  | base64 | tr -d '\n')
+
+mosquitto_sub -h localhost -t "te/pki/x509/cert/issued/$DEVICE_ID" -C 1 -W 30 &
+printf '{"device_id":"%s","public_key":"%s","nonce":"%s","_current_cert":"%s","_req_sig":"%s"}' \
+  "$DEVICE_ID" "$NEW_PUB" "$NONCE" "$CURRENT_CERT" "$REQ_SIG" \
+  | mosquitto_pub -h localhost -t te/pki/x509/renew -s
+wait
+```
