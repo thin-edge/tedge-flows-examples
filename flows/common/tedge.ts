@@ -106,3 +106,24 @@ export function decodePayload(payload?: Uint8Array | string): string {
 export function decodeJsonPayload(payload?: Uint8Array | string): any {
   return JSON.parse(decodePayload(payload));
 }
+
+/**
+ * Encode a Uint8Array to a base64 string without relying on the `btoa` global,
+ * which is not available in all JS runtimes (e.g. QuickJS).
+ */
+export function uint8ToBase64(bytes: Uint8Array): string {
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let result = "";
+  const len = bytes.length;
+  for (let i = 0; i < len; i += 3) {
+    const b0 = bytes[i];
+    const b1 = i + 1 < len ? bytes[i + 1] : 0;
+    const b2 = i + 2 < len ? bytes[i + 2] : 0;
+    result += chars[b0 >> 2];
+    result += chars[((b0 & 3) << 4) | (b1 >> 4)];
+    result += i + 1 < len ? chars[((b1 & 15) << 2) | (b2 >> 6)] : "=";
+    result += i + 2 < len ? chars[b2 & 63] : "=";
+  }
+  return result;
+}

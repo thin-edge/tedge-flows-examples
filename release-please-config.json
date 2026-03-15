@@ -43,6 +43,9 @@
     },
     "flows/measurement-aggregator": {
       "component": "measurement-aggregator"
+    },
+    "flows/x509-cert-issuer": {
+      "component": "x509-cert-issuer"
     }
   }
 }

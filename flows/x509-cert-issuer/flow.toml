@@ -1,0 +1,24 @@
+[input.mqtt]
+topics = ["te/pki/x509/csr", "te/pki/x509/keygen", "te/pki/x509/renew"]
+
+[config]
+debug = "${.params.debug}"
+ca_private_key = "${.params.ca_private_key}"
+ca_cert_der = "${.params.ca_cert_der}"
+factory_ca_public_keys = "${.params.factory_ca_public_keys}"
+cert_validity_days = "${.params.cert_validity_days}"
+nonce_window_hours = "${.params.nonce_window_hours}"
+require_factory_cert = "${.params.require_factory_cert}"
+keygen_topic = "${.params.keygen_topic}"
+renewal_topic = "${.params.renewal_topic}"
+output_cert_topic_prefix = "${.params.output_cert_topic_prefix}"
+output_keygen_topic_prefix = "${.params.output_keygen_topic_prefix}"
+output_renewal_topic_prefix = "${.params.output_renewal_topic_prefix}"
+output_rejected_topic = "${.params.output_rejected_topic}"
+renewal_window_days = "${.params.renewal_window_days}"
+denied_device_ids = "${.params.denied_device_ids}"
+revoked_cert_serials = "${.params.revoked_cert_serials}"
+denied_factory_pubkeys = "${.params.denied_factory_pubkeys}"
+
+[[steps]]
+script = "lib/main.js"

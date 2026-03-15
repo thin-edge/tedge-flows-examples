@@ -143,3 +143,10 @@ vite.config.ts.timestamp-*
 
 # macOS
 .DS_Store
+
+# test files
+*.pem
+params.toml
+*.b64
+*.csr
+*.srl
