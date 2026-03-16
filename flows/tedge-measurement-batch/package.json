@@ -1,0 +1,17 @@
+{
+  "name": "tedge-measurement-batch",
+  "version": "0.0.1",
+  "description": "Flow description",
+  "source": "src/main.ts",
+  "module": "lib/main.js",
+  "type": "module",
+  "tedge": {
+    "mapper": "c8y"
+  },
+  "scripts": {
+    "build": "esbuild src/main.ts --target=es2018 --bundle --outfile=lib/main.js --format=esm --drop-labels=DEV,TEST",
+    "test": "jest --coverageProvider=v8 --coverage"
+  },
+  "author": "thin-edge.io",
+  "license": "Apache-2.0"
+}

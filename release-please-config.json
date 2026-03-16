@@ -37,6 +37,9 @@
     },
     "flows/tedge-events": {
       "component": "tedge-events"
+    },
+    "flows/tedge-measurement-batch": {
+      "component": "tedge-measurement-batch"
     }
   }
 }

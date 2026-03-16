@@ -1,0 +1,17 @@
+
+# message are sent back on the same input topic, however
+# as the flow only processes messages with an array of items
+# there isn't an infinite loop.
+expect_loop = true
+
+[input.mqtt]
+# Subscribe to all thin-edge.io measurement topics.
+# Devices may publish either a single measurement object or a JSON array of
+# measurement objects (a "batch").  This flow transparently splits batches
+# into individual messages so the rest of the pipeline sees only single-object
+# payloads.
+topics = ["te/+/+/+/+/m/+"]
+
+[[steps]]
+script = "lib/main.js"
+config.debug = "${.params.debug}"
