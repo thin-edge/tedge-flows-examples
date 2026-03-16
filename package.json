@@ -11,7 +11,8 @@
     "build-all": "npm run build --workspaces",
     "update-deps": "npx npm-check-updates -u --workspaces",
     "publish": "node ./scripts/publish-images.js",
-    "generate-flow": "node ./scripts/create-flow.js"
+    "generate-flow": "node ./scripts/create-flow.js",
+    "deploy-local": "node ./scripts/deploy-local.js"
   },
   "author": "",
   "license": "ISC",
