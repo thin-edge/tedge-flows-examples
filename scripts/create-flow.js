@@ -51,6 +51,11 @@ config.debug = 1440
 config.custom_prop = "my/prop"
 `.trimStart();
 
+const templateParamsTemplate = `
+# enable debug messages
+debug = false
+`.trimStart();
+
 const templateREADME = `
 ## ${projectName}
 
@@ -138,6 +143,10 @@ function generateProject(name) {
     JSON.stringify(packageTemplate, null, "  "),
   );
   fs.writeFileSync(path.join(projectDir, "flow.toml"), templateFlow);
+  fs.writeFileSync(
+    path.join(projectDir, "params.toml.template"),
+    templateParamsTemplate,
+  );
   fs.writeFileSync(path.join(projectDir, "README.md"), templateREADME);
 
   fs.mkdirSync(path.join(projectDir, "src"));
