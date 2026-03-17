@@ -4,6 +4,7 @@
   "flows/cloud-mapper-telemetry": "0.1.0",
   "flows/jsonata-xform": "0.1.0",
   "flows/log-surge": "1.4.0",
+  "flows/measurement-aggregator": "0.0.1",
   "flows/protobuf-xform": "0.2.1",
   "flows/thingsboard": "0.1.0",
   "flows/thingsboard-registration": "0.1.0",

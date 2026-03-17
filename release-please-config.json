@@ -40,6 +40,9 @@
     },
     "flows/tedge-measurement-batch": {
       "component": "tedge-measurement-batch"
+    },
+    "flows/measurement-aggregator": {
+      "component": "measurement-aggregator"
     }
   }
 }
