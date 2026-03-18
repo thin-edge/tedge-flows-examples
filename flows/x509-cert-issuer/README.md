@@ -1,5 +1,7 @@
 ## x509-cert-issuer
 
+**WARNING:** This example is currently not suitable for production as some features (like private key generation) require a suitable random source for the `crypto.getRandomValues()` JavaScript function which is not yet available in the thin-edge.io flow engine.
+
 An MQTT-based X.509 Certificate Authority flow. Devices that present a trusted **factory certificate** receive a X.509 TLS client certificate they can use to authenticate to an MQTT broker's TLS endpoint (or another other service which requires mutual TLS authentication).
 
 ### Description
