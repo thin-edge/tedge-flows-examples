@@ -1,0 +1,53 @@
+# base64-encoded 32-byte Ed25519 private key of this CA.
+# extract from a PEM key with:
+#   openssl pkey -in ca.pem -outform DER | tail -c 32 | openssl base64 -A
+ca_private_key = ""
+
+# base64-encoded DER of the CA certificate (included in the response for chain installation).
+# extract from a PEM cert with:
+#   openssl x509 -in ca.pem -outform DER | base64 | tr -d '\n'
+ca_cert_der = ""
+
+# JSON array of trusted factory CA public keys (base64-encoded Ed25519).
+# a device must present a factory certificate signed by one of these CAs.
+# example: factory_ca_public_keys = ["<base64-pubkey>", "<base64-pubkey>"]
+factory_ca_public_keys = []
+
+# issued certificate validity period in days
+cert_validity_days = 365
+
+# time window in hours within which each nonce is guaranteed to be unique (anti-replay)
+nonce_window_hours = 24
+
+# topic prefix for issued certificate responses — device_id is appended: <prefix>/<device_id>
+output_cert_topic_prefix = "te/pki/x509/cert/issued"
+
+# topic for rejected requests (empty string = silently discard)
+output_rejected_topic = "te/pki/x509/req/rejected"
+
+# when false, factory certificate and request signature checks are skipped.
+# only appropriate when the CSR/keygen topics are access-controlled at the broker.
+require_factory_cert = true
+
+# input topic for server-side key generation (flow generates the keypair for the device).
+# responses include a private key — ensure this topic has strict ACLs on the broker.
+keygen_topic = "te/pki/x509/keygen"
+
+# topic prefix for keygen responses — device_id is appended: <prefix>/<device_id>
+output_keygen_topic_prefix = "te/pki/x509/keygen/issued"
+
+# only allow renewals within this many days of certificate expiry (unset = always allow)
+# renewal_window_days = 30
+
+# JSON array of device_id strings to explicitly deny (denylist)
+# denied_device_ids = ["compromised-device-001"]
+
+# CRL-style revocation: hex-encoded serial numbers of certificates that should no longer be renewed.
+# The serial is returned as `cert_serial` in every issuance response, and logged at issuance.
+# Unlike denied_device_ids, this targets the specific certificate rather than the device identity,
+# so after the device re-enrolls with a fresh factory cert it receives a new serial and is unblocked.
+# revoked_cert_serials = ["<hex-serial>"]
+
+# Revoke specific compromised factory credentials without permanently blocking the device identity.
+# Re-provisioning the device with a new factory key (fresh burn) restores enrollment capability.
+# denied_factory_pubkeys = ["<base64-ed25519-pubkey>"]
