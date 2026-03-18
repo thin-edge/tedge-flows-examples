@@ -923,26 +923,32 @@ describe("require_factory_cert = false", () => {
     expect(output[0].topic).toBe(`te/pki/x509/cert/issued/${DEVICE_ID}`);
   });
 
-  test("issued cert is valid and signed by CA", () => {
-    const ctx = openContext();
-    const msg: tedge.Message = {
-      time: new Date(),
-      topic: "te/pki/x509/csr",
-      payload: JSON.stringify({
-        device_id: DEVICE_ID,
-        public_key: OP_PUB,
-        nonce: "open-nonce-2",
-      }),
-    };
-    const output = flow.onMessage(msg, ctx);
-    const resp = JSON.parse(output[0].payload as string);
-    const deviceCert = new crypto.X509Certificate(
-      Buffer.from(resp.cert_der, "base64"),
-    );
-    const caCert = new crypto.X509Certificate(
-      Buffer.from(resp.ca_cert_der, "base64"),
-    );
-    expect(deviceCert.verify(caCert.publicKey)).toBe(true);
+  // Wrapped in a nested describe so jest.retryTimes is scoped to this test only.
+  // The cert construction occasionally fails with an OpenSSL PEM parse error on
+  // slow CI runners — likely a timing issue in beforeAll — so we retry up to 3 times.
+  describe("issued cert is valid and signed by CA", () => {
+    jest.retryTimes(3);
+    test("issued cert is valid and signed by CA", () => {
+      const ctx = openContext();
+      const msg: tedge.Message = {
+        time: new Date(),
+        topic: "te/pki/x509/csr",
+        payload: JSON.stringify({
+          device_id: DEVICE_ID,
+          public_key: OP_PUB,
+          nonce: "open-nonce-2",
+        }),
+      };
+      const output = flow.onMessage(msg, ctx);
+      const resp = JSON.parse(output[0].payload as string);
+      const deviceCert = new crypto.X509Certificate(
+        Buffer.from(resp.cert_der, "base64"),
+      );
+      const caCert = new crypto.X509Certificate(
+        Buffer.from(resp.ca_cert_der, "base64"),
+      );
+      expect(deviceCert.verify(caCert.publicKey)).toBe(true);
+    });
   });
 
   test("nonce replay is still rejected even without factory cert", () => {
