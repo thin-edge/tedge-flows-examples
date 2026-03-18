@@ -70,3 +70,74 @@ npm run start:quickjs
 # using wasm based quickjs version
 npm run start:wasm-quickjs
 ```
+
+### Device Parameter Schema
+
+Create the DTM definition to control the parameters in Cumulocity
+
+```sh
+c8y api --raw POST /service/dtm/definitions/properties --template '{
+  "identifier": "flow_params_local_log-surge",
+  "jsonSchema": {
+    "title": "Flow Parameters - Log Surge Detection",
+    "description": "Monitor high amount of log entries",
+    "properties": {
+      "with_logs": {
+        "type": "boolean",
+        "default": false,
+        "description": "Publish individual log entries (useful for debugging)."
+      },
+      "debug": {
+        "type": "boolean",
+        "default": false,
+        "description": "Enable debug messages."
+      },
+      "publish_statistics": {
+        "type": "boolean",
+        "default": true,
+        "description": "Publish aggregated statistics instead of individual log entries."
+      },
+      "threshold_total": {
+        "type": "integer",
+        "minimum": 0,
+        "default": 500,
+        "description": "Total number of log entries (regardless of log level) before triggering an alarm. 0 disables the alarm."
+      },
+      "threshold_error": {
+        "type": "integer",
+        "minimum": 0,
+        "default": 10,
+        "description": "Number of error log entries before triggering an alarm. 0 disables the alarm."
+      },
+      "threshold_warning": {
+        "type": "integer",
+        "minimum": 0,
+        "default": 50,
+        "description": "Number of warning log entries before triggering an alarm. 0 disables the alarm."
+      },
+      "threshold_info": {
+        "type": "integer",
+        "minimum": 0,
+        "default": 0,
+        "description": "Number of info log entries before triggering an alarm. 0 disables the alarm."
+      },
+      "text_filter": {
+        "type": "array",
+        "description": "Optional list of regex patterns used to filter log messages. Only matching messages will be included.",
+        "items": {
+          "type": "string",
+          "format": "regex"
+        },
+        "minItems": 1
+      }
+    },
+    "type": "object"
+  },
+  "contexts": [
+    "asset",
+    "event",
+    "operation"
+  ]
+}
+'
+```
