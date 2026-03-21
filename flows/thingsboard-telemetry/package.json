@@ -1,5 +1,5 @@
 {
-  "name": "thingsboard",
+  "name": "thingsboard-telemetry",
   "version": "0.1.0",
   "description": "This flow demonstrates how to map thin-edge.io data to ThingsBoard.",
   "source": "src/main.ts",
