@@ -1,0 +1,8 @@
+# Name to register the main device as
+main_device_name = "{{MAIN_DEVICE_NAME}}"
+
+# ThingsBoard device profile applied when `type` is not specified in registration payload
+default_device_profile = "default"
+
+# Maximum number of messages to buffer per unregistered device
+max_pending_messages = 100

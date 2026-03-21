@@ -11,6 +11,6 @@ mqtt.topics = [
 
 [[steps]]
 script = "lib/main.js"
-config.main_device_name = "{{MAIN_DEVICE_NAME}}"
-config.default_device_profile = "default"
-config.max_pending_messages = 100
+config.main_device_name = "${.params.main_device_name}"
+config.default_device_profile = "${.params.default_device_profile}"
+config.max_pending_messages = "${.params.max_pending_messages}"
