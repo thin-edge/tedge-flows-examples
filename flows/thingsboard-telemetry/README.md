@@ -25,6 +25,8 @@ For the support of RPC/commands, use a dedicated flow [ThingsBoard RPC flow](../
 
 ## Flow Custom Configuration
 
+The following properties can be set in the flow's `params.toml` file. You can copy the `params.toml.template` file to create a new `params.toml` file to customize the values accordingly.
+
 - `add_type_to_key`: `<true|false>`
   - Determines whether the measurements/twin type is prefixed to the keys.
   - For example,
