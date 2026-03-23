@@ -36,15 +36,23 @@ const NAME_TO_ENTITY_PREFIX = "tb-name-to-entity:";
 // Prefix for <(key: entity ID), (value:pending messages)> store
 const MSG_PREFIX = "tb-msg:";
 
+// Initialize the context, by registering the main device name into the mapper key-value store.
+// This is to ensure the main device is registered even if the registration message is not published.
+export function onStartup(time: Date, context: FlowContext): void {
+  const { main_device_name = "MAIN" } = context.config;
+  const lookupKey = `${ENTITY_TO_NAME_PREFIX}device/main//`;
+  const reverseLookupKey = `${NAME_TO_ENTITY_PREFIX}${main_device_name}`;
+
+  context.mapper.set(lookupKey, main_device_name);
+  context.mapper.set(reverseLookupKey, "device/main//");
+}
+
 export function onMessage(message: Message, context: FlowContext): Message[] {
   const {
     main_device_name = "MAIN",
     default_device_profile = "default",
     max_pending_messages = 100,
   } = context.config;
-
-  // It would be good if we have `onStartup` hook to initialize the main device
-  initializeMainDevice(context, main_device_name);
 
   const { entityId, topicSegments } = parseTopicSegments(message.topic);
   const lookupKey = `${ENTITY_TO_NAME_PREFIX}${entityId}`;
@@ -96,21 +104,6 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   storePendingMessage(context, max_pending_messages, pendingMsgKey, message);
 
   return [];
-}
-
-// The registration message for the main device is not always published,
-// hence add it to the KV store here
-function initializeMainDevice(
-  context: FlowContext,
-  mainDeviceName: string,
-): void {
-  const lookupKey = `${ENTITY_TO_NAME_PREFIX}device/main//`;
-  const reverseLookupKey = `${NAME_TO_ENTITY_PREFIX}${mainDeviceName}`;
-
-  if (!context.mapper.get(lookupKey)) {
-    context.mapper.set(lookupKey, mainDeviceName);
-    context.mapper.set(reverseLookupKey, "device/main//");
-  }
 }
 
 function parseTopicSegments(topic: string): {
