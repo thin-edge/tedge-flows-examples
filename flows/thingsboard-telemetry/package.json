@@ -1,10 +1,13 @@
 {
-  "name": "thingsboard",
+  "name": "thingsboard-telemetry",
   "version": "0.1.0",
   "description": "This flow demonstrates how to map thin-edge.io data to ThingsBoard.",
   "source": "src/main.ts",
   "module": "lib/main.js",
   "type": "module",
+  "tedge": {
+    "mapper": "thingsboard"
+  },
   "scripts": {
     "build": "esbuild src/main.ts --target=es2018 --bundle --outfile=lib/main.js --format=esm --drop-labels=DEV,TEST",
     "test": "jest --coverageProvider=v8 --coverage"

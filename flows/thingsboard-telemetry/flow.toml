@@ -18,8 +18,7 @@ config.reformat = true
 script = "lib/main.js"
 
 interval = "10m"
-config.add_type_to_key = true
-config.alarm_prefix = "alarm::"
-config.event_prefix = "event::"
-config.enable_heartbeat = true
-
+config.add_type_to_key = "${.params.add_type_to_key}"
+config.alarm_prefix = "${.params.alarm_prefix}"
+config.event_prefix = "${.params.event_prefix}"
+config.enable_heartbeat = "${.params.enable_heartbeat}"

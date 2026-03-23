@@ -1,0 +1,12 @@
+# Determines whether the measurements/twin type is prefixed to the keys.
+add_type_to_key = true
+
+#
+# To distinguish alarms and events from other data types, the step prepends
+# these prefixes to the type from the MQTT topic to form the telemetry key used by ThingsBoard
+#
+alarm_prefix = "alarm::"
+event_prefix = "event::"
+
+# If enabled, a heartbeat message will be published in a specified interval to the gateway device
+enable_heartbeat = true

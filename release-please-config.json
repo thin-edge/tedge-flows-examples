@@ -20,8 +20,8 @@
     "flows/protobuf-xform": {
       "component": "protobuf-xform"
     },
-    "flows/thingsboard": {
-      "component": "thingsboard"
+    "flows/thingsboard-telemetry": {
+      "component": "thingsboard-telemetry"
     },
     "flows/thingsboard-registration": {
       "component": "thingsboard-registration"
