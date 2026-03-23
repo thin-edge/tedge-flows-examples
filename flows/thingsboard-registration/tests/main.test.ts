@@ -21,6 +21,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       const result = flow.onMessage(message, context);
 
@@ -67,6 +68,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       const result = flow.onMessage(message, context);
 
@@ -90,6 +92,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       const result = flow.onMessage(message, context);
 
@@ -113,6 +116,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       const result = flow.onMessage(message, context);
       expect(result).toHaveLength(1);
@@ -144,6 +148,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       const result = flow.onMessage(message, context);
 
@@ -179,6 +184,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       const result = flow.onMessage(message, context);
 
@@ -200,6 +206,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 3,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       for (let i = 0; i < 5; i++) {
         const message: tedge.Message = {
@@ -231,6 +238,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       // First, send some non-registration messages
       for (let i = 0; i < 3; i++) {
@@ -273,6 +281,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       // Send measurement message
       const measurementMessage: tedge.Message = {
@@ -322,6 +331,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       // First register the device
       const registrationMessage: tedge.Message = {
@@ -354,6 +364,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       // Register the device
       const registrationMessage: tedge.Message = {
@@ -387,6 +398,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       const message: tedge.Message = {
         time: tedge.mockGetTime(),
@@ -406,34 +418,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
-
-      // Register device first
-      const registrationMessage: tedge.Message = {
-        time: tedge.mockGetTime(),
-        topic: "te/device/child0//",
-        payload: JSON.stringify({
-          "@type": "child-device",
-        }),
-      };
-      flow.onMessage(registrationMessage, context);
-
-      // Send measurement
-      const message: tedge.Message = {
-        time: tedge.mockGetTime(),
-        topic: "te/device/child0///m/humidity",
-        payload: JSON.stringify({ humidity: 60 }),
-      };
-
-      const result = flow.onMessage(message, context);
-      expect(result[0].topic).toBe("tbflow/device/child0///m/humidity");
-    });
-
-    test("should replace te/ with tbflow/ in forwarded messages", () => {
-      const context = tedge.createContext({
-        main_device_name: "MAIN",
-        default_device_profile: "default",
-        max_pending_messages: 100,
-      });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       // Register device first
       const registrationMessage: tedge.Message = {
@@ -458,7 +443,7 @@ describe("ThingsBoard Registration Flow", () => {
   });
 
   describe("Edge Cases", () => {
-    test("main device should be added to the KV store", () => {
+    test("main device should be added to the KV store on startup", () => {
       const context = tedge.createContext({
         main_device_name: "MAIN DEVICE",
         default_device_profile: "default",
@@ -472,13 +457,7 @@ describe("ThingsBoard Registration Flow", () => {
         undefined,
       );
 
-      const message: tedge.Message = {
-        time: tedge.mockGetTime(),
-        topic: "te/device/child0//",
-        payload: JSON.stringify({}),
-      };
-
-      flow.onMessage(message, context);
+      flow.onStartup(tedge.mockGetTime(), context);
       expect(context.mapper.get("tb-entity-to-name:device/main//")).toBe(
         "MAIN DEVICE",
       );
@@ -493,6 +472,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       const message: tedge.Message = {
         time: tedge.mockGetTime(),
@@ -512,6 +492,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       const message: tedge.Message = {
         time: tedge.mockGetTime(),
@@ -533,6 +514,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       const message: tedge.Message = {
         time: tedge.mockGetTime(),
@@ -559,6 +541,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       const message: tedge.Message = {
         time: tedge.mockGetTime(),
@@ -581,6 +564,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       const message: tedge.Message = {
         time: tedge.mockGetTime(),
@@ -605,6 +589,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       const message: tedge.Message = {
         time: tedge.mockGetTime(),
@@ -628,6 +613,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       const message: tedge.Message = {
         time: tedge.mockGetTime(),
@@ -651,6 +637,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       const message: tedge.Message = {
         time: tedge.mockGetTime(),
@@ -672,6 +659,7 @@ describe("ThingsBoard Registration Flow", () => {
         default_device_profile: "default",
         max_pending_messages: 100,
       });
+      flow.onStartup(tedge.mockGetTime(), context);
 
       const message: tedge.Message = {
         time: tedge.mockGetTime(),
