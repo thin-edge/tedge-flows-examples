@@ -7,6 +7,9 @@ debug = false
 # Publish the statistics instead
 publish_statistics = true
 
+# Topic where the local statistics are published to
+stats_topic = "stats/logs"
+
 ################################################
 # thresholds for triggering alarms
 # 0 = disabled
@@ -30,3 +33,4 @@ threshold_info = 0
 # Optional log message filter, which will only include log entries
 # where the message text matches the given regex
 #text_filter = ["(connect)"]
+text_filter = []
