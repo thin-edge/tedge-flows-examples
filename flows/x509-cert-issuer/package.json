@@ -1,6 +1,6 @@
 {
   "name": "x509-cert-issuer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MQTT-based X.509 certificate authority: issues real TLS client certificates to devices that present a trusted factory certificate",
   "source": "src/main.ts",
   "module": "lib/main.js",

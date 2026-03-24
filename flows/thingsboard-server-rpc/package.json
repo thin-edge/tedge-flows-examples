@@ -1,6 +1,6 @@
 {
   "name": "thingsboard-server-rpc",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "This flow demonstrates how to integrate ThingsBoard server-side RPC with thin-edge.io commands.",
   "source": "src/main.ts",
   "module": "lib/main.js",
