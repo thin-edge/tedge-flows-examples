@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/thin-edge/tedge-flows-examples/compare/log-surge-v1.4.0...log-surge-v1.4.1) (2026-03-24)
+
+
+### Bug Fixes
+
+* **log-surge:** add missing variables to the params.toml.template ([#113](https://github.com/thin-edge/tedge-flows-examples/issues/113)) ([3b1b820](https://github.com/thin-edge/tedge-flows-examples/commit/3b1b8204f50e12ff3d64a47a07cb8271764950a6))
+
 ## [1.4.0](https://github.com/thin-edge/tedge-flows-examples/compare/log-surge-v1.3.1...log-surge-v1.4.0) (2026-03-05)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/thin-edge/tedge-flows-examples/compare/thingsboard-registration-v0.1.0...thingsboard-registration-v0.2.0) (2026-03-24)
+
+
+### Features
+
+* refactor thingsboard flows to modernize them ([#109](https://github.com/thin-edge/tedge-flows-examples/issues/109)) ([3e6d4d8](https://github.com/thin-edge/tedge-flows-examples/commit/3e6d4d82d76063e6bb5483a619566f4f6e61be8b))
+
 ## [0.1.0](https://github.com/thin-edge/tedge-flows-examples/compare/thingsboard-registration-v0.0.1...thingsboard-registration-v0.1.0) (2026-03-05)
 
 
