@@ -19,6 +19,12 @@ cert_validity_days = 365
 # time window in hours within which each nonce is guaranteed to be unique (anti-replay)
 nonce_window_hours = 24
 
+# Input topic for certificate renewal requests.
+renewal_topic = "te/pki/x509/renew"
+
+# Topic prefix for renewal responses — device_id is appended: <prefix>/<device_id>.
+output_renewal_topic_prefix = ""
+
 # topic prefix for issued certificate responses — device_id is appended: <prefix>/<device_id>
 output_cert_topic_prefix = "te/pki/x509/cert/issued"
 
@@ -36,18 +42,21 @@ keygen_topic = "te/pki/x509/keygen"
 # topic prefix for keygen responses — device_id is appended: <prefix>/<device_id>
 output_keygen_topic_prefix = "te/pki/x509/keygen/issued"
 
-# only allow renewals within this many days of certificate expiry (unset = always allow)
-# renewal_window_days = 30
+# only allow renewals within this many days of certificate expiry (0 = always allow)
+renewal_window_days = 0
 
 # JSON array of device_id strings to explicitly deny (denylist)
 # denied_device_ids = ["compromised-device-001"]
+denied_device_ids = []
 
 # CRL-style revocation: hex-encoded serial numbers of certificates that should no longer be renewed.
 # The serial is returned as `cert_serial` in every issuance response, and logged at issuance.
 # Unlike denied_device_ids, this targets the specific certificate rather than the device identity,
 # so after the device re-enrolls with a fresh factory cert it receives a new serial and is unblocked.
 # revoked_cert_serials = ["<hex-serial>"]
+revoked_cert_serials = []
 
 # Revoke specific compromised factory credentials without permanently blocking the device identity.
 # Re-provisioning the device with a new factory key (fresh burn) restores enrollment capability.
 # denied_factory_pubkeys = ["<base64-ed25519-pubkey>"]
+denied_factory_pubkeys = []

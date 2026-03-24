@@ -1000,7 +1000,7 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     }
 
     // Optionally enforce a renewal window (e.g. only allow within 30 days of expiry)
-    if (renewal_window_days !== undefined) {
+    if (renewal_window_days !== 0) {
       const windowMs = Number(renewal_window_days) * 86_400_000;
       if (currentCertNotAfter.getTime() - Date.now() > windowMs) {
         return reject(

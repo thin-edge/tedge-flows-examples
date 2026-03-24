@@ -2,7 +2,6 @@
 topics = ["te/pki/x509/csr", "te/pki/x509/keygen", "te/pki/x509/renew"]
 
 [config]
-debug = "${.params.debug}"
 ca_private_key = "${.params.ca_private_key}"
 ca_cert_der = "${.params.ca_cert_der}"
 factory_ca_public_keys = "${.params.factory_ca_public_keys}"
