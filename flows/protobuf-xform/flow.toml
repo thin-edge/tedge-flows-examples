@@ -7,4 +7,4 @@ mqtt.topics = [
 [[steps]]
 script = "lib/main.js"
 # config.topic: Use the template variable, '{{type}}' if you wish to include the sensor data type within the topic
-config.topic = "${.params.outbound_topic}"
+config.topic = "${params.outbound_topic}"

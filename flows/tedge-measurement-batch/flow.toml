@@ -14,4 +14,4 @@ topics = ["te/+/+/+/+/m/+"]
 
 [[steps]]
 script = "lib/main.js"
-config.debug = "${.params.debug}"
+config.debug = "${params.debug}"
