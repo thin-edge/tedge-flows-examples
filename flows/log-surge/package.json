@@ -1,6 +1,6 @@
 {
   "name": "log-surge",
-  "version": "1.4.1",
+  "version": "2.0.0",
   "description": "This flow demonstrates how to use `tedge-flows` to monitor system logs for surges in error messages and raise alarms accordingly.",
   "source": "src/main.ts",
   "module": "lib/main.js",

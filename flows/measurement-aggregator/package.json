@@ -1,6 +1,6 @@
 {
   "name": "measurement-aggregator",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Collect individual per-topic MQTT datapoints and emit them as a single aggregated thin-edge.io measurement",
   "source": "src/main.ts",
   "module": "lib/main.js",

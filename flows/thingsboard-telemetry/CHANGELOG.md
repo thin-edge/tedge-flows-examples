@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0](https://github.com/thin-edge/tedge-flows-examples/compare/thingsboard-telemetry-v0.2.0...thingsboard-telemetry-v1.0.0) (2026-03-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* use new params variable reference syntax ([#114](https://github.com/thin-edge/tedge-flows-examples/issues/114))
+
+### Code Refactoring
+
+* use new params variable reference syntax ([#114](https://github.com/thin-edge/tedge-flows-examples/issues/114)) ([47ec828](https://github.com/thin-edge/tedge-flows-examples/commit/47ec828990ec2082d0f12b51d57b6e7d4327beef))
+
 ## [0.2.0](https://github.com/thin-edge/tedge-flows-examples/compare/thingsboard-telemetry-v0.1.0...thingsboard-telemetry-v0.2.0) (2026-03-24)
 
 

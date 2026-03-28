@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/thin-edge/tedge-flows-examples/compare/uptime-v1.3.0...uptime-v2.0.0) (2026-03-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* use new params variable reference syntax ([#114](https://github.com/thin-edge/tedge-flows-examples/issues/114))
+
+### Code Refactoring
+
+* use new params variable reference syntax ([#114](https://github.com/thin-edge/tedge-flows-examples/issues/114)) ([47ec828](https://github.com/thin-edge/tedge-flows-examples/commit/47ec828990ec2082d0f12b51d57b6e7d4327beef))
+
 ## [1.3.0](https://github.com/thin-edge/tedge-flows-examples/compare/uptime-v1.2.1...uptime-v1.3.0) (2026-03-05)
 
 

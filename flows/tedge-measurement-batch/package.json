@@ -1,6 +1,6 @@
 {
   "name": "tedge-measurement-batch",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Flow description",
   "source": "src/main.ts",
   "module": "lib/main.js",
