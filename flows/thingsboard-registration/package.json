@@ -1,6 +1,6 @@
 {
   "name": "thingsboard-registration",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "This flow handles device registration and message buffering for ThingsBoard integration with thin-edge.io.",
   "source": "src/main.ts",
   "module": "lib/main.js",
