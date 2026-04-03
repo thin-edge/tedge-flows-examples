@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "prebuild": "npx buf generate",
-    "build": "esbuild src/main*.ts --target=es2018 --bundle --outdir=lib/ --format=esm --drop-labels=DEV,TEST",
+    "build": "esbuild src/main*.ts --target=es2018 --bundle --outdir=lib/ --format=esm",
     "test": "jest --coverageProvider=v8 --coverage"
   },
   "tedge": {

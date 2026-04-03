@@ -23,7 +23,7 @@ const packageTemplate = {
   },
   scripts: {
     build:
-      "esbuild src/main.ts --target=es2018 --bundle --outfile=lib/main.js --format=esm --drop-labels=DEV,TEST",
+      "esbuild src/main.ts --target=es2018 --bundle --outfile=lib/main.js --format=esm",
     test: "jest --coverageProvider=v8 --coverage",
   },
   author: "thin-edge.io",

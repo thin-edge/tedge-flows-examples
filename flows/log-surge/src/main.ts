@@ -105,7 +105,7 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
     };
   };
   if (!text_filter.map((v) => RegExp(v)).every(contains(output.text))) {
-    TEST: if (debug) {
+    if (debug) {
       console.log("Skipping message as it did not match the text filter", {
         text_filter,
       });
@@ -139,9 +139,6 @@ export function onInterval(time: Date, context: FlowContext) {
     stats_topic = "stats/logs",
     threshold = {},
   } = context.config || {};
-  TEST: if (debug) {
-    console.log("Calling tick");
-  }
 
   const { info = 0, warning = 0, error = 0, total = 0 } = threshold;
   const state = getState(context);
@@ -191,9 +188,6 @@ export function onInterval(time: Date, context: FlowContext) {
       }),
     });
   } else if (state.ran) {
-    TEST: if (debug) {
-      console.log("clearing log_surge alarm (if present)");
-    }
     output.push({
       time,
       topic: `te/device/main///a/log_surge`,

@@ -3,8 +3,6 @@ import type { Config } from "jest";
 
 const esbuildOptions = {
   target: "es2018",
-  // ignore labels for test coverage
-  dropLabels: ["TEST", "DEV"],
 };
 
 const config: Config = {
