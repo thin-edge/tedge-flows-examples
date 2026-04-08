@@ -1,0 +1,17 @@
+[input]
+mqtt.topics = [
+    "tedge/measurements",
+    "tedge/events/+",
+    "tedge/alarms/+/+",
+
+    # child devices
+    "tedge/measurements/+",
+    "tedge/events/+/+",
+    "tedge/alarms/+/+/+",
+]
+
+[config]
+topic_root = "${params.topic_root}"
+
+[[steps]]
+script = "lib/main.js"

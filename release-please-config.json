@@ -46,6 +46,9 @@
     },
     "flows/x509-cert-issuer": {
       "component": "x509-cert-issuer"
+    },
+    "flows/tedge-compat": {
+      "component": "tedge-compat"
     }
   }
 }
