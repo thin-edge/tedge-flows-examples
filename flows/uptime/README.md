@@ -35,18 +35,20 @@ The flow expects the thin-edge.io service status message to be one of the follow
        "jsonSchema": {
            "title": "Flow Parameters - Cumulocity Uptime",
            "description": "Track the uptime",
+           "additionalProperties": true,
+           "$schema": "http://json-schema.org/draft-07/schema#",
            "properties": {
-           "window_size_minutes": {
-               "type": "integer",
-               "default": 1000,
-               "title": "Window Size (Minutes)",
-               "order": 1
-           },
-           "stats_topic": {
-               "type": "string",
-               "title": "Statistics Topic",
-               "order": 2
-           }
+                "window_size_minutes": {
+                    "type": "integer",
+                    "default": 1000,
+                    "title": "Window Size in Minutes",
+                    "order": 1
+                },
+                "stats_topic": {
+                    "type": "string",
+                    "title": "Statistics Topic",
+                    "order": 2
+                }
            },
            "type": "object"
        },

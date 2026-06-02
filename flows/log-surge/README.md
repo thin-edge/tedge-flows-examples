@@ -81,11 +81,13 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
   "jsonSchema": {
     "title": "Flow Parameters - Log Surge Detection",
     "description": "Monitor high amount of log entries",
+    "additionalProperties": true,
+    "$schema": "http://json-schema.org/draft-07/schema#",
     "properties": {
       "with_logs": {
         "type": "boolean",
         "default": false,
-        "description": "Publish individual log entries (useful for debugging)."
+        "description": "Publish individual log entries"
       },
       "debug": {
         "type": "boolean",
@@ -101,7 +103,7 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
         "type": "integer",
         "minimum": 0,
         "default": 500,
-        "description": "Total number of log entries (regardless of log level) before triggering an alarm. 0 disables the alarm."
+        "description": "Total number of log entries before triggering an alarm. 0 disables the alarm."
       },
       "threshold_error": {
         "type": "integer",
@@ -121,6 +123,11 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
         "default": 0,
         "description": "Number of info log entries before triggering an alarm. 0 disables the alarm."
       },
+      "stats_topic": {
+        "type": "string",
+        "default": "stats/logs",
+        "description": "Topic to publish the statistics to"
+      },
       "text_filter": {
         "type": "array",
         "description": "Optional list of regex patterns used to filter log messages. Only matching messages will be included.",
@@ -128,7 +135,7 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
           "type": "string",
           "format": "regex"
         },
-        "minItems": 1
+        "minItems": 0
       }
     },
     "type": "object"
