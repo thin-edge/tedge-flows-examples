@@ -30,6 +30,8 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
     "jsonSchema": {
         "title": "Flow Parameters - Certificate Alert",
         "description": "Certificate expiration alerts",
+        "additionalProperties": true,
+        "$schema": "http://json-schema.org/draft-07/schema#",
         "properties": {
             "disable_alarms": {
                 "type": "boolean",
@@ -52,7 +54,7 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
             "disable_twin": {
                 "type": "boolean",
                 "default": false,
-                "title": "Don't publish certificate info via the digital twin",
+                "title": "Do not publish certificate info via the digital twin",
                 "order": 4
             }
         },
