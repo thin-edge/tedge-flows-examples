@@ -14,5 +14,6 @@
   "flows/tedge-events": "1.0.0",
   "flows/tedge-measurement-batch": "1.0.0",
   "flows/x509-cert-issuer": "1.0.0",
-  "flows/tedge-compat": "0.1.0"
+  "flows/tedge-compat": "0.1.0",
+  "flows/collectd": "0.0.1"
 }

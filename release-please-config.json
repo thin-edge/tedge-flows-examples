@@ -49,6 +49,9 @@
     },
     "flows/tedge-compat": {
       "component": "tedge-compat"
+    },
+    "flows/collectd": {
+      "component": "collectd"
     }
   }
 }

@@ -1,0 +1,8 @@
+[input]
+mqtt.topics = [
+    "collectd/+/+/+"
+]
+
+[[steps]]
+script = "lib/main.js"
+config.topic = "te/device/main///m/collectd"
