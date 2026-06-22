@@ -87,50 +87,59 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
       "with_logs": {
         "type": "boolean",
         "default": false,
+        "title": "With Logs",
         "description": "Publish individual log entries"
       },
       "debug": {
         "type": "boolean",
         "default": false,
+        "title": "Debug",
         "description": "Enable debug messages."
       },
       "publish_statistics": {
         "type": "boolean",
         "default": true,
+        "title": "Publish Statistics",
         "description": "Publish aggregated statistics instead of individual log entries."
       },
       "threshold_total": {
         "type": "integer",
         "minimum": 0,
         "default": 500,
+        "title": "Threshold Total",
         "description": "Total number of log entries before triggering an alarm. 0 disables the alarm."
       },
       "threshold_error": {
         "type": "integer",
         "minimum": 0,
         "default": 10,
+        "title": "Threshold Error",
         "description": "Number of error log entries before triggering an alarm. 0 disables the alarm."
       },
       "threshold_warning": {
         "type": "integer",
         "minimum": 0,
         "default": 50,
+        "title": "Threshold Warning",
         "description": "Number of warning log entries before triggering an alarm. 0 disables the alarm."
       },
       "threshold_info": {
         "type": "integer",
         "minimum": 0,
         "default": 0,
+        "title": "Threshold Info",
         "description": "Number of info log entries before triggering an alarm. 0 disables the alarm."
       },
       "stats_topic": {
         "type": "string",
         "default": "stats/logs",
+        "title": "Statistics Topic",
         "description": "Topic to publish the statistics to"
       },
       "text_filter": {
         "type": "array",
         "description": "Optional list of regex patterns used to filter log messages. Only matching messages will be included.",
+        "title": "Text Filters",
         "items": {
           "type": "string",
           "format": "regex"
