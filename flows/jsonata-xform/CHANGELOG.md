@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/thin-edge/tedge-flows-examples/compare/jsonata-xform-v0.1.0...jsonata-xform-v0.1.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **deps:** update dependencies to resolve dependabot alerts ([#126](https://github.com/thin-edge/tedge-flows-examples/issues/126)) ([a07ea53](https://github.com/thin-edge/tedge-flows-examples/commit/a07ea530726b0b3b34c9eb265e07928ecd57dea0))
+
 ## [0.1.0](https://github.com/thin-edge/tedge-flows-examples/compare/jsonata-xform-v0.0.3...jsonata-xform-v0.1.0) (2026-03-05)
 
 
