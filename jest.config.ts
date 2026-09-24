@@ -14,7 +14,7 @@ const config: Config = {
   },
   testRegex: "/tests/.*\\.(test|spec)?\\.(ts|tsx)$",
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
-  transformIgnorePatterns: ["node_modules/(?!@noble/)"],
+  transformIgnorePatterns: ["node_modules/(?!(@noble|@faker-js)/)"],
   coverageReporters: ["clover", "json", "lcov", ["text", { skipFull: true }]],
 };
 
