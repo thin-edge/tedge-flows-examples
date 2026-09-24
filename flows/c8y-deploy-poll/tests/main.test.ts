@@ -2038,3 +2038,37 @@ describe("deployment result events", () => {
     expect(eventOf(out)).toBeUndefined();
   });
 });
+
+describe("request line parsing without slow regular expressions", () => {
+  test.each([
+    ["1 0 id /p", { due: 1, expires: 0, id: "id", path: "/p", body: "{}" }],
+    [
+      '  1\t0  id   /p   {"a": "b c"}  ',
+      { due: 1, expires: 0, id: "id", path: "/p", body: '{"a": "b c"}' },
+    ],
+  ])("%j", (line, expected) => {
+    expect(flow.parseRequest(line)).toEqual(expected);
+  });
+
+  test.each([["1 0 id"], ["x 0 id /p"], ["1 y id /p"], ["1 0"], [""]])(
+    "invalid %j",
+    (line) => {
+      expect(flow.parseRequest(line)).toBeUndefined();
+    },
+  );
+
+  test("adversarial input is processed quickly", () => {
+    const started = Date.now();
+    expect(
+      flow.parseRequest("0 0 ! ! " + "  ".repeat(100_000) + "\n!"),
+    ).toEqual({
+      due: 0,
+      expires: 0,
+      id: "!",
+      path: "!",
+      body: "!",
+    });
+    flow.parseRequest("0 0 " + " ".repeat(100_000));
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+});

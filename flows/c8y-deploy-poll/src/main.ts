@@ -428,19 +428,43 @@ export function formatRequest(spec: RequestSpec): string {
   return `${spec.due} ${spec.expires} ${spec.id} ${spec.path} ${spec.body}`;
 }
 
+function isSpace(char: string): boolean {
+  return char === " " || char === "\t" || char === "\n" || char === "\r";
+}
+
+/**
+ * Parse "<due> <expires> <id> <path> <body>". The body is the rest of the line.
+ * The line is split without a regular expression, to avoid slow matching
+ * (backtracking) on unexpected input
+ */
 export function parseRequest(line: string): RequestSpec | undefined {
-  const match = line
-    .trim()
-    .match(/^(\d+)\s+(\d+)\s+(\S+)\s+(\S+)(?:\s+(.*))?$/);
-  if (!match) {
+  const text = line.trim();
+  const tokens: string[] = [];
+  let pos = 0;
+  while (tokens.length < 4) {
+    while (pos < text.length && isSpace(text[pos])) {
+      pos++;
+    }
+    const start = pos;
+    while (pos < text.length && !isSpace(text[pos])) {
+      pos++;
+    }
+    if (pos === start) {
+      return undefined;
+    }
+    tokens.push(text.substring(start, pos));
+  }
+  const [due, expires, id, path] = tokens;
+  if (!/^\d+$/.test(due) || !/^\d+$/.test(expires)) {
     return undefined;
   }
+  const body = text.substring(pos).trim();
   return {
-    due: parseInt(match[1], 10),
-    expires: parseInt(match[2], 10),
-    id: match[3],
-    path: match[4],
-    body: match[5] ?? "{}",
+    due: parseInt(due, 10),
+    expires: parseInt(expires, 10),
+    id,
+    path,
+    body: body === "" ? "{}" : body,
   };
 }
 

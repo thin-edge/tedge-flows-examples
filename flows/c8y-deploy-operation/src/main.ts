@@ -187,17 +187,44 @@ export function toLocalProxyUrl(
   if (!c8yUrl) {
     return url;
   }
-  const match = url.match(/^(https?):\/\/([^/?#]+)(.*)$/);
-  if (!match) {
+  // Split the url without a regular expression, to avoid slow matching
+  // (backtracking) on unexpected input
+  const scheme = url.startsWith("https://")
+    ? "https://"
+    : url.startsWith("http://")
+      ? "http://"
+      : undefined;
+  if (!scheme) {
     return url;
   }
-  const [, , host, rest] = match;
+  const hostStart = scheme.length;
+  let hostEnd = hostStart;
+  while (hostEnd < url.length && !"/?#".includes(url[hostEnd])) {
+    hostEnd++;
+  }
+  if (hostEnd === hostStart) {
+    return url;
+  }
+  const host = url.substring(hostStart, hostEnd);
+  const rest = url.substring(hostEnd);
   const c8yHost = c8yUrl.replace(/^[a-z]+:\/\//, "").split("/")[0];
   if (getDomainWithoutTenant(host) !== getDomainWithoutTenant(c8yHost)) {
     return url;
   }
   const path = rest.startsWith("/") || rest === "" ? rest : `/${rest}`;
-  return `${proxyUrl.replace(/\/+$/, "")}/c8y${path}`;
+  return `${trimTrailingSlashes(proxyUrl)}/c8y${path}`;
+}
+
+/**
+ * Remove trailing slashes (without a regular expression, as /\/+$/ is slow on
+ * input with many slashes which are not at the end)
+ */
+export function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === "/") {
+    end--;
+  }
+  return value.substring(0, end);
 }
 
 /**

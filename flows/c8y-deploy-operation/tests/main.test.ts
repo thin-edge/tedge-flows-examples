@@ -432,3 +432,45 @@ describe("values resolved from the mapper config", () => {
     expect(out).toHaveLength(0);
   });
 });
+
+describe("url parsing without slow regular expressions", () => {
+  const c8y = "t12345.example.com";
+  const proxy = "http://127.0.0.1:8001";
+
+  test.each([
+    [
+      "https://t12345.example.com/inventory/binaries/1",
+      `${proxy}/c8y/inventory/binaries/1`,
+    ],
+    ["https://t12345.example.com", `${proxy}/c8y`],
+    ["https://t12345.example.com?x=1", `${proxy}/c8y/?x=1`],
+    ["http://mytenant.example.com:443/a#b", `${proxy}/c8y/a#b`],
+    ["https://other.com/file", "https://other.com/file"],
+    ["ftp://t12345.example.com/file", "ftp://t12345.example.com/file"],
+    ["https:///nohost", "https:///nohost"],
+    ["not a url", "not a url"],
+  ])("%s", (url, expected) => {
+    expect(flow.toLocalProxyUrl(url, c8y, proxy)).toBe(expected);
+  });
+
+  test("trailing slashes of the proxy url are removed", () => {
+    expect(
+      flow.toLocalProxyUrl("https://t12345.example.com/a", c8y, `${proxy}///`),
+    ).toBe(`${proxy}/c8y/a`);
+    expect(flow.trimTrailingSlashes("a/b//")).toBe("a/b");
+    expect(flow.trimTrailingSlashes("///")).toBe("");
+    expect(flow.trimTrailingSlashes("")).toBe("");
+  });
+
+  test("adversarial input is processed quickly", () => {
+    const started = Date.now();
+    flow.toLocalProxyUrl('http://"' + '""'.repeat(50_000) + "\n", c8y, proxy);
+    flow.toLocalProxyUrl(
+      "https://t12345.example.com/a",
+      c8y,
+      "/".repeat(100_000) + "x",
+    );
+    flow.trimTrailingSlashes("/".repeat(100_000) + "x");
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+});
