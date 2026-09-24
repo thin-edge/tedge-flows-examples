@@ -1,6 +1,6 @@
 {
   "name": "c8y-deploy-poll",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Periodically evaluate a Cumulocity deployment and request an operation when a new version is available",
   "source": "src/main.ts",
   "module": "lib/main.js",

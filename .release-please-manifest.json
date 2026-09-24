@@ -15,7 +15,7 @@
   "flows/tedge-measurement-batch": "1.0.0",
   "flows/x509-cert-issuer": "1.0.0",
   "flows/tedge-compat": "0.1.0",
-  "flows/c8y-deploy-operation": "0.1.0",
-  "flows/c8y-deploy-status": "0.1.0",
-  "flows/c8y-deploy-poll": "0.1.0"
+  "flows/c8y-deploy-operation": "0.2.0",
+  "flows/c8y-deploy-status": "0.2.0",
+  "flows/c8y-deploy-poll": "0.2.0"
 }
