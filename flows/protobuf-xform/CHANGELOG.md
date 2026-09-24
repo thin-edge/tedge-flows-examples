@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/thin-edge/tedge-flows-examples/compare/protobuf-xform-v1.0.0...protobuf-xform-v1.0.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **deps:** update dependencies to resolve dependabot alerts ([#126](https://github.com/thin-edge/tedge-flows-examples/issues/126)) ([a07ea53](https://github.com/thin-edge/tedge-flows-examples/commit/a07ea530726b0b3b34c9eb265e07928ecd57dea0))
+
 ## [1.0.0](https://github.com/thin-edge/tedge-flows-examples/compare/protobuf-xform-v0.2.1...protobuf-xform-v1.0.0) (2026-03-28)
 
 
