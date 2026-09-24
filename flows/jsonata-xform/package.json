@@ -19,6 +19,6 @@
   },
   "dependencies": {
     "es-toolkit": "^1.42.0",
-    "jsonata": "^2.1.0"
+    "jsonata": "^2.2.2"
   }
 }
