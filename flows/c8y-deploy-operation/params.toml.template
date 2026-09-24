@@ -1,0 +1,18 @@
+# The device id, Cumulocity URL, bridge topic prefix and local proxy address
+# are read from the c8y mapper config (${mapper.*})
+
+# Operation fragment which contains the target state
+fragment = "c8y_ComposedTargetState"
+
+# thin-edge.io MQTT topic root (tedge config get mqtt.topic_root)
+topic_root = "te"
+
+# Command id prefix. Use the prefix of the c8y mapper so that it reports the
+# command status (executing/successful/failed) back to the Cumulocity operation
+cmd_id_prefix = "c8y-mapper"
+
+# Scheme of the local Cumulocity proxy. Use "https" if c8y.proxy.cert_path is set
+proxy_scheme = "http"
+
+# Enable debug logging
+debug = false

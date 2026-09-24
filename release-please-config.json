@@ -49,6 +49,12 @@
     },
     "flows/tedge-compat": {
       "component": "tedge-compat"
+    },
+    "flows/c8y-deploy-operation": {
+      "component": "c8y-deploy-operation"
+    },
+    "flows/c8y-deploy-status": {
+      "component": "c8y-deploy-status"
     }
   }
 }

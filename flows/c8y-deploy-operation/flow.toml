@@ -1,0 +1,15 @@
+[input]
+# Cumulocity operations delivered via JSON over MQTT
+mqtt.topics = [
+    "${mapper.bridge.topic_prefix}/devicecontrol/notifications",
+]
+
+[[steps]]
+script = "lib/main.js"
+config.fragment = "${params.fragment}"
+config.topic_root = "${params.topic_root}"
+config.cmd_id_prefix = "${params.cmd_id_prefix}"
+config.device_id = "${mapper.device.id}"
+config.c8y_url = "${mapper.http}"
+config.proxy_url = "${params.proxy_scheme}://${mapper.proxy.client.host}:${mapper.proxy.client.port}"
+config.debug = "${params.debug}"

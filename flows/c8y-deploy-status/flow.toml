@@ -1,0 +1,8 @@
+[input]
+mqtt.topics = [
+    "te/+/+/+/+/cmd/device_profile/+",
+]
+
+[[steps]]
+script = "lib/main.js"
+config.debug = "${params.debug}"
