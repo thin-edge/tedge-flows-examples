@@ -1,0 +1,56 @@
+# The step publishes to topics it also subscribes to (its retained state and the
+# deployment twins), so looping messages must not be dropped
+expect_loop = true
+
+[[input.mqtt]]
+topics = [
+    "tedge-flows/c8y-deploy-poll/${params.deployment_key}/request",
+    "tedge-flows/c8y-deploy-poll/${params.deployment_key}/state",
+    "${params.topic_root}/device/main///twin/c8y_Deployment_${params.deployment_key}",
+    "${params.topic_root}/device/main///twin/c8y_DeploymentState_${params.deployment_key}",
+    # Commands of the main device, to avoid requesting a deployment while another
+    # operation is in progress (filtered by busy_operations)
+    "${params.topic_root}/device/main///cmd/+/+",
+]
+
+# Execute the request published by the step once it is due
+[[input.process]]
+command = "sh ./poll.sh request tedge-flows/c8y-deploy-poll/${params.deployment_key}/request ${params.state_dir}"
+topic = "tedge-flows/c8y-deploy-poll/${params.deployment_key}/response"
+interval = "60s"
+
+# Read the device context file
+[[input.process]]
+command = "sh ./poll.sh context \"${params.context_file}\""
+topic = "tedge-flows/c8y-deploy-poll/${params.deployment_key}/context"
+interval = "300s"
+
+# Detect the device architecture (normalized by the step)
+[[input.process]]
+command = "sh ./poll.sh detect"
+topic = "tedge-flows/c8y-deploy-poll/${params.deployment_key}/detect"
+interval = "3600s"
+
+[[steps]]
+script = "lib/main.js"
+interval = "10s"
+config.deployment_key = "${params.deployment_key}"
+config.target_state = "${params.target_state}"
+config.context = "${params.context}"
+config.context_file = "${params.context_file}"
+config.detect_arch = "${params.detect_arch}"
+config.priority = "${params.priority}"
+config.interval = "${params.interval}"
+config.startup_delay = "${params.startup_delay}"
+config.retry_min = "${params.retry_min}"
+config.max_attempts = "${params.max_attempts}"
+config.assigned_timeout = "${params.assigned_timeout}"
+config.in_progress_timeout = "${params.in_progress_timeout}"
+config.busy_operations = "${params.busy_operations}"
+config.operation_request = "${params.operation_request}"
+config.server_query = "${params.server_query}"
+config.allow_preview = "${params.allow_preview}"
+config.events = "${params.events}"
+config.device_id = "${mapper.device.id}"
+config.topic_root = "${params.topic_root}"
+config.debug = "${params.debug}"

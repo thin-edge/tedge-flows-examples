@@ -91,3 +91,4 @@ See [params.toml.template](./params.toml.template).
 
 - Commands are retained until they are cleared, so a command which is still in progress is processed again when the flow restarts. The published state is the same, but `updatedAt` is set to the time the message was processed again.
 - A failed deployment updates `c8y_DeploymentState_<key>` only. The `c8y_Deployment_<key>` fragment keeps the last successful deployment.
+- The [c8y-deploy-poll](../c8y-deploy-poll/) flow relies on these fragments to decide whether a new version needs to be requested. It also publishes the `ASSIGNED` state when it requests an operation, and the deployment priority.

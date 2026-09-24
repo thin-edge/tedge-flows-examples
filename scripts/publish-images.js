@@ -107,9 +107,14 @@ for (const [_, project] of Object.entries(projects)) {
     console.log(`Creating tar file: ${tarFileName}`);
 
     // Gather flow files (relative to flow directory)
-    const files = [flowFilename, project.module, "params.toml.template"].filter(
-      (p) => fs.existsSync(path.join(projectDir, p)),
-    );
+    // Additional files (e.g. scripts) are listed in package.json: tedge.files
+    const extraFiles = (project.tedge && project.tedge.files) || [];
+    const files = [
+      flowFilename,
+      project.module,
+      "params.toml.template",
+      ...extraFiles,
+    ].filter((p) => fs.existsSync(path.join(projectDir, p)));
 
     const fileArgs = files.map((p) => `'${p}'`).join(" ");
     execSync(`tar -czf ${tarFilePath} -C ${projectDir} ${fileArgs}`, {

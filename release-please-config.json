@@ -55,6 +55,9 @@
     },
     "flows/c8y-deploy-status": {
       "component": "c8y-deploy-status"
+    },
+    "flows/c8y-deploy-poll": {
+      "component": "c8y-deploy-poll"
     }
   }
 }

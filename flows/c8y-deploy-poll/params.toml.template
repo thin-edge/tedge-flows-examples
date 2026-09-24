@@ -1,0 +1,71 @@
+# NOTE: The defaults are set up for the "demo" deployment, so that the flow works
+# out of the box. For a production installation, use a longer interval (e.g. "24h"),
+# startup_delay and retry_min (e.g. "5m") and set the device context of your devices.
+
+# Deployment to evaluate (required)
+deployment_key = "demo"
+
+# Target state to evaluate: "active", "latest" or a concrete version.
+# Operations are only requested for "active" (see allow_preview)
+target_state = "active"
+
+# Add the architecture of the device to the device context as "arch", e.g. "arm64",
+# "armv7" or "amd64" (from dpkg --print-architecture, or uname -m).
+# A value set in context or context_file takes precedence
+detect_arch = true
+
+# Device context sent to the server (string values only)
+context = { type = "deluxe" }
+
+# Optional JSON file with additional device context. Its values override context
+context_file = ""
+
+# Priority requested by the device (integer). Leave empty to use the server priority
+priority = 100
+
+# How often to poll. Each device polls at a fixed offset within the interval
+interval = "5m"
+
+# Maximum delay before the first poll after the flow is installed
+startup_delay = "10s"
+
+# First retry delay after a failed request (doubled on each failure, up to interval)
+retry_min = "1m"
+
+# Maximum number of operation requests for the same version
+max_attempts = 3
+
+# Time after which an ASSIGNED deployment without any progress is requested again
+assigned_timeout = "15m"
+
+# Operations of the main device which block a new deployment while they are in
+# progress (e.g. a deployment started manually from Cumulocity)
+busy_operations = ["device_profile", "firmware_update", "software_update", "config_update"]
+
+# Report a deployment or operation which has not changed its status for this long
+# (e.g. "24h"). This is a warning only, as installations can take hours.
+# Leave empty to disable
+in_progress_timeout = ""
+
+# "client": dry run first, then request the operation if the version is new
+# "server": always request the operation and let the server decide (needs server support)
+operation_request = "client"
+
+# Additional query parameters in "server" mode
+server_query = ""
+
+# Allow requesting operations for target states other than "active"
+allow_preview = false
+
+# Publish events (te/device/main///e/c8y_DeploymentPoll) describing what the flow does:
+# "off", "changes" (only when the outcome changes) or "all" (every poll)
+events = "changes"
+
+# Directory used by poll.sh to remember which request it executed last
+state_dir = "/tmp/c8y-deploy-poll"
+
+# thin-edge.io MQTT topic root (tedge config get mqtt.topic_root)
+topic_root = "te"
+
+# Enable debug logging
+debug = false
