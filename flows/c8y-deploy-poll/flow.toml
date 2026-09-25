@@ -6,6 +6,8 @@ expect_loop = true
 topics = [
     "tedge-flows/c8y-deploy-poll/${params.deployment_key}/request",
     "tedge-flows/c8y-deploy-poll/${params.deployment_key}/state",
+    # Reset the attempts, e.g. after the cause of a failed installation was fixed
+    "tedge-flows/c8y-deploy-poll/${params.deployment_key}/reset",
     "${params.topic_root}/device/main///twin/c8y_Deployment_${params.deployment_key}",
     "${params.topic_root}/device/main///twin/c8y_DeploymentState_${params.deployment_key}",
     # Commands of the main device, to avoid requesting a deployment while another

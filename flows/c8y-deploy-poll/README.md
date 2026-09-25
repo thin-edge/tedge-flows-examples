@@ -22,7 +22,7 @@ The evaluate endpoint does not know which version the device is running, and eve
    ├─ available: false                             → wait for the next poll
    ├─ version == last successful version           → in sync, wait for the next poll
    ├─ version is ASSIGNED/PENDING/…/IN_PROGRESS    → in progress, wait for the next poll
-   ├─ version failed max_attempts times            → give up (until a new version is offered)
+   ├─ version failed max_attempts times            → give up (until a new version is offered or the attempts are reset)
    └─ otherwise
         └─ POST ...evaluate?createOperation=true   → c8y_DeploymentState_<key> = ASSIGNED
                                                       (the operation arrives via c8y-deploy-operation)
@@ -50,6 +50,16 @@ Flow steps cannot make HTTP requests, so the requests are sent by [poll.sh](./po
 3. The step decides what to do next and publishes the next request.
 
 Each device polls at a fixed time within the `interval`, derived from the device id and deployment key, so a fleet does not poll at the same time. Failed requests are retried with an exponential backoff (starting at `retry_min`). Operation requests are never retried blindly: a failed operation request is followed by a new dry run.
+
+### Retrying a failed version
+
+After `max_attempts` failed installations, the offered version is not requested again until a new version is available. Once the cause of the failures is fixed, reset the attempts to request the same version again, without publishing a new version:
+
+```sh
+tedge mqtt pub tedge-flows/c8y-deploy-poll/<key>/reset '{}'
+```
+
+The flow then checks the deployment straight away, and requests the operation again (with another `max_attempts` attempts). If a request is due at the time of the reset, its result is evaluated with the reset attempts instead. The payload is ignored, but must not be empty. A retained reset is cleared by the flow, so it is not applied again after a restart.
 
 ### Operations in progress
 
@@ -142,6 +152,7 @@ Example (`te/device/main///e/c8y_DeploymentPoll`):
 | `request_failed`      | Could not check deployment demo (HTTP 502), retrying in 10m                                                                                                  |
 | `request_error`       | Could not check deployment demo (HTTP 404): the deployment or target state does not exist                                                                    |
 | `request_lost`        | No result was received for the last request of deployment demo. Checking again                                                                               |
+| `reset`               | The attempts of deployment demo were reset (version 13.6). Checking again                                                                                    |
 
 The result of a deployment (`completed` or `failed`) is reported when c8y-deploy-status publishes `SUCCESS` or `FAILURE` in `c8y_DeploymentState_<key>`, also for deployments which were not requested by this flow. The reason of a failure is taken from the failed `device_profile` command. Each result is reported once, and results from before the flow started are not reported again (e.g. after a restart). With `changes`, the first `in_sync` after a `completed` event is not reported.
 

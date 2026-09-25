@@ -817,6 +817,105 @@ describe("flow", () => {
     });
   });
 
+  describe("reset", () => {
+    const resetTopic = "tedge-flows/c8y-deploy-poll/demo/reset";
+
+    // Give up on 13.6 after 3 attempts, return the next (regular) request
+    function gaveUp(context: flow.FlowContext): flow.RequestSpec {
+      flow.onMessage(
+        msg(topics.state, { version: "13.6", attempts: 3, failures: 1 }),
+        context,
+      );
+      flow.onMessage(
+        msg(topics.deploymentState, { version: "13.6", state: "FAILURE" }),
+        context,
+      );
+      const dry = requestOf(flow.onInterval(at(10 * SEC), context));
+      const next = requestOf(
+        flow.onMessage(
+          msg(
+            topics.response,
+            result(dry.id, { available: true, version: "13.6" }),
+            at(1 * MIN),
+          ),
+          context,
+        ),
+      );
+      expect(next.path).toBe(PATH);
+      expect(next.due * 1000).toBeGreaterThan(at(1 * HOUR).getTime());
+      return next;
+    }
+
+    test("requests the version again after giving up", () => {
+      const context = started();
+      gaveUp(context);
+
+      const out = flow.onMessage(msg(resetTopic, "{}", at(2 * MIN)), context);
+      // a retained reset is cleared
+      expect(find(out, resetTopic)).toEqual({
+        time: at(2 * MIN),
+        topic: resetTopic,
+        payload: "",
+        mqtt: { retain: true, qos: 1 },
+      });
+      expect(
+        tedge.decodeJsonPayload(find(out, topics.state)!.payload),
+      ).toMatchObject({ version: "13.6", attempts: 0, failures: 0 });
+
+      // a dry run is scheduled now
+      const dry = requestOf(out);
+      expect(dry.path).toBe(PATH);
+      expect(dry.due).toBe(Math.floor(at(2 * MIN).getTime() / 1000));
+
+      const create = requestOf(
+        flow.onMessage(
+          msg(
+            topics.response,
+            result(dry.id, { available: true, version: "13.6" }),
+            at(3 * MIN),
+          ),
+          context,
+        ),
+      );
+      expect(create.path).toBe(`${PATH}?createOperation=true`);
+      const assigned = flow.onMessage(
+        msg(
+          topics.response,
+          result(create.id, { available: true, version: "13.6" }),
+          at(4 * MIN),
+        ),
+        context,
+      );
+      expect(
+        tedge.decodeJsonPayload(find(assigned, topics.state)!.payload),
+      ).toMatchObject({ version: "13.6", attempts: 1 });
+    });
+
+    test("an empty payload is ignored", () => {
+      const context = started();
+      gaveUp(context);
+      expect(flow.onMessage(msg(resetTopic, "", at(2 * MIN)), context)).toEqual(
+        [],
+      );
+    });
+
+    test("a due request is not replaced", () => {
+      const context = started();
+      flow.onMessage(
+        msg(topics.state, { version: "13.6", attempts: 3 }),
+        context,
+      );
+      const due = Math.floor(at(5 * SEC).getTime() / 1000);
+      flow.onMessage(msg(topics.request, `${due} 0 due-1 ${PATH} {}`), context);
+
+      const out = flow.onMessage(msg(resetTopic, "{}", at(10 * SEC)), context);
+      expect(find(out, topics.request)).toBeUndefined();
+      expect(
+        tedge.decodeJsonPayload(find(out, topics.state)!.payload),
+      ).toMatchObject({ attempts: 0 });
+    });
+  });
+
   test("first poll publishes the membership", () => {
     const context = started();
     const dry = requestOf(flow.onInterval(at(10 * SEC), context));
@@ -1130,6 +1229,26 @@ describe("events", () => {
       version: "13.6",
       attempts: 3,
       text: "Version 13.6 of deployment demo failed 3 times. It is not requested again until a new version is available",
+    });
+  });
+
+  test("reset", () => {
+    const context = started("changes");
+    flow.onMessage(
+      msg(topics.state, { version: "13.6", attempts: 3 }),
+      context,
+    );
+    const dry = requestOf(flow.onInterval(at(10 * SEC), context));
+    answer(context, dry.id, { available: true, version: "13.6" }, at(1 * MIN));
+    const out = flow.onMessage(
+      msg("tedge-flows/c8y-deploy-poll/demo/reset", "{}", at(2 * MIN)),
+      context,
+    );
+    expect(eventOf(out)).toMatchObject({
+      outcome: "reset",
+      version: "13.6",
+      nextPollAt: at(2 * MIN).toISOString(),
+      text: "The attempts of deployment demo were reset (version 13.6). Checking again",
     });
   });
 
