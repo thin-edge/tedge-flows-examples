@@ -33,7 +33,7 @@ interface C8ySoftwareModule {
   version?: string;
   url?: string;
   softwareType?: string;
-  action: string;
+  action?: string;
 }
 
 interface C8yConfiguration {
@@ -361,8 +361,9 @@ export function convertTargetState(
       const [version, softwareType] = getModuleVersionAndType(module);
       const type = softwareType ?? DEFAULT_SOFTWARE_TYPE;
 
+      // A missing action means install
       let action: SoftwareModuleItem["action"];
-      if (module.action === "install") {
+      if (module.action === undefined || module.action === "install") {
         action = "install";
       } else if (module.action === "delete") {
         action = "remove";
