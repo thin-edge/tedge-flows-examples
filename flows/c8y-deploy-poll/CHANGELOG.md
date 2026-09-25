@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/thin-edge/tedge-flows-examples/compare/c8y-deploy-poll-v0.2.0...c8y-deploy-poll-v0.3.0) (2026-09-25)
+
+
+### Features
+
+* **c8y-deploy-poll:** add a reset topic to retry a version after giving up ([#130](https://github.com/thin-edge/tedge-flows-examples/issues/130)) ([1697c27](https://github.com/thin-edge/tedge-flows-examples/commit/1697c273d4a08303081bd27f47a4ff5c2ae67955))
+
 ## [0.2.0](https://github.com/thin-edge/tedge-flows-examples/compare/c8y-deploy-poll-v0.1.0...c8y-deploy-poll-v0.2.0) (2026-09-24)
 
 
