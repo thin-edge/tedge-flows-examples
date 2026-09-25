@@ -266,6 +266,7 @@ export function topics(settings: Settings) {
   return {
     request: `${TOPIC_PREFIX}/${key}/request`,
     state: `${TOPIC_PREFIX}/${key}/state`,
+    reset: `${TOPIC_PREFIX}/${key}/reset`,
     response: `${TOPIC_PREFIX}/${key}/response`,
     context: `${TOPIC_PREFIX}/${key}/context`,
     detect: `${TOPIC_PREFIX}/${key}/detect`,
@@ -932,6 +933,7 @@ export type EventOutcome =
   | "request_failed"
   | "gave_up"
   | "request_lost"
+  | "reset"
   | "completed"
   | "failed";
 
@@ -1635,6 +1637,79 @@ function handleResult(
   return messages;
 }
 
+/**
+ * Reset the failed attempts (e.g. after the cause of a failed installation was
+ * fixed), so that the offered version is requested again, and check again now
+ */
+function handleReset(
+  cache: Cache,
+  message: Message,
+  context: FlowContext,
+  settings: Settings,
+  time: Date,
+): Message[] {
+  // An empty payload clears a retained reset (see below)
+  if (decodePayload(message.payload).trim() === "") {
+    return [];
+  }
+  const t = topics(settings);
+  const now = nowOf(time);
+  // Clear the reset in case it was published as retained, as it would otherwise
+  // be applied again after each restart
+  const messages: Message[] = [retained(t.reset, "", time)];
+  const poll: PollState = { ...(cache.poll ?? {}), attempts: 0, failures: 0 };
+
+  // A request which is due might already be executed by poll.sh, and its result
+  // is evaluated with the reset attempts. Before the first request is known, one
+  // is scheduled once the retained messages were received
+  const { request } = cache;
+  const answered = request !== undefined && poll.lastRequestId === request.id;
+  let next: RequestSpec | undefined;
+  if (request && (answered || now < request.due * 1000)) {
+    const phase = phaseOf(request.path, settings);
+    next =
+      phase === "create" && !answered
+        ? undefined
+        : newRequest(
+            cache,
+            settings,
+            context,
+            regularPhase(cache, settings, now),
+            now,
+            now,
+          );
+  }
+  console.log("Reset the attempts", {
+    version: poll.version,
+    nextPollAt: next ? new Date(next.due * 1000).toISOString() : undefined,
+  });
+
+  const event = eventMessage(
+    {
+      outcome: "reset",
+      text: `The attempts of deployment ${settings.key} were reset${poll.version ? ` (version ${poll.version})` : ""}. Checking again`,
+      fields: {
+        deploymentKey: settings.key,
+        targetState: settings.targetState,
+        outcome: "reset",
+        version: poll.version,
+        nextPollAt: next ? new Date(next.due * 1000).toISOString() : undefined,
+      },
+    },
+    poll,
+    settings,
+    time,
+  );
+  if (event) {
+    messages.push(event);
+  }
+  messages.push(publishPollState(cache, poll, settings, time));
+  if (next) {
+    messages.push(publishRequest(cache, next, settings, time));
+  }
+  return messages;
+}
+
 export function onStartup(time: Date, context: FlowContext): Message[] {
   const cache = loadCache(context);
   cache.startedAt = nowOf(time);
@@ -1711,6 +1786,8 @@ function processMessage(
     case t.state:
       cache.poll = parseJson(message) ?? {};
       return [];
+    case t.reset:
+      return handleReset(cache, message, context, settings, time);
     case t.membership:
       cache.twins.membership = parseJson(message);
       return [];
