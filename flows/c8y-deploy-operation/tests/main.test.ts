@@ -194,6 +194,32 @@ describe("c8y_ComposedTargetState to device_profile", () => {
     ]);
   });
 
+  test("treats a missing software action as install", () => {
+    const ctx = tedge.createContext({});
+    const out = flow.onMessage(
+      msg(
+        operation({
+          c8y_ComposedTargetState: {
+            deploymentKey: "demo",
+            version: "1",
+            software: [
+              { softwareType: "apt", name: "tedge", version: "2.0.1" },
+            ],
+          },
+        }),
+      ),
+      ctx,
+    );
+    const payload = tedge.decodeJsonPayload(out[0].payload);
+    expect(payload.status).toBe("init");
+    expect(payload.operations[0].payload.updateList).toEqual([
+      {
+        type: "apt",
+        modules: [{ name: "tedge", version: "2.0.1", action: "install" }],
+      },
+    ]);
+  });
+
   test("creates a failed command for an invalid software action", () => {
     const ctx = tedge.createContext({});
     const out = flow.onMessage(
