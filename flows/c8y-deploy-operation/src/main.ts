@@ -49,6 +49,8 @@ interface C8yTargetState {
   firmware?: C8yFirmware;
   software?: C8ySoftwareModule[];
   configuration?: C8yConfiguration[];
+  // Device parameters, one object per parameter fragment (as in c8y_ParameterUpdate)
+  parameters?: Record<string, unknown>[];
 }
 
 interface SoftwareModuleItem {
@@ -104,7 +106,12 @@ export interface Deployment {
 }
 
 // Target state fields which are converted to device_profile operations
-const OPERATION_FIELDS = ["firmware", "software", "configuration"];
+const OPERATION_FIELDS = [
+  "firmware",
+  "software",
+  "configuration",
+  "parameters",
+];
 
 /**
  * Keep all target state fields except the ones converted to operations,
@@ -328,6 +335,20 @@ export function convertTargetState(
     operations: [],
   };
 
+  // There is no thin-edge.io command to apply device parameters, so fail rather
+  // than report a target state as applied when part of it was not
+  if (
+    Array.isArray(targetState.parameters) &&
+    targetState.parameters.length > 0
+  ) {
+    const fragments = targetState.parameters
+      .flatMap((p) => (p && typeof p === "object" ? Object.keys(p) : []))
+      .join(", ");
+    throw new Error(
+      `Device parameters are not supported${fragments ? ` (${fragments})` : ""}`,
+    );
+  }
+
   // Keep the same order as the c8y mapper: firmware, configuration, software
   if (targetState.firmware) {
     const { name, version, url } = targetState.firmware;
@@ -442,6 +463,12 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   const topic = `${topic_root}/${topicId}/cmd/device_profile/${cmd_id_prefix}-${operation.id}`;
   const profileName = getProfileName(operation, targetState);
 
+  // The operation is created when the version is assigned to the device
+  const assignedAt =
+    typeof operation.creationTime === "string"
+      ? operation.creationTime
+      : undefined;
+
   let command: DeviceProfileCommand;
   try {
     command = convertTargetState(targetState, profileName, context.config);
@@ -454,6 +481,10 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
       deployment: getDeployment(targetState),
       operations: [],
     };
+  }
+
+  if (assignedAt && command.deployment.assignedAt === undefined) {
+    command.deployment.assignedAt = assignedAt;
   }
 
   if (isEnabled(debug)) {

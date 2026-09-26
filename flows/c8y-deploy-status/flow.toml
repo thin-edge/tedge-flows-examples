@@ -1,6 +1,7 @@
 [input]
 mqtt.topics = [
     "te/+/+/+/+/cmd/device_profile/+",
+    "te/+/+/+/+/twin/+",
 ]
 
 [[steps]]

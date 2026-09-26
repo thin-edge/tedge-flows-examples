@@ -62,7 +62,12 @@ describe("c8y_ComposedTargetState to device_profile", () => {
     expect(tedge.decodeJsonPayload(out[0].payload)).toEqual({
       status: "init",
       name: "demo/13.6",
-      deployment: { key: "demo", version: "13.6", priority: 100 },
+      deployment: {
+        key: "demo",
+        version: "13.6",
+        priority: 100,
+        assignedAt: "2026-09-24T18:45:32.561Z",
+      },
       operations: [
         {
           operation: "firmware_update",
@@ -237,7 +242,11 @@ describe("c8y_ComposedTargetState to device_profile", () => {
     const payload = tedge.decodeJsonPayload(out[0].payload);
     expect(payload.status).toBe("failed");
     expect(payload.reason).toContain("upgrade");
-    expect(payload.deployment).toEqual({ key: "demo", version: "1" });
+    expect(payload.deployment).toEqual({
+      key: "demo",
+      version: "1",
+      assignedAt: "2026-09-24T18:45:32.561Z",
+    });
   });
 
   test("keeps all deployment meta information", () => {
@@ -265,7 +274,63 @@ describe("c8y_ComposedTargetState to device_profile", () => {
       priority: 50,
       rolloutId: "r-42",
       labels: { env: "prod" },
+      assignedAt: "2026-09-24T18:45:32.561Z",
     });
+  });
+
+  test("creates a failed command for device parameters", () => {
+    const ctx = tedge.createContext({});
+    const out = flow.onMessage(
+      msg(
+        operation({
+          c8y_ComposedTargetState: {
+            deploymentKey: "demo",
+            version: "1",
+            software: [{ name: "foo", version: "1" }],
+            parameters: [{ c8y_RelayStatus: { left: false, right: true } }],
+          },
+        }),
+      ),
+      ctx,
+    );
+    const payload = tedge.decodeJsonPayload(out[0].payload);
+    expect(payload.status).toBe("failed");
+    expect(payload.reason).toBe(
+      "Device parameters are not supported (c8y_RelayStatus)",
+    );
+    expect(payload.operations).toEqual([]);
+    expect(payload.deployment).not.toHaveProperty("parameters");
+  });
+
+  test("ignores an empty list of device parameters", () => {
+    const ctx = tedge.createContext({});
+    const out = flow.onMessage(
+      msg(
+        operation({
+          c8y_ComposedTargetState: {
+            deploymentKey: "demo",
+            version: "1",
+            software: [{ name: "foo", version: "1" }],
+            parameters: [],
+          },
+        }),
+      ),
+      ctx,
+    );
+    const payload = tedge.decodeJsonPayload(out[0].payload);
+    expect(payload.status).toBe("init");
+    expect(payload.deployment).not.toHaveProperty("parameters");
+  });
+
+  test("operation without a creation time has no assignedAt", () => {
+    const ctx = tedge.createContext({});
+    const out = flow.onMessage(
+      msg(operation({ creationTime: undefined })),
+      ctx,
+    );
+    expect(
+      tedge.decodeJsonPayload(out[0].payload).deployment,
+    ).not.toHaveProperty("assignedAt");
   });
 });
 

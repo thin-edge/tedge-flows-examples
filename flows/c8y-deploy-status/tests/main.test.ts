@@ -36,14 +36,15 @@ describe("deployment status", () => {
     expect(tedge.decodeJsonPayload(out[0].payload)).toEqual({
       deploymentKey: "demo",
       priority: 100,
-      version: "13.6",
-      assignedAt: t.toISOString(),
+      installedVersion: "13.6",
+      installedAt: t.toISOString(),
     });
 
     expect(out[1].topic).toBe("te/device/main///twin/c8y_DeploymentState_demo");
     expect(tedge.decodeJsonPayload(out[1].payload)).toEqual({
       deploymentKey: "demo",
       version: "13.6",
+      assignedAt: t.toISOString(),
       state: "SUCCESS",
       updatedAt: t.toISOString(),
     });
@@ -223,6 +224,182 @@ describe("command lifecycle", () => {
   });
 });
 
+describe("digital twin", () => {
+  const stateTopic = "te/device/main///twin/c8y_DeploymentState_demo";
+  const membershipTopic = "te/device/main///twin/c8y_Deployment_demo";
+
+  test("keeps the assignment time of the ASSIGNED state", () => {
+    const ctx = tedge.createContext({});
+    const assigned = {
+      deploymentKey: "demo",
+      version: "13.6",
+      assignedAt: "2026-09-24T10:00:00.000Z",
+      state: "ASSIGNED",
+      updatedAt: "2026-09-24T10:00:00.000Z",
+    };
+    expect(flow.onMessage(msg(assigned, stateTopic), ctx)).toHaveLength(0);
+
+    const out = flow.onMessage(
+      msg(command("executing", { assignedAt: "2026-09-24T10:00:01.000Z" })),
+      ctx,
+    );
+    expect(tedge.decodeJsonPayload(out[0].payload)).toEqual({
+      deploymentKey: "demo",
+      version: "13.6",
+      assignedAt: "2026-09-24T10:00:00.000Z",
+      state: "IN_PROGRESS",
+      updatedAt: t.toISOString(),
+    });
+  });
+
+  test("ignores the assignment time of another version", () => {
+    const ctx = tedge.createContext({});
+    flow.onMessage(
+      msg(
+        {
+          deploymentKey: "demo",
+          version: "13.5",
+          assignedAt: "2026-09-01T10:00:00.000Z",
+          state: "SUCCESS",
+        },
+        stateTopic,
+      ),
+      ctx,
+    );
+    const out = flow.onMessage(
+      msg(command("init", { assignedAt: "2026-09-24T10:00:01.000Z" })),
+      ctx,
+    );
+    expect(tedge.decodeJsonPayload(out[0].payload).assignedAt).toBe(
+      "2026-09-24T10:00:01.000Z",
+    );
+  });
+
+  test("uses the command time if the assignment time is not known", () => {
+    const out = flow.onMessage(msg(command("init")), tedge.createContext({}));
+    expect(tedge.decodeJsonPayload(out[0].payload).assignedAt).toBe(
+      t.toISOString(),
+    );
+  });
+
+  test("keeps the assignment time through the command states", () => {
+    const ctx = tedge.createContext({});
+    const first = flow.onMessage(
+      msg(command("init", { assignedAt: "2026-09-24T10:00:00.000Z" })),
+      ctx,
+    );
+    // The published state is received back
+    flow.onMessage(
+      msg(tedge.decodeJsonPayload(first[0].payload), stateTopic),
+      ctx,
+    );
+    const out = flow.onMessage(msg(command("successful")), ctx);
+    expect(tedge.decodeJsonPayload(out[1].payload).assignedAt).toBe(
+      "2026-09-24T10:00:00.000Z",
+    );
+  });
+
+  test("a failure reports the reason and keeps the installed version", () => {
+    const ctx = tedge.createContext({});
+    flow.onMessage(
+      msg(
+        {
+          deploymentKey: "demo",
+          priority: 100,
+          installedVersion: "13.5",
+          installedAt: "2026-09-01T10:00:00.000Z",
+        },
+        membershipTopic,
+      ),
+      ctx,
+    );
+    const out = flow.onMessage(
+      msg({ ...command("failed"), reason: "checksum mismatch" }),
+      ctx,
+    );
+    expect(out.map((m) => m.topic)).toEqual([stateTopic]);
+    expect(tedge.decodeJsonPayload(out[0].payload)).toEqual({
+      deploymentKey: "demo",
+      version: "13.6",
+      assignedAt: t.toISOString(),
+      state: "FAILURE",
+      updatedAt: t.toISOString(),
+      error: "checksum mismatch",
+    });
+  });
+
+  test("a failure without a reason still reports an error", () => {
+    const out = flow.onMessage(msg(command("failed")), tedge.createContext({}));
+    expect(tedge.decodeJsonPayload(out[0].payload).error).toBe(
+      "Deployment failed",
+    );
+  });
+
+  test("a retry drops the error", () => {
+    const ctx = tedge.createContext({});
+    flow.onMessage(msg({ ...command("failed"), reason: "boom" }), ctx);
+    const out = flow.onMessage(msg(command("executing")), ctx);
+    expect(tedge.decodeJsonPayload(out[0].payload)).not.toHaveProperty("error");
+  });
+
+  test("repeating the installed version keeps the installation time", () => {
+    const ctx = tedge.createContext({});
+    flow.onMessage(
+      msg(
+        {
+          deploymentKey: "demo",
+          priority: 100,
+          installedVersion: "13.6",
+          installedAt: "2026-09-01T10:00:00.000Z",
+        },
+        membershipTopic,
+      ),
+      ctx,
+    );
+    const out = flow.onMessage(msg(command("successful")), ctx);
+    expect(tedge.decodeJsonPayload(out[0].payload).installedAt).toBe(
+      "2026-09-01T10:00:00.000Z",
+    );
+  });
+
+  test("keeps the priority of the membership if the command has none", () => {
+    const ctx = tedge.createContext({});
+    flow.onMessage(
+      msg({ deploymentKey: "demo", priority: 7 }, membershipTopic),
+      ctx,
+    );
+    const out = flow.onMessage(
+      msg(command("successful", { priority: undefined })),
+      ctx,
+    );
+    expect(tedge.decodeJsonPayload(out[0].payload)).toEqual({
+      deploymentKey: "demo",
+      priority: 7,
+      installedVersion: "13.6",
+      installedAt: t.toISOString(),
+    });
+  });
+
+  test("ignores other twin fragments and cleared fragments", () => {
+    const ctx = tedge.createContext({});
+    expect(
+      flow.onMessage(msg({ a: 1 }, "te/device/main///twin/c8y_Other"), ctx),
+    ).toHaveLength(0);
+    flow.onMessage(
+      msg(
+        { version: "13.6", assignedAt: "2026-09-01T10:00:00.000Z" },
+        stateTopic,
+      ),
+      ctx,
+    );
+    flow.onMessage(msg("", stateTopic), ctx);
+    const out = flow.onMessage(msg(command("init")), ctx);
+    expect(tedge.decodeJsonPayload(out[0].payload).assignedAt).toBe(
+      t.toISOString(),
+    );
+  });
+});
+
 describe("c8y-deploy-operation integration", () => {
   test("processes the command created by the c8y-deploy-operation flow", () => {
     const operation = {
@@ -230,6 +407,7 @@ describe("c8y-deploy-operation integration", () => {
       deviceId: "87143",
       id: "218",
       status: "PENDING",
+      creationTime: "2026-09-24T18:40:00.000Z",
       c8y_ComposedTargetState: {
         deploymentKey: "demo",
         version: "13.6",
@@ -266,9 +444,13 @@ describe("c8y-deploy-operation integration", () => {
     expect(tedge.decodeJsonPayload(out[0].payload)).toEqual({
       deploymentKey: "demo",
       priority: 100,
-      version: "13.6",
-      assignedAt: t.toISOString(),
+      installedVersion: "13.6",
+      installedAt: t.toISOString(),
     });
+    // The operation creation time is used as the assignment time
+    expect(tedge.decodeJsonPayload(out[1].payload).assignedAt).toBe(
+      operation.creationTime,
+    );
   });
 });
 
