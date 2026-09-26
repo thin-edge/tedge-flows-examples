@@ -20,6 +20,7 @@ Input (topic `c8y/devicecontrol/notifications`):
   "deviceId": "87143",
   "id": "218",
   "status": "PENDING",
+  "creationTime": "2026-09-24T18:40:12.345Z",
   "c8y_ComposedTargetState": {
     "deploymentKey": "demo",
     "version": "13.6",
@@ -57,7 +58,8 @@ Output (topic `te/device/main///cmd/device_profile/c8y-mapper-218`, retained):
   "deployment": {
     "key": "demo",
     "version": "13.6",
-    "priority": 100
+    "priority": 100,
+    "assignedAt": "2026-09-24T18:40:12.345Z"
   },
   "operations": [
     {
@@ -96,9 +98,11 @@ These match the c8y mapper's `c8y_DeviceProfile` conversion:
 - Operations are ordered: firmware, then configuration (one `config_update` per item), then software
 - Software modules are grouped by `softwareType`. If `softwareType` is missing, the legacy `<version>::<type>` format is used, and the type falls back to `default`
 - Software action `delete` becomes `remove`. A missing action is treated as `install`. Any other action except `install` creates a `failed` command, so the operation is marked as FAILED
+- Device `parameters` are not supported (thin-edge.io has no command to apply them). A target state with parameters creates a `failed` command, so the operation is marked as FAILED rather than reported as applied
 - Empty versions and URLs are left out
 - URLs pointing to the Cumulocity tenant (`c8y_url`) are changed to use the local Cumulocity proxy (`proxy_url`), e.g. `https://example.cumulocity.com/inventory/binaries/19133` becomes `http://127.0.0.1:8001/c8y/inventory/binaries/19133`. The original URL is kept as `serverUrl` for configuration items
 - All other target state fields (e.g. `deploymentKey`, `version` and `priority`) are kept in the `deployment` object, with `deploymentKey` renamed to `key`. Workflows can read them as `${.payload.deployment.key}`, `${.payload.deployment.version}` and `${.payload.deployment.priority}`
+- The operation's `creationTime` is added to the `deployment` object as `assignedAt`, the time the version was assigned to the device. [c8y-deploy-status](../c8y-deploy-status/) uses it if the `ASSIGNED` state was not published by [c8y-deploy-poll](../c8y-deploy-poll/)
 
 ### Target device
 

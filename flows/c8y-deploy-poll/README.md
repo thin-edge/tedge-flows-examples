@@ -20,12 +20,13 @@ The evaluate endpoint does not know which version the device is running, and eve
  dry run: POST .../deployments/<key>/targetstates/<target_state>/evaluate   {context...}
    │
    ├─ available: false                             → wait for the next poll
-   ├─ version == last successful version           → in sync, wait for the next poll
+   ├─ version == installed version                 → in sync, wait for the next poll
    ├─ version is ASSIGNED/PENDING/…/IN_PROGRESS    → in progress, wait for the next poll
    ├─ version failed max_attempts times            → give up (until a new version is offered or the attempts are reset)
    └─ otherwise
         └─ POST ...evaluate?createOperation=true   → c8y_DeploymentState_<key> = ASSIGNED
-                                                      (the operation arrives via c8y-deploy-operation)
+                                                      (unless the version is already assigned;
+                                                      the operation arrives via c8y-deploy-operation)
 ```
 
 Flow steps cannot make HTTP requests, so the requests are sent by [poll.sh](./poll.sh):
@@ -103,12 +104,12 @@ Only string values are sent. For example, with the default params on an arm64 de
 
 ### Published messages
 
-| Topic (retained)                                  | Payload                                                                                                                                                                |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `te/device/main///twin/c8y_DeploymentState_<key>` | `{"deploymentKey","version","state":"ASSIGNED","updatedAt"}` when an operation was requested                                                                           |
-| `te/device/main///twin/c8y_Deployment_<key>`      | `{"deploymentKey","priority"}` after the first poll and when the priority changes. The `version` (last successfully applied version, set by c8y-deploy-status) is kept |
-| `tedge-flows/c8y-deploy-poll/<key>/request`       | Next request for poll.sh                                                                                                                                               |
-| `tedge-flows/c8y-deploy-poll/<key>/state`         | `{"version","attempts","requestedAt","lastPollAt","lastRequestId","failures","priority"}`                                                                              |
+| Topic (retained)                                  | Payload                                                                                                                                                                                                                           |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `te/device/main///twin/c8y_DeploymentState_<key>` | `{"deploymentKey","version","assignedAt","state":"ASSIGNED","updatedAt"}` when an operation was requested for a version which is not already assigned. A retry of the assigned version (e.g. after a failure) leaves it unchanged |
+| `te/device/main///twin/c8y_Deployment_<key>`      | `{"deploymentKey","priority"}` after the first poll and when the priority changes. The `installedVersion` and `installedAt` (set by c8y-deploy-status once an update succeeds) are kept                                           |
+| `tedge-flows/c8y-deploy-poll/<key>/request`       | Next request for poll.sh                                                                                                                                                                                                          |
+| `tedge-flows/c8y-deploy-poll/<key>/state`         | `{"version","attempts","requestedAt","lastPollAt","lastRequestId","failures","priority"}`                                                                                                                                         |
 
 The state is kept in retained messages, so it survives restarts.
 
@@ -408,7 +409,7 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
 - Only the main device is supported, and each flow instance handles one deployment key. Install the flow again with other params to poll another deployment.
 - Preview target states (`latest` or a version) are evaluated, but no operation is requested unless `allow_preview` is set.
 - `server` mode is intended for a future version of the deployment service which only creates an operation if the device needs it. In this mode, `ASSIGNED` is only published if the response contains `"operationCreated": true`.
-- The deployment service expects `c8y_Deployment_<key>.version` to be the assigned version, whereas c8y-deploy-status publishes the last successfully applied version. This flow relies on the latter.
+- The fragments follow the [Deployment Manager device integration](https://github.com/Cumulocity-IoT/c8y-deployment-manager/blob/main/docs/device-integration.md): `c8y_Deployment_<key>` carries the version the device runs (`installedVersion`), `c8y_DeploymentState_<key>` the version assigned to it (`version`, `assignedAt`) and its progress. The flow is in sync when the offered version equals `installedVersion`.
 - To reset the flow, clear its retained messages:
 
   ```sh

@@ -91,21 +91,22 @@ export interface Evaluation {
   operationCreated?: boolean;
 }
 
-/** c8y_DeploymentState_<key> */
+/** c8y_DeploymentState_<key>: the version assigned to the device, and its progress */
 export interface DeploymentState {
   deploymentKey?: string;
   version?: string;
+  assignedAt?: string;
   state?: string;
   updatedAt?: string;
   [field: string]: unknown;
 }
 
-/** c8y_Deployment_<key> */
+/** c8y_Deployment_<key>: the deployment the device belongs to, and the version it runs */
 export interface DeploymentMembership {
   deploymentKey?: string;
   priority?: number;
-  version?: string;
-  assignedAt?: string;
+  installedVersion?: string;
+  installedAt?: string;
   [field: string]: unknown;
 }
 
@@ -743,8 +744,15 @@ function isStaleAssignment(
   now: number,
   settings: Settings,
 ): boolean {
-  const since = Date.parse(state.updatedAt ?? poll.requestedAt ?? "");
-  return isNaN(since) || now - since > settings.assignedTimeout;
+  // The operation might have been requested again for the same version, which
+  // leaves the deployment state unchanged
+  const times = [state.updatedAt, poll.requestedAt]
+    .map((value) => Date.parse(value ?? ""))
+    .filter((value) => !isNaN(value));
+  if (times.length === 0) {
+    return true;
+  }
+  return now - Math.max(...times) > settings.assignedTimeout;
 }
 
 function isPreview(settings: Settings): boolean {
@@ -811,7 +819,7 @@ export function decide(
   if (busy) {
     return busy;
   }
-  if (membership?.version === version) {
+  if (membership?.installedVersion === version) {
     return {
       action: "schedule",
       outcome: "in_sync",
@@ -906,7 +914,8 @@ function inProgress(
 
 /**
  * Return the c8y_Deployment_<key> fragment to publish, or undefined if unchanged.
- * The version (the last successfully applied version) is never changed here
+ * The installed version is never changed here (it is set by c8y-deploy-status
+ * once an update has completed)
  */
 export function membershipUpdate(
   current: DeploymentMembership | undefined,
@@ -1548,14 +1557,19 @@ function handleResult(
       poll.version = decision.version;
       poll.attempts = attempts;
       poll.requestedAt = time.toISOString();
-      const state: DeploymentState = {
-        deploymentKey: settings.key,
-        version: decision.version,
-        state: "ASSIGNED",
-        updatedAt: time.toISOString(),
-      };
-      cache.twins.state = state;
-      messages.push(retained(t.deploymentState, JSON.stringify(state), time));
+      // A version which is already assigned leaves the deployment state
+      // unchanged, e.g. when an update is retried after a failure
+      if (cache.twins.state?.version !== decision.version) {
+        const state: DeploymentState = {
+          deploymentKey: settings.key,
+          version: decision.version,
+          assignedAt: time.toISOString(),
+          state: "ASSIGNED",
+          updatedAt: time.toISOString(),
+        };
+        cache.twins.state = state;
+        messages.push(retained(t.deploymentState, JSON.stringify(state), time));
+      }
       next = newRequest(
         cache,
         settings,

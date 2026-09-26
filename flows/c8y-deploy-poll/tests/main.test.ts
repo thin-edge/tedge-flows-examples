@@ -354,7 +354,7 @@ describe("decide", () => {
       "new version after an older one",
       available("13.7"),
       {
-        membership: { version: "13.6" },
+        membership: { installedVersion: "13.6" },
         state: { version: "13.6", state: "SUCCESS" },
       },
       { version: "13.6", attempts: 1 },
@@ -364,11 +364,21 @@ describe("decide", () => {
       "already applied",
       available(),
       {
-        membership: { version: "13.6" },
+        membership: { installedVersion: "13.6" },
         state: { version: "13.6", state: "SUCCESS" },
       },
       {},
       "schedule",
+    ],
+    [
+      "failed update keeps the previous installed version",
+      available(),
+      {
+        membership: { installedVersion: "13.5" },
+        state: { version: "13.6", state: "FAILURE" },
+      },
+      { version: "13.6", attempts: 1 },
+      "create",
     ],
     ...["ASSIGNED", "PENDING", "CONFIRMED", "IN_PROGRESS"].map(
       (state) =>
@@ -509,14 +519,14 @@ describe("membership", () => {
     });
   });
 
-  test("keeps the applied version", () => {
+  test("keeps the installed version", () => {
     expect(
       flow.membershipUpdate(
         {
           deploymentKey: "demo",
           priority: 42,
-          version: "13.5",
-          assignedAt: "2026-09-01T00:00:00Z",
+          installedVersion: "13.5",
+          installedAt: "2026-09-01T00:00:00Z",
         },
         50,
         "demo",
@@ -524,8 +534,8 @@ describe("membership", () => {
     ).toEqual({
       deploymentKey: "demo",
       priority: 50,
-      version: "13.5",
-      assignedAt: "2026-09-01T00:00:00Z",
+      installedVersion: "13.5",
+      installedAt: "2026-09-01T00:00:00Z",
     });
   });
 
@@ -656,7 +666,7 @@ describe("flow", () => {
       msg(topics.membership, {
         deploymentKey: "demo",
         priority: 100,
-        version: "13.5",
+        installedVersion: "13.5",
       }),
       context,
     );
@@ -708,6 +718,7 @@ describe("flow", () => {
     expect(tedge.decodeJsonPayload(assigned.payload)).toEqual({
       deploymentKey: "demo",
       version: "13.6",
+      assignedAt: at(6 * MIN).toISOString(),
       state: "ASSIGNED",
       updatedAt: at(6 * MIN).toISOString(),
     });
@@ -731,7 +742,7 @@ describe("flow", () => {
       msg(topics.membership, {
         deploymentKey: "demo",
         priority: 100,
-        version: "13.6",
+        installedVersion: "13.6",
       }),
       context,
     );
@@ -815,6 +826,62 @@ describe("flow", () => {
       version: "13.6",
       attempts: 2,
     });
+    // The version is already assigned, so the deployment state is unchanged
+    expect(find(out, topics.deploymentState)).toBeUndefined();
+  });
+
+  test("a retried assignment is not stale before the assigned timeout", () => {
+    const context = started();
+    flow.onMessage(
+      msg(topics.state, { version: "13.6", attempts: 1 }),
+      context,
+    );
+    // The assignment of the first attempt has expired
+    flow.onMessage(
+      msg(topics.deploymentState, {
+        version: "13.6",
+        assignedAt: at(-2 * HOUR).toISOString(),
+        state: "ASSIGNED",
+        updatedAt: at(-2 * HOUR).toISOString(),
+      }),
+      context,
+    );
+    const dry = requestOf(flow.onInterval(at(10 * SEC), context));
+    const create = requestOf(
+      flow.onMessage(
+        msg(
+          topics.response,
+          result(dry.id, { available: true, version: "13.6" }),
+          at(1 * MIN),
+        ),
+        context,
+      ),
+    );
+    const out = flow.onMessage(
+      msg(
+        topics.response,
+        result(create.id, { available: true, version: "13.6" }),
+        at(2 * MIN),
+      ),
+      context,
+    );
+    expect(find(out, topics.deploymentState)).toBeUndefined();
+    const settings = flow.getSettings(baseConfig);
+    const poll = tedge.decodeJsonPayload(find(out, topics.state)!.payload);
+    const twins: flow.Twins = {
+      state: {
+        version: "13.6",
+        state: "ASSIGNED",
+        updatedAt: at(-2 * HOUR).toISOString(),
+      },
+    };
+    // The new request counts, not the time of the first assignment
+    expect(flow.isBusy(twins, poll, settings, at(30 * MIN).getTime())).toBe(
+      true,
+    );
+    expect(flow.isBusy(twins, poll, settings, at(2 * HOUR).getTime())).toBe(
+      false,
+    );
   });
 
   describe("reset", () => {
@@ -1255,7 +1322,10 @@ describe("events", () => {
   test("in sync and in progress", () => {
     const context = started("all");
     flow.onMessage(
-      msg(topics.membership, { deploymentKey: "demo", version: "13.6" }),
+      msg(topics.membership, {
+        deploymentKey: "demo",
+        installedVersion: "13.6",
+      }),
       context,
     );
     let req = requestOf(flow.onInterval(at(10 * SEC), context));
