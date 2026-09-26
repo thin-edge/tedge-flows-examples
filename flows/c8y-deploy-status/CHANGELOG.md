@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/thin-edge/tedge-flows-examples/compare/c8y-deploy-status-v0.2.0...c8y-deploy-status-v0.3.0) (2026-09-26)
+
+
+### Features
+
+* **c8y-deploy:** report the installed version separately from the assigned version ([#132](https://github.com/thin-edge/tedge-flows-examples/issues/132)) ([3efc93f](https://github.com/thin-edge/tedge-flows-examples/commit/3efc93fefdb3091aa11c15fff788cfe60906221a))
+
 ## [0.2.0](https://github.com/thin-edge/tedge-flows-examples/compare/c8y-deploy-status-v0.1.0...c8y-deploy-status-v0.2.0) (2026-09-24)
 
 

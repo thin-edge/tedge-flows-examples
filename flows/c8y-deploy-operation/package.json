@@ -1,6 +1,6 @@
 {
   "name": "c8y-deploy-operation",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Convert a Cumulocity c8y_ComposedTargetState operation to a thin-edge.io device_profile command",
   "source": "src/main.ts",
   "module": "lib/main.js",

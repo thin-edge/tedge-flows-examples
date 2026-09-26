@@ -1,6 +1,6 @@
 {
   "name": "c8y-deploy-status",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Report the progress of a deployment (from the c8y-deploy-operation flow) to Cumulocity via the device's digital twin",
   "source": "src/main.ts",
   "module": "lib/main.js",
