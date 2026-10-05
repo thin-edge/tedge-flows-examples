@@ -614,6 +614,8 @@ export interface Twins {
   commands?: Record<string, ActiveCommand>;
   // Reason of the last failed command of this deployment
   failure?: { version?: string; reason?: string };
+  // Last command of this deployment (in any status), and when it was seen
+  lastCommand?: { version?: string; seenAt: string };
 }
 
 const FINAL_STATUSES = ["successful", "failed"];
@@ -635,11 +637,9 @@ export function trackCommand(
     return false;
   }
   const [operation, cmdId] = topic.substring(prefix.length).split("/");
-  if (!operation || !cmdId || !settings.busyOperations.includes(operation)) {
+  if (!operation || !cmdId) {
     return false;
   }
-  const commands = (twins.commands ??= {});
-  const previous = commands[topic];
   let command: any;
   try {
     command = payload.trim() === "" ? undefined : JSON.parse(payload);
@@ -647,6 +647,24 @@ export function trackCommand(
     command = undefined;
   }
   const status = typeof command?.status === "string" ? command.status : "";
+  if (
+    status &&
+    command?.deployment?.key === settings.key &&
+    !cmdId.startsWith("sub:")
+  ) {
+    twins.lastCommand = {
+      version:
+        command.deployment.version !== undefined
+          ? `${command.deployment.version}`
+          : undefined,
+      seenAt: time.toISOString(),
+    };
+  }
+  if (!settings.busyOperations.includes(operation)) {
+    return false;
+  }
+  const commands = (twins.commands ??= {});
+  const previous = commands[topic];
   if (
     status === "failed" &&
     command?.deployment?.key === settings.key &&
@@ -682,6 +700,23 @@ export function trackCommand(
       deployment?.version !== undefined ? `${deployment.version}` : undefined,
   };
   return !previous || previous.status !== status;
+}
+
+/**
+ * Return true if a command for the version was seen at or after the given time
+ * (epoch milliseconds), e.g. the command of an operation that was just requested
+ */
+export function commandSince(
+  twins: Twins,
+  version: string,
+  since: number,
+): boolean {
+  const { lastCommand } = twins;
+  if (!lastCommand || lastCommand.version !== version) {
+    return false;
+  }
+  const seenAt = Date.parse(lastCommand.seenAt);
+  return !isNaN(seenAt) && seenAt >= since;
 }
 
 export function activeCommands(twins: Twins): ActiveCommand[] {
@@ -1558,8 +1593,13 @@ function handleResult(
       poll.attempts = attempts;
       poll.requestedAt = time.toISOString();
       // A version which is already assigned leaves the deployment state
-      // unchanged, e.g. when an update is retried after a failure
-      if (cache.twins.state?.version !== decision.version) {
+      // unchanged, e.g. when an update is retried after a failure. The
+      // operation is delivered while the request is running, so its command
+      // (and the states reported by c8y-deploy-status) can be seen first
+      if (
+        cache.twins.state?.version !== decision.version &&
+        !commandSince(cache.twins, decision.version, request.due * 1000)
+      ) {
         const state: DeploymentState = {
           deploymentKey: settings.key,
           version: decision.version,
