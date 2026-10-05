@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/thin-edge/tedge-flows-examples/compare/c8y-deploy-status-v0.3.0...c8y-deploy-status-v0.3.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* **c8y-deploy:** keep the deployment twin consistent when the flows race ([#134](https://github.com/thin-edge/tedge-flows-examples/issues/134)) ([46aca9c](https://github.com/thin-edge/tedge-flows-examples/commit/46aca9ceac67c7e6972abc6bbf4a9b1918828d48))
+
 ## [0.3.0](https://github.com/thin-edge/tedge-flows-examples/compare/c8y-deploy-status-v0.2.0...c8y-deploy-status-v0.3.0) (2026-09-26)
 
 
