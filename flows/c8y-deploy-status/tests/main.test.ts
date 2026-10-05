@@ -275,6 +275,69 @@ describe("digital twin", () => {
     );
   });
 
+  describe("ASSIGNED published after the command progressed", () => {
+    const assigned = (version: string) => ({
+      deploymentKey: "demo",
+      version,
+      assignedAt: "2026-09-24T10:00:05.000Z",
+      state: "ASSIGNED",
+      updatedAt: "2026-09-24T10:00:05.000Z",
+    });
+
+    test("restores the state of a finished command", () => {
+      const ctx = tedge.createContext({});
+      const done = flow.onMessage(
+        msg(command("successful", { assignedAt: "2026-09-24T10:00:01.000Z" })),
+        ctx,
+      );
+      // c8y-deploy-poll handles the response of its request after the command finished
+      const out = flow.onMessage(msg(assigned("13.6"), stateTopic), ctx);
+      expect(out).toHaveLength(1);
+      expect(out[0].topic).toBe(stateTopic);
+      expect(out[0].mqtt).toEqual({ retain: true, qos: 1 });
+      expect(out[0].payload).toBe(done[1].payload);
+
+      // The restored state is received back, nothing else is published
+      expect(flow.onMessage(msg(out[0].payload, stateTopic), ctx)).toEqual([]);
+    });
+
+    test("restores the state of a running command, and keeps its assignment time", () => {
+      const ctx = tedge.createContext({});
+      flow.onMessage(
+        msg(command("executing", { assignedAt: "2026-09-24T10:00:01.000Z" })),
+        ctx,
+      );
+      const out = flow.onMessage(msg(assigned("13.6"), stateTopic), ctx);
+      expect(tedge.decodeJsonPayload(out[0].payload).state).toBe("IN_PROGRESS");
+
+      // The next status is processed before the restored state is received back
+      const next = flow.onMessage(msg(command("successful")), ctx);
+      expect(tedge.decodeJsonPayload(next[1].payload)).toMatchObject({
+        assignedAt: "2026-09-24T10:00:01.000Z",
+        state: "SUCCESS",
+      });
+    });
+
+    test("an ASSIGNED received before the command is kept", () => {
+      const ctx = tedge.createContext({});
+      expect(flow.onMessage(msg(assigned("13.6"), stateTopic), ctx)).toEqual(
+        [],
+      );
+    });
+
+    test("a version assigned again after another version is kept", () => {
+      const ctx = tedge.createContext({});
+      // v1 -> v2 -> v1
+      flow.onMessage(msg(command("successful", { version: "13.5" })), ctx);
+      expect(flow.onMessage(msg(assigned("13.6"), stateTopic), ctx)).toEqual(
+        [],
+      );
+      expect(flow.onMessage(msg(assigned("13.5"), stateTopic), ctx)).toEqual(
+        [],
+      );
+    });
+  });
+
   test("uses the command time if the assignment time is not known", () => {
     const out = flow.onMessage(msg(command("init")), tedge.createContext({}));
     expect(tedge.decodeJsonPayload(out[0].payload).assignedAt).toBe(
@@ -377,6 +440,96 @@ describe("digital twin", () => {
       priority: 7,
       installedVersion: "13.6",
       installedAt: t.toISOString(),
+    });
+  });
+
+  test("keeps the priority published by c8y-deploy-poll", () => {
+    const ctx = tedge.createContext({});
+    flow.onMessage(
+      msg({ deploymentKey: "demo", priority: 7 }, membershipTopic),
+      ctx,
+    );
+    const out = flow.onMessage(msg(command("successful")), ctx);
+    expect(tedge.decodeJsonPayload(out[0].payload).priority).toBe(7);
+  });
+
+  describe("membership published from an older copy", () => {
+    const older = {
+      deploymentKey: "demo",
+      priority: 50,
+      installedVersion: "13.5",
+      installedAt: "2026-09-01T10:00:00.000Z",
+    };
+
+    test("restores the installed version and keeps the new priority", () => {
+      const ctx = tedge.createContext({});
+      flow.onMessage(msg(command("successful")), ctx);
+      // c8y-deploy-poll publishes a new priority from a copy taken before the update
+      const out = flow.onMessage(msg(older, membershipTopic), ctx);
+      expect(out).toHaveLength(1);
+      expect(out[0].topic).toBe(membershipTopic);
+      expect(out[0].mqtt).toEqual({ retain: true, qos: 1 });
+      expect(tedge.decodeJsonPayload(out[0].payload)).toEqual({
+        deploymentKey: "demo",
+        priority: 50,
+        installedVersion: "13.6",
+        installedAt: t.toISOString(),
+      });
+
+      // The restored fragment is received back, nothing else is published
+      expect(flow.onMessage(msg(out[0].payload, membershipTopic), ctx)).toEqual(
+        [],
+      );
+    });
+
+    test("restores the installed version if it is missing", () => {
+      const ctx = tedge.createContext({});
+      flow.onMessage(msg(command("successful")), ctx);
+      const out = flow.onMessage(
+        msg({ deploymentKey: "demo", priority: 50 }, membershipTopic),
+        ctx,
+      );
+      expect(tedge.decodeJsonPayload(out[0].payload)).toMatchObject({
+        priority: 50,
+        installedVersion: "13.6",
+      });
+    });
+
+    test("restores the installed version known from the retained fragment", () => {
+      const ctx = tedge.createContext({});
+      // after a restart
+      const retained = { ...older, installedVersion: "13.6" };
+      expect(flow.onMessage(msg(retained, membershipTopic), ctx)).toEqual([]);
+      const out = flow.onMessage(
+        msg({ deploymentKey: "demo", priority: 60 }, membershipTopic),
+        ctx,
+      );
+      expect(tedge.decodeJsonPayload(out[0].payload)).toEqual({
+        ...retained,
+        priority: 60,
+      });
+    });
+
+    test("a priority change keeps the installed version unchanged", () => {
+      const ctx = tedge.createContext({});
+      const done = flow.onMessage(msg(command("successful")), ctx);
+      const current = tedge.decodeJsonPayload(done[0].payload);
+      expect(
+        flow.onMessage(msg({ ...current, priority: 60 }, membershipTopic), ctx),
+      ).toEqual([]);
+    });
+
+    test("leaving the deployment is not restored", () => {
+      const ctx = tedge.createContext({});
+      flow.onMessage(msg(command("successful")), ctx);
+      expect(flow.onMessage(msg("", membershipTopic), ctx)).toEqual([]);
+      // joining again
+      expect(
+        flow.onMessage(
+          msg({ deploymentKey: "demo", priority: 50 }, membershipTopic),
+          ctx,
+        ),
+      ).toEqual([]);
     });
   });
 

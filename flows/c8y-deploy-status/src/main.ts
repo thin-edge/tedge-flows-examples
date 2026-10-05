@@ -71,6 +71,15 @@ function isEnabled(value: boolean | string | undefined): boolean {
 
 const MEMBERSHIP_PREFIX = "c8y_Deployment_";
 const STATE_PREFIX = "c8y_DeploymentState_";
+// Flow context key of the last state published from a command, per twin topic
+const REPORTED_PREFIX = "reported:";
+// Flow context key of the installed version, per twin topic
+const INSTALLED_PREFIX = "installed:";
+
+type InstalledVersion = Pick<
+  DeploymentMembership,
+  "installedVersion" | "installedAt"
+>;
 
 /** c8y_Deployment_<key>: the deployment the device belongs to, and the version it runs */
 export interface DeploymentMembership {
@@ -110,16 +119,93 @@ function parseFragment(payload: Message["payload"]): any {
  * and the c8y-deploy-poll flow), so that the fields which are not known from the
  * command (e.g. assignedAt) are kept
  */
-function trackTwin(message: Message, context: FlowContext): void {
+function trackTwin(message: Message, context: FlowContext): Message[] {
   const fragment = message.topic.split("/")[6] ?? "";
   if (
     !fragment.startsWith(MEMBERSHIP_PREFIX) &&
     !fragment.startsWith(STATE_PREFIX)
   ) {
-    return;
+    return [];
   }
   const value = parseFragment(message.payload);
   context.flow.set(message.topic, value);
+  if (fragment.startsWith(MEMBERSHIP_PREFIX)) {
+    return trackMembership(message, value, context);
+  }
+
+  // The state last reported from a command only describes the deployment until
+  // another version is assigned
+  const reportedKey = `${REPORTED_PREFIX}${message.topic}`;
+  const reported = twinOf<DeploymentStateFragment>(context, reportedKey);
+  if (!reported) {
+    return [];
+  }
+  if (value?.version !== reported.version) {
+    context.flow.set(reportedKey, undefined);
+    return [];
+  }
+
+  // c8y-deploy-poll publishes ASSIGNED once the operation request returns,
+  // which can be after the command has already progressed (or even finished).
+  // A version is assigned before its command starts, so restore the state
+  if (value?.state === "ASSIGNED") {
+    return [
+      {
+        time: message.time,
+        topic: message.topic,
+        mqtt: { retain: true, qos: 1 },
+        payload: JSON.stringify(reported),
+      },
+    ];
+  }
+  return [];
+}
+
+/**
+ * Keep the installed version of the membership fragment. This flow is the only
+ * one which changes it, but c8y-deploy-poll publishes the fragment when the
+ * server returns a different priority, and its copy can be older than an update
+ * which has just completed. The installed version is restored, keeping the
+ * other fields (e.g. the new priority)
+ */
+function trackMembership(
+  message: Message,
+  value: DeploymentMembership | undefined,
+  context: FlowContext,
+): Message[] {
+  const installedKey = `${INSTALLED_PREFIX}${message.topic}`;
+  // The device left the deployment
+  if (!value) {
+    context.flow.set(installedKey, undefined);
+    return [];
+  }
+  const installed = twinOf<InstalledVersion>(context, installedKey);
+  if (!installed) {
+    // e.g. the retained fragment after a restart
+    if (value.installedVersion !== undefined) {
+      context.flow.set(installedKey, {
+        installedVersion: value.installedVersion,
+        installedAt: value.installedAt,
+      });
+    }
+    return [];
+  }
+  if (
+    value.installedVersion === installed.installedVersion &&
+    value.installedAt === installed.installedAt
+  ) {
+    return [];
+  }
+  const restored: DeploymentMembership = { ...value, ...installed };
+  context.flow.set(message.topic, restored);
+  return [
+    {
+      time: message.time,
+      topic: message.topic,
+      mqtt: { retain: true, qos: 1 },
+      payload: JSON.stringify(restored),
+    },
+  ];
 }
 
 function twinOf<T>(context: FlowContext, topic: string): T | undefined {
@@ -132,8 +218,11 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
 
   // te/<entity topic id>/twin/<fragment>
   if (message.topic.split("/")[5] === "twin") {
-    trackTwin(message, context);
-    return [];
+    const messages = trackTwin(message, context);
+    if (isEnabled(debug) && messages.length > 0) {
+      console.log("Restoring the deployment twin", { messages });
+    }
+    return messages;
   }
 
   // The retained command is cleared (empty payload) once it has finished
@@ -170,13 +259,19 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   if (command.status === "successful") {
     const current = twinOf<DeploymentMembership>(context, membershipTopic);
     const unchanged = current?.installedVersion === version;
+    // The priority is kept from c8y-deploy-poll, as the server can return a
+    // different priority than the one the operation was created with
     const membership: DeploymentMembership = {
       deploymentKey: key,
-      priority: priority ?? current?.priority,
+      priority: current?.priority ?? priority,
       installedVersion: version,
       installedAt: (unchanged && current?.installedAt) || now,
     };
     context.flow.set(membershipTopic, membership);
+    context.flow.set(`${INSTALLED_PREFIX}${membershipTopic}`, {
+      installedVersion: membership.installedVersion,
+      installedAt: membership.installedAt,
+    });
     messages.push({
       time: message.time,
       topic: membershipTopic,
@@ -189,7 +284,13 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
   // included. The assignment time is kept from the ASSIGNED state (c8y-deploy-poll)
   const state = toDeploymentState(command.status);
   if (state) {
-    const current = twinOf<DeploymentStateFragment>(context, stateTopic);
+    // The reported state is preferred, as the twin might hold a stale ASSIGNED
+    const reportedKey = `${REPORTED_PREFIX}${stateTopic}`;
+    const reported = twinOf<DeploymentStateFragment>(context, reportedKey);
+    const current =
+      reported?.version === version
+        ? reported
+        : twinOf<DeploymentStateFragment>(context, stateTopic);
     const deploymentState: DeploymentStateFragment = {
       deploymentKey: key,
       version,
@@ -204,6 +305,7 @@ export function onMessage(message: Message, context: FlowContext): Message[] {
       deploymentState.error = command.reason || "Deployment failed";
     }
     context.flow.set(stateTopic, deploymentState);
+    context.flow.set(reportedKey, deploymentState);
     messages.push({
       time: message.time,
       topic: stateTopic,

@@ -1,3 +1,7 @@
+# The step subscribes to the deployment twins it publishes (to remember the
+# current fragments), so looping messages must not be dropped
+expect_loop = true
+
 [input]
 mqtt.topics = [
     "te/+/+/+/+/cmd/device_profile/+",

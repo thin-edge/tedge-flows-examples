@@ -1801,6 +1801,144 @@ describe("busy device", () => {
       expect(requestOf(out).path).toBe(`${PATH}?createOperation=true`);
     });
 
+    describe("command seen before the operation request returned", () => {
+      // Request the operation for 13.6, while 13.5 is assigned (e.g. v1 -> v2 -> v1)
+      function requested(): {
+        context: flow.FlowContext;
+        create: flow.RequestSpec;
+      } {
+        const context = started();
+        flow.onMessage(
+          msg(topics.deploymentState, {
+            deploymentKey: "demo",
+            version: "13.5",
+            state: "SUCCESS",
+            updatedAt: at(-1 * HOUR).toISOString(),
+          }),
+          context,
+        );
+        const dry = requestOf(flow.onInterval(at(10 * SEC), context));
+        const out = answer(
+          context,
+          dry.id,
+          { available: true, version: "13.6" },
+          at(1 * MIN),
+        );
+        const create = requestOf(out);
+        expect(create.path).toBe(`${PATH}?createOperation=true`);
+        return { context, create };
+      }
+
+      const deviceProfile = (status: string, version = "13.6") => ({
+        status,
+        deployment: { key: "demo", version },
+      });
+
+      test.each(["executing", "successful"])(
+        "ASSIGNED is not published after the command was %s",
+        (status) => {
+          const { context, create } = requested();
+          const topic = cmdTopic("device_profile", "c8y-mapper-9");
+          const due = create.due * 1000;
+          flow.onMessage(
+            msg(topic, deviceProfile(status), new Date(due + 2 * SEC)),
+            context,
+          );
+          const out = answer(
+            context,
+            create.id,
+            { available: true, version: "13.6" },
+            new Date(due + 3 * SEC),
+          );
+          expect(find(out, topics.deploymentState)).toBeUndefined();
+          expect(
+            tedge.decodeJsonPayload(find(out, topics.state)!.payload),
+          ).toMatchObject({ version: "13.6", attempts: 1 });
+        },
+      );
+
+      test("ASSIGNED is published if the command is for another version", () => {
+        const { context, create } = requested();
+        const due = create.due * 1000;
+        flow.onMessage(
+          msg(
+            cmdTopic("device_profile", "c8y-mapper-9"),
+            deviceProfile("executing", "13.5"),
+            new Date(due + 2 * SEC),
+          ),
+          context,
+        );
+        const out = answer(
+          context,
+          create.id,
+          { available: true, version: "13.6" },
+          new Date(due + 3 * SEC),
+        );
+        expect(
+          tedge.decodeJsonPayload(find(out, topics.deploymentState)!.payload),
+        ).toMatchObject({ version: "13.6", state: "ASSIGNED" });
+      });
+
+      test("ASSIGNED is published if the command of the version is older than the request", () => {
+        const context = started();
+        // 13.6 was installed before, then 13.5 was assigned
+        flow.onMessage(
+          msg(
+            cmdTopic("device_profile", "c8y-mapper-1"),
+            deviceProfile("successful"),
+            at(-2 * HOUR),
+          ),
+          context,
+        );
+        flow.onMessage(
+          msg(topics.deploymentState, {
+            deploymentKey: "demo",
+            version: "13.5",
+            state: "SUCCESS",
+            updatedAt: at(-1 * HOUR).toISOString(),
+          }),
+          context,
+        );
+        const dry = requestOf(flow.onInterval(at(10 * SEC), context));
+        const create = requestOf(
+          answer(
+            context,
+            dry.id,
+            { available: true, version: "13.6" },
+            at(1 * MIN),
+          ),
+        );
+        const out = answer(
+          context,
+          create.id,
+          { available: true, version: "13.6" },
+          new Date(create.due * 1000 + 3 * SEC),
+        );
+        expect(
+          tedge.decodeJsonPayload(find(out, topics.deploymentState)!.payload),
+        ).toMatchObject({ version: "13.6", state: "ASSIGNED" });
+      });
+
+      test("the command is remembered even if it is not a busy operation", () => {
+        const s = flow.getSettings({
+          ...baseConfig,
+          busy_operations: "restart",
+        });
+        const twins: flow.Twins = {};
+        flow.trackCommand(
+          twins,
+          cmdTopic("device_profile", "1"),
+          JSON.stringify(deviceProfile("successful")),
+          s,
+          t0,
+        );
+        expect(flow.activeCommands(twins)).toEqual([]);
+        expect(flow.commandSince(twins, "13.6", t0.getTime())).toBe(true);
+        expect(flow.commandSince(twins, "13.6", t0.getTime() + 1)).toBe(false);
+        expect(flow.commandSince(twins, "13.5", t0.getTime())).toBe(false);
+      });
+    });
+
     test("stuck event", () => {
       const context = started({ in_progress_timeout: "24h" });
       flow.onMessage(
