@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/thin-edge/tedge-flows-examples/compare/c8y-deploy-poll-v0.5.1...c8y-deploy-poll-v0.5.2) (2026-10-09)
+
+
+### Bug Fixes
+
+* **c8y-deploy-poll:** recover from a deployment state whose command is no longer running ([#140](https://github.com/thin-edge/tedge-flows-examples/issues/140)) ([18dc123](https://github.com/thin-edge/tedge-flows-examples/commit/18dc123ebfa183851c41e1896087d8bbd317a4e4))
+
 ## [0.5.1](https://github.com/thin-edge/tedge-flows-examples/compare/c8y-deploy-poll-v0.5.0...c8y-deploy-poll-v0.5.1) (2026-10-09)
 
 
