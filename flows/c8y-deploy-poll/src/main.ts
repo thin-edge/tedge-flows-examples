@@ -61,6 +61,9 @@ const CONTEXT_WAIT_MS = 30_000;
 const RESPONSE_TIMEOUT_MS = 5 * 60_000;
 // Time window in which poll.sh may execute an operation request
 const CREATE_TTL_MS = 10 * 60_000;
+// How long a deployment can stay PENDING, CONFIRMED or IN_PROGRESS without its
+// command, before the state is considered orphaned (its final state was lost)
+const ORPHAN_GRACE_MS = 2 * 60_000;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -616,6 +619,11 @@ export interface Twins {
   failure?: { version?: string; reason?: string };
   // Last command of this deployment (in any status), and when it was seen
   lastCommand?: { version?: string; seenAt: string };
+  // Last time a command of this deployment finished (or was cleared)
+  commandEndedAt?: string;
+  // Time since when the commands are tracked (the retained commands are
+  // received when the flow starts)
+  trackedSince?: string;
 }
 
 const FINAL_STATUSES = ["successful", "failed"];
@@ -660,11 +668,15 @@ export function trackCommand(
       seenAt: time.toISOString(),
     };
   }
-  if (!settings.busyOperations.includes(operation)) {
-    return false;
-  }
+  // The commands of this deployment are always tracked, as they show whether
+  // the deployment state is still backed by a running command
   const commands = (twins.commands ??= {});
   const previous = commands[topic];
+  const own =
+    command?.deployment?.key === settings.key && !cmdId.startsWith("sub:");
+  if (!settings.busyOperations.includes(operation) && !own && !previous) {
+    return false;
+  }
   if (
     status === "failed" &&
     command?.deployment?.key === settings.key &&
@@ -681,6 +693,9 @@ export function trackCommand(
   if (!status || FINAL_STATUSES.includes(status)) {
     if (!previous) {
       return false;
+    }
+    if (previous.deploymentKey === settings.key) {
+      twins.commandEndedAt = time.toISOString();
     }
     delete commands[topic];
     return true;
@@ -733,16 +748,67 @@ export function isBusy(
   settings: Settings,
   now: number,
 ): boolean {
+  return (
+    inFlight(twins, poll, settings, now) || activeCommands(twins).length > 0
+  );
+}
+
+/**
+ * Return true if the deployment state shows that a deployment is in progress.
+ * An ASSIGNED state expires after assigned_timeout, as the operation normally
+ * arrives within seconds. Any later state is reported by c8y-deploy-status from
+ * the command of the deployment, so it is ignored once the command is gone:
+ * its final state was lost (e.g. c8y-deploy-status was replaced or stopped
+ * while the command was running), and would otherwise block the deployment
+ * forever
+ */
+function inFlight(
+  twins: Twins,
+  poll: PollState,
+  settings: Settings,
+  now: number,
+): boolean {
   const { state } = twins;
-  if (state?.state && IN_FLIGHT_STATES.includes(state.state)) {
-    const stale =
-      state.state === "ASSIGNED" &&
-      isStaleAssignment(state, poll, now, settings);
-    if (!stale) {
-      return true;
-    }
+  if (!state?.state || !IN_FLIGHT_STATES.includes(state.state)) {
+    return false;
   }
-  return activeCommands(twins).length > 0;
+  if (state.state === "ASSIGNED") {
+    return !isStaleAssignment(state, poll, now, settings);
+  }
+  return !isOrphaned(twins, settings, now);
+}
+
+/**
+ * Return true if the deployment state is PENDING, CONFIRMED or IN_PROGRESS, but
+ * no command of the deployment has been running for ORPHAN_GRACE_MS. The grace
+ * period covers the short time between the end of the command and its final
+ * state, and the retained commands which are received after a restart
+ */
+export function isOrphaned(
+  twins: Twins,
+  settings: Settings,
+  now: number,
+): boolean {
+  const { state } = twins;
+  if (
+    !state?.state ||
+    state.state === "ASSIGNED" ||
+    !IN_FLIGHT_STATES.includes(state.state)
+  ) {
+    return false;
+  }
+  if (activeCommands(twins).some((c) => c.deploymentKey === settings.key)) {
+    return false;
+  }
+  const times = [
+    state.updatedAt,
+    twins.lastCommand?.seenAt,
+    twins.commandEndedAt,
+    twins.trackedSince,
+  ]
+    .map((value) => Date.parse(value ?? ""))
+    .filter((value) => !isNaN(value));
+  return times.length > 0 && now - Math.max(...times) > ORPHAN_GRACE_MS;
 }
 
 export type ScheduleOutcome =
@@ -891,20 +957,15 @@ function inProgress(
   const other = commands.find((c) => c.deploymentKey !== key);
 
   let decision: Decision | undefined;
-  if (state?.state && IN_FLIGHT_STATES.includes(state.state)) {
-    const stale =
-      state.state === "ASSIGNED" &&
-      isStaleAssignment(state, poll, now, settings);
-    if (!stale) {
-      decision = {
-        action: "schedule",
-        outcome: "in_progress",
-        reason: `in progress: ${state.version} (${state.state})`,
-        version: state.version,
-        state: state.state,
-        since: state.updatedAt,
-      };
-    }
+  if (state?.state && inFlight(twins, poll, settings, now)) {
+    decision = {
+      action: "schedule",
+      outcome: "in_progress",
+      reason: `in progress: ${state.version} (${state.state})`,
+      version: state.version,
+      state: state.state,
+      since: state.updatedAt,
+    };
   }
   // The command of this deployment is running, even if the deployment state
   // is not known (e.g. c8y-deploy-status is not installed)
@@ -1444,6 +1505,7 @@ function reconcile(
 ): Message[] {
   const now = nowOf(time);
   cache.startedAt ??= now;
+  cache.twins.trackedSince ??= new Date(cache.startedAt).toISOString();
   const elapsed = now - cache.startedAt;
 
   // Wait for the retained messages and the context file
@@ -1551,6 +1613,12 @@ function handleResult(
   const decision = decide(evaluation, phase, cache.twins, poll, settings, now);
   if (settings.debug) {
     console.log("Deployment evaluation", { phase, evaluation, decision });
+  }
+  if (decision.action === "create" && isOrphaned(cache.twins, settings, now)) {
+    console.warn(
+      "Ignoring the deployment state, as the command of the deployment is no longer running",
+      { state: cache.twins.state },
+    );
   }
 
   if (evaluation.ok) {
@@ -1767,6 +1835,7 @@ function handleReset(
 export function onStartup(time: Date, context: FlowContext): Message[] {
   const cache = loadCache(context);
   cache.startedAt = nowOf(time);
+  cache.twins.trackedSince = new Date(cache.startedAt).toISOString();
   saveCache(context, cache);
   return [];
 }
