@@ -52,6 +52,8 @@ Flow steps cannot make HTTP requests, so the requests are sent by [poll.sh](./po
 
 Each device polls at a fixed time within the `interval`, derived from the device id and deployment key, so a fleet does not poll at the same time. Failed requests are retried with an exponential backoff (starting at `retry_min`). Operation requests are never retried blindly: a failed operation request is followed by a new dry run.
 
+A dry run which fails with `502 Bad Gateway` (`Error communicating with Cumulocity`) is retried once straight away by `poll.sh`. The local Cumulocity proxy returns this error when the connection to Cumulocity was closed while sending the request ([thin-edge/thin-edge.io#4364](https://github.com/thin-edge/thin-edge.io/issues/4364)), which usually succeeds on the next attempt.
+
 ### Retrying a failed version
 
 After `max_attempts` failed installations, the offered version is not requested again until a new version is available. Once the cause of the failures is fixed, reset the attempts to request the same version again, without publishing a new version:

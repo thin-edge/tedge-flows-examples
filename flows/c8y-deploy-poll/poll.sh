@@ -19,6 +19,26 @@ json_escape() {
     printf '%s' "$1" | tr -d '\r' | tr '\n\t' '  ' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 }
 
+# Send the request via the local Cumulocity proxy. The proxy returns a 502 when
+# the connection to Cumulocity was closed while sending the request
+# (https://github.com/thin-edge/thin-edge.io/issues/4364), which usually works
+# again straight away. Only dry runs are retried: an operation request might have
+# reached the server, and is followed by a new dry run by the flow anyway
+post() {
+    path="$1"
+    body="$2"
+    err_file="$3"
+    if tedge http post "$path" --data "$body" --content-type application/json 2>"$err_file"; then
+        return 0
+    fi
+    case "$path" in
+        *createOperation=true*) return 1 ;;
+    esac
+    grep -q "502" "$err_file" && grep -q "Error communicating with Cumulocity" "$err_file" || return 1
+    sleep 1
+    tedge http post "$path" --data "$body" --content-type application/json 2>"$err_file"
+}
+
 cmd_request() {
     topic="$1"
     state_dir="$2"
@@ -48,7 +68,7 @@ EOF
 
     [ -n "$body" ] || body="{}"
     err_file="$state_dir/.stderr.$$"
-    if response=$(tedge http post "$path" --data "$body" --content-type application/json 2>"$err_file"); then
+    if response=$(post "$path" "$body" "$err_file"); then
         printf '{"id":"%s","path":"%s","ok":true,"response":"%s"}\n' \
             "$(json_escape "$id")" "$(json_escape "$path")" "$(json_escape "$response")"
     else
