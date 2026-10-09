@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/thin-edge/tedge-flows-examples/compare/c8y-deploy-poll-v0.5.0...c8y-deploy-poll-v0.5.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **c8y-deploy-poll:** retry a dry run once when the local proxy returns 502 ([#138](https://github.com/thin-edge/tedge-flows-examples/issues/138)) ([9bb9bad](https://github.com/thin-edge/tedge-flows-examples/commit/9bb9bad02415cbabf21854a882f7713775e33e4a))
+
 ## [0.5.0](https://github.com/thin-edge/tedge-flows-examples/compare/c8y-deploy-poll-v0.4.1...c8y-deploy-poll-v0.5.0) (2026-10-09)
 
 
