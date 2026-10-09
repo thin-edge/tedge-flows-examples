@@ -21,10 +21,10 @@ context = { type = "deluxe" }
 context_file = ""
 
 # Priority requested by the device (integer). Leave empty to use the server priority
-priority = 100
+#priority = 100
 
 # How often to poll. Each device polls at a fixed offset within the interval
-interval = "5m"
+interval = "30s"
 
 # Maximum delay before the first poll after the flow is installed
 startup_delay = "10s"
