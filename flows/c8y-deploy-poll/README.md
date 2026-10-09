@@ -68,7 +68,7 @@ The flow then checks the deployment straight away, and requests the operation ag
 
 Deployments can take a long time (e.g. hours for a firmware update), so no operation is requested while the device is busy, however long it takes:
 
-- The deployment is in progress: `c8y_DeploymentState_<key>` is `ASSIGNED`, `PENDING`, `CONFIRMED` or `IN_PROGRESS` (published by c8y-deploy-status). Only `ASSIGNED` expires (`assigned_timeout`), as the operation normally arrives within seconds.
+- The deployment is in progress: `c8y_DeploymentState_<key>` is `ASSIGNED`, `PENDING`, `CONFIRMED` or `IN_PROGRESS` (published by c8y-deploy-status). `ASSIGNED` expires (`assigned_timeout`), as the operation normally arrives within seconds. The other states are reported from the `device_profile` command of the deployment, so they are ignored once no command of the deployment has been running for 2 minutes. This recovers a deployment whose final state was lost, e.g. when c8y-deploy-status was replaced or stopped while the command was running: the offered version is requested again (counting as another attempt) unless it is already installed.
 - A command of the main device listed in `busy_operations` is not finished (`te/device/main///cmd/<operation>/<id>` with a status other than `successful` or `failed`). This also covers operations which were not requested by this flow, e.g. a firmware update or another deployment started from Cumulocity, and works without c8y-deploy-status.
 
 While the device is busy, the flow keeps polling (and reports `in_progress` or `device_busy` events), but does not request an operation. In `server` mode, a plain check (without `createOperation`) is done instead.

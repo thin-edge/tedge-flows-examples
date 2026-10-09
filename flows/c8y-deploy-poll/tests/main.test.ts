@@ -340,6 +340,17 @@ describe("decide", () => {
   });
   const recently = at(-10 * MIN).toISOString();
   const longAgo = at(-2 * HOUR).toISOString();
+  // The device_profile command of the deployment, which reports the state
+  const running = (version: string): Record<string, flow.ActiveCommand> => ({
+    "te/device/main///cmd/device_profile/c8y-mapper-1": {
+      operation: "device_profile",
+      cmdId: "c8y-mapper-1",
+      status: "executing",
+      changedAt: recently,
+      deploymentKey: "demo",
+      version,
+    },
+  });
 
   test.each<[string, flow.Evaluation, flow.Twins, flow.PollState, string]>([
     [
@@ -385,7 +396,10 @@ describe("decide", () => {
         [
           `in flight (${state})`,
           available(),
-          { state: { version: "13.6", state, updatedAt: recently } },
+          {
+            state: { version: "13.6", state, updatedAt: recently },
+            commands: state === "ASSIGNED" ? undefined : running("13.6"),
+          },
           { version: "13.6", attempts: 1 },
           "schedule",
         ] as [string, flow.Evaluation, flow.Twins, flow.PollState, string],
@@ -393,7 +407,74 @@ describe("decide", () => {
     [
       "other version in flight",
       available("13.7"),
-      { state: { version: "13.6", state: "IN_PROGRESS", updatedAt: recently } },
+      {
+        state: { version: "13.6", state: "IN_PROGRESS", updatedAt: recently },
+        commands: running("13.6"),
+      },
+      {},
+      "schedule",
+    ],
+    // The command finished, but its final state was lost
+    ...["PENDING", "CONFIRMED", "IN_PROGRESS"].map(
+      (state) =>
+        [
+          `orphaned (${state})`,
+          available(),
+          {
+            membership: { installedVersion: "13.5" },
+            state: { version: "13.6", state, updatedAt: recently },
+          },
+          { version: "13.6", attempts: 1 },
+          "create",
+        ] as [string, flow.Evaluation, flow.Twins, flow.PollState, string],
+    ),
+    [
+      "orphaned, in sync",
+      available(),
+      {
+        membership: { installedVersion: "13.6" },
+        state: { version: "13.6", state: "IN_PROGRESS", updatedAt: longAgo },
+      },
+      { version: "13.6", attempts: 1 },
+      "schedule",
+    ],
+    [
+      "orphaned, cap reached",
+      available(),
+      { state: { version: "13.6", state: "IN_PROGRESS", updatedAt: longAgo } },
+      { version: "13.6", attempts: 3 },
+      "give-up",
+    ],
+    [
+      "command just finished, final state not seen yet",
+      available("13.7"),
+      {
+        state: { version: "13.6", state: "IN_PROGRESS", updatedAt: longAgo },
+        commandEndedAt: at(-30 * SEC).toISOString(),
+      },
+      {},
+      "schedule",
+    ],
+    [
+      "state changed recently, command not seen yet",
+      available("13.7"),
+      {
+        state: {
+          version: "13.6",
+          state: "PENDING",
+          updatedAt: at(-30 * SEC).toISOString(),
+        },
+      },
+      {},
+      "schedule",
+    ],
+    [
+      "flow just started, retained commands not seen yet",
+      available("13.7"),
+      {
+        state: { version: "13.6", state: "IN_PROGRESS", updatedAt: longAgo },
+        trackedSince: at(-30 * SEC).toISOString(),
+      },
       {},
       "schedule",
     ],
@@ -770,6 +851,13 @@ describe("flow", () => {
 
   test("in flight deployment is not requested again", () => {
     const context = started();
+    flow.onMessage(
+      msg("te/device/main///cmd/device_profile/c8y-mapper-1", {
+        status: "executing",
+        deployment: { key: "demo", version: "13.6" },
+      }),
+      context,
+    );
     flow.onMessage(
       msg(topics.deploymentState, {
         deploymentKey: "demo",
@@ -1341,6 +1429,14 @@ describe("events", () => {
     });
 
     flow.onMessage(
+      msg(
+        "te/device/main///cmd/device_profile/c8y-mapper-2",
+        { status: "executing", deployment: { key: "demo", version: "13.7" } },
+        at(1 * HOUR),
+      ),
+      context,
+    );
+    flow.onMessage(
       msg(topics.deploymentState, {
         version: "13.7",
         state: "IN_PROGRESS",
@@ -1572,6 +1668,42 @@ describe("busy device", () => {
       expect(flow.activeCommands(twins)).toEqual([]);
     });
 
+    test("commands of the deployment are tracked even if not a busy operation", () => {
+      const custom = flow.getSettings({
+        ...baseConfig,
+        busy_operations: ["restart"],
+      });
+      const twins: flow.Twins = {};
+      const topic = cmdTopic("device_profile", "c8y-mapper-1");
+      expect(
+        flow.trackCommand(
+          twins,
+          topic,
+          JSON.stringify({
+            status: "executing",
+            deployment: { key: "demo", version: "13.6" },
+          }),
+          custom,
+          t0,
+        ),
+      ).toBe(true);
+      expect(flow.activeCommands(twins)).toHaveLength(1);
+      // cleared without a final status (e.g. missed while restarting)
+      expect(flow.trackCommand(twins, topic, "", custom, at(1 * MIN))).toBe(
+        true,
+      );
+      expect(flow.activeCommands(twins)).toEqual([]);
+      expect(twins.commandEndedAt).toBe(at(1 * MIN).toISOString());
+    });
+
+    test("end of other commands is not recorded", () => {
+      const twins: flow.Twins = {};
+      const topic = cmdTopic("software_update", "abc");
+      flow.trackCommand(twins, topic, '{"status":"executing"}', s, t0);
+      flow.trackCommand(twins, topic, "", s, t0);
+      expect(twins.commandEndedAt).toBeUndefined();
+    });
+
     test("busy operations can be configured", () => {
       const custom = flow.getSettings({
         ...baseConfig,
@@ -1629,6 +1761,7 @@ describe("busy device", () => {
             state: "IN_PROGRESS",
             updatedAt: at(-10 * HOUR).toISOString(),
           },
+          commands: command({ deploymentKey: "demo", version: "13.7" }),
         },
         { version: "13.7", attempts: 1 },
         s,
@@ -1706,6 +1839,7 @@ describe("busy device", () => {
           state: "IN_PROGRESS",
           updatedAt: at(-25 * HOUR).toISOString(),
         },
+        commands: command({ deploymentKey: "demo", version: "13.7" }),
       };
       expect(
         flow.decide(available, "dry", twins, {}, timeout, now),
@@ -1797,6 +1931,175 @@ describe("busy device", () => {
         req.id,
         { available: true, version: "13.6" },
         at(2 * HOUR),
+      );
+      expect(requestOf(out).path).toBe(`${PATH}?createOperation=true`);
+    });
+
+    test("a deployment whose final state was lost is requested again", () => {
+      // The command finished, but c8y-deploy-status did not publish its final
+      // state (e.g. the flow was replaced while the command was running)
+      const context = started();
+      const topic = cmdTopic("device_profile", "c8y-mapper-5");
+      flow.onMessage(
+        msg(topics.membership, {
+          deploymentKey: "demo",
+          installedVersion: "13.8",
+        }),
+        context,
+      );
+      flow.onMessage(
+        msg(topics.state, { version: "13.6", attempts: 1 }),
+        context,
+      );
+      const command = (status: string) => ({
+        status,
+        deployment: { key: "demo", version: "13.6" },
+      });
+      flow.onMessage(msg(topic, command("executing")), context);
+      flow.onMessage(
+        msg(topics.deploymentState, {
+          deploymentKey: "demo",
+          version: "13.6",
+          state: "IN_PROGRESS",
+          updatedAt: t0.toISOString(),
+        }),
+        context,
+      );
+      let req = requestOf(flow.onInterval(at(10 * SEC), context));
+      flow.onMessage(msg(topic, command("successful"), at(30 * SEC)), context);
+      flow.onMessage(msg(topic, "", at(30 * SEC)), context);
+
+      // just finished: the final state might still arrive
+      let out = answer(
+        context,
+        req.id,
+        { available: true, version: "13.6" },
+        at(1 * MIN),
+      );
+      req = requestOf(out);
+      expect(req.path).toBe(PATH);
+      expect(eventOf(out)).toMatchObject({ outcome: "in_progress" });
+
+      // the final state never arrived
+      out = answer(
+        context,
+        req.id,
+        { available: true, version: "13.6" },
+        at(1 * HOUR),
+      );
+      expect(requestOf(out).path).toBe(`${PATH}?createOperation=true`);
+      expect(console.warn).toHaveBeenCalledWith(
+        "Ignoring the deployment state, as the command of the deployment is no longer running",
+        expect.anything(),
+      );
+    });
+
+    test("an orphaned deployment state of the installed version is in sync", () => {
+      const context = started();
+      flow.onMessage(
+        msg(topics.membership, {
+          deploymentKey: "demo",
+          installedVersion: "13.6",
+        }),
+        context,
+      );
+      flow.onMessage(
+        msg(topics.deploymentState, {
+          deploymentKey: "demo",
+          version: "13.6",
+          state: "IN_PROGRESS",
+          updatedAt: at(-10 * HOUR).toISOString(),
+        }),
+        context,
+      );
+      const req = requestOf(flow.onInterval(at(10 * SEC), context));
+      const out = answer(
+        context,
+        req.id,
+        { available: true, version: "13.6" },
+        at(5 * MIN),
+      );
+      expect(requestOf(out).path).toBe(PATH);
+      expect(eventOf(out)).toMatchObject({
+        outcome: "in_sync",
+        version: "13.6",
+      });
+    });
+
+    test("a running deployment is not orphaned if it is not a busy operation", () => {
+      const context = started({ busy_operations: ["restart"] });
+      flow.onMessage(
+        msg(cmdTopic("device_profile", "c8y-mapper-5"), {
+          status: "executing",
+          deployment: { key: "demo", version: "13.6" },
+        }),
+        context,
+      );
+      flow.onMessage(
+        msg(topics.deploymentState, {
+          deploymentKey: "demo",
+          version: "13.6",
+          state: "IN_PROGRESS",
+          updatedAt: t0.toISOString(),
+        }),
+        context,
+      );
+      const req = requestOf(flow.onInterval(at(10 * SEC), context));
+      // installing for hours
+      const out = answer(
+        context,
+        req.id,
+        { available: true, version: "13.6" },
+        at(5 * HOUR),
+      );
+      expect(requestOf(out).path).toBe(PATH);
+      expect(eventOf(out)).toMatchObject({
+        outcome: "in_progress",
+        version: "13.6",
+      });
+    });
+
+    test("an orphaned deployment state left from before a restart is ignored", () => {
+      const context = started();
+      flow.onMessage(
+        msg(topics.deploymentState, {
+          deploymentKey: "demo",
+          version: "13.6",
+          state: "IN_PROGRESS",
+          updatedAt: at(-10 * HOUR).toISOString(),
+        }),
+        context,
+      );
+      const req = requestOf(flow.onInterval(at(10 * SEC), context));
+      // the retained commands were received after the start (none for the deployment)
+      const out = answer(
+        context,
+        req.id,
+        { available: true, version: "13.7" },
+        at(5 * MIN),
+      );
+      expect(requestOf(out).path).toBe(`${PATH}?createOperation=true`);
+    });
+
+    test("server mode: an orphaned deployment state does not keep the device busy", () => {
+      const context = started({ operation_request: "server" });
+      flow.onMessage(
+        msg(topics.deploymentState, {
+          deploymentKey: "demo",
+          version: "13.6",
+          state: "IN_PROGRESS",
+          updatedAt: at(-10 * HOUR).toISOString(),
+        }),
+        context,
+      );
+      // within the grace period after the start, the state is trusted
+      const check = requestOf(flow.onInterval(at(10 * SEC), context));
+      expect(check.path).toBe(PATH);
+      const out = answer(
+        context,
+        check.id,
+        { available: false, reason: "threshold.exceeded" },
+        at(5 * MIN),
       );
       expect(requestOf(out).path).toBe(`${PATH}?createOperation=true`);
     });
