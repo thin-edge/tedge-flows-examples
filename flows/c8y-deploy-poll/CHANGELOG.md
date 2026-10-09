@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/thin-edge/tedge-flows-examples/compare/c8y-deploy-poll-v0.4.1...c8y-deploy-poll-v0.5.0) (2026-10-09)
+
+
+### Features
+
+* **c8y-deploy-poll:** use defaults targeted for a demo ([#136](https://github.com/thin-edge/tedge-flows-examples/issues/136)) ([25c4ec8](https://github.com/thin-edge/tedge-flows-examples/commit/25c4ec859549f2bf4b291b86282fa86b9479dbf3))
+
 ## [0.4.1](https://github.com/thin-edge/tedge-flows-examples/compare/c8y-deploy-poll-v0.4.0...c8y-deploy-poll-v0.4.1) (2026-10-05)
 
 
