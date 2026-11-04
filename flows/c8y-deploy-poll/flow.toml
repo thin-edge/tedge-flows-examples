@@ -27,7 +27,7 @@ command = "sh ./poll.sh context \"${params.context_file}\""
 topic = "tedge-flows/c8y-deploy-poll/${params.deployment_key}/context"
 interval = "300s"
 
-# Detect the device architecture (normalized by the step)
+# Detect the device architecture, package manager, OS and firmware updater (normalized by the step)
 [[input.process]]
 command = "sh ./poll.sh detect"
 topic = "tedge-flows/c8y-deploy-poll/${params.deployment_key}/detect"
@@ -41,6 +41,9 @@ config.target_state = "${params.target_state}"
 config.context = "${params.context}"
 config.context_file = "${params.context_file}"
 config.detect_arch = "${params.detect_arch}"
+config.detect_package_manager = "${params.detect_package_manager}"
+config.detect_os = "${params.detect_os}"
+config.detect_firmware_updater = "${params.detect_firmware_updater}"
 config.priority = "${params.priority}"
 config.interval = "${params.interval}"
 config.startup_delay = "${params.startup_delay}"

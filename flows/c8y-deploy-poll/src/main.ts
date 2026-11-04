@@ -11,6 +11,12 @@ export interface Config {
   context_file?: string;
   // Add the (normalized) architecture of the device to the context as "arch"
   detect_arch?: boolean | string;
+  // Add the package manager of the device to the context as "package_manager"
+  detect_package_manager?: boolean | string;
+  // Add the ID of the OS (/etc/os-release) to the context as "os"
+  detect_os?: boolean | string;
+  // Add the firmware updater of the device to the context as "firmware_updater"
+  detect_firmware_updater?: boolean | string;
   // Priority requested by the device. Leave empty to use the server priority
   priority?: number | string;
   // Poll interval, e.g. "24h"
@@ -130,6 +136,16 @@ export interface PollState {
 
 export type EventMode = "off" | "changes" | "all";
 
+// Device context keys detected by poll.sh, and the option which enables each
+const DETECTED_KEYS = [
+  ["arch", "detect_arch"],
+  ["package_manager", "detect_package_manager"],
+  ["os", "detect_os"],
+  ["firmware_updater", "detect_firmware_updater"],
+] as const satisfies readonly (readonly [string, keyof Config])[];
+
+type DetectedKey = (typeof DETECTED_KEYS)[number][0];
+
 export interface Settings {
   key: string;
   targetState: string;
@@ -143,7 +159,8 @@ export interface Settings {
   mode: "client" | "server";
   serverQuery: string;
   allowPreview: boolean;
-  detectArch: boolean;
+  // Detected context keys to send, e.g. "arch"
+  detect: DetectedKey[];
   events: EventMode;
   deviceId: string;
   topicRoot: string;
@@ -252,7 +269,9 @@ export function getSettings(config: Config = {}): Settings {
       "",
     ),
     allowPreview: isEnabled(config.allow_preview),
-    detectArch: isEnabled(config.detect_arch),
+    detect: DETECTED_KEYS.filter(([, option]) => isEnabled(config[option])).map(
+      ([key]) => key,
+    ),
     events: parseEventMode(config.events),
     deviceId: valueOrUndefined(config.device_id) ?? "",
     topicRoot: valueOrUndefined(config.topic_root) ?? "te",
@@ -335,6 +354,46 @@ function knownArch(value: unknown): string | undefined {
   return undefined;
 }
 
+// Architecture names of a package manager which differ from the common ones:
+// Alpine's armhf is ARMv6 (its ARMv7 is armv7), while Debian's armhf is ARMv7
+const OS_ARCHITECTURES: Record<string, Record<string, string>> = {
+  apk: { armhf: "armv6", x86: "386" },
+};
+
+// Architectures of packages which run on any CPU (opkg)
+const ANY_ARCHITECTURE = ["all", "any", "noarch"];
+
+/**
+ * Split the OS architecture detected by poll.sh, "<tool>:<architectures>"
+ * (e.g. "apk:armv7"), into the tool and its architectures in order of priority
+ */
+function parseOsArch(value: unknown): { tool: string; archs: string[] } {
+  const raw = valueOrUndefined(value)?.toLowerCase() ?? "";
+  const separator = raw.indexOf(":");
+  return {
+    tool: separator < 0 ? "" : raw.substring(0, separator),
+    archs: raw
+      .substring(separator + 1)
+      .split(/\s+/)
+      .filter((arch) => arch !== "" && !ANY_ARCHITECTURE.includes(arch)),
+  };
+}
+
+/**
+ * Return the normalized architecture of the OS, or undefined if none of the
+ * architectures reported by its package manager is known
+ */
+function knownOsArch(value: unknown): string | undefined {
+  const { tool, archs } = parseOsArch(value);
+  for (const arch of archs) {
+    const known = OS_ARCHITECTURES[tool]?.[arch] ?? knownArch(arch);
+    if (known !== undefined) {
+      return known;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Normalize an architecture reported by dpkg or uname. Unknown values are
  * returned as is
@@ -351,10 +410,61 @@ export function normalizeArch(value: unknown): string | undefined {
   return arch ?? raw;
 }
 
+// Package tools found by poll.sh, in order of preference, and the software type
+// of the thin-edge.io plugin which installs their packages. dpkg comes first, as
+// e.g. rpm can be installed on Debian as a tool without being the system's
+// package manager
+const PACKAGE_MANAGERS: [string, string][] = [
+  ["dpkg", "apt"],
+  ["apk", "apk"],
+  ["opkg", "opkg"],
+  ["rpm", "rpm"],
+];
+
+// Firmware update tools found by poll.sh, in order of preference, and the name
+// of the firmware updater
+const FIRMWARE_UPDATERS: [string, string][] = [
+  ["rugix-ctrl", "rugix"],
+  ["mender-update", "mender"],
+  ["mender", "mender"],
+  ["rauc", "rauc"],
+  ["swupdate", "swupdate"],
+];
+
 /**
- * Device context detected by poll.sh, e.g. {"machine":"aarch64","dpkg":"arm64"}.
- * The userland architecture (dpkg) is preferred over the kernel one (uname -m),
- * as a 64-bit kernel can run a 32-bit OS (e.g. Raspberry Pi OS 32-bit)
+ * Return the first known tool of a space separated list of tools found by
+ * poll.sh, mapped to its name
+ */
+function firstTool(
+  value: unknown,
+  tools: [string, string][],
+): string | undefined {
+  const found = (valueOrUndefined(value) ?? "").toLowerCase().split(/\s+/);
+  return tools.find(([tool]) => found.includes(tool))?.[1];
+}
+
+/**
+ * Return the firmware updater of the device from the firmware update tools
+ * found by poll.sh (space separated), or undefined if none is known
+ */
+export function firmwareUpdater(value: unknown): string | undefined {
+  return firstTool(value, FIRMWARE_UPDATERS);
+}
+
+/**
+ * Return the package manager of the device from the package tools found by
+ * poll.sh (space separated), or undefined if none is known
+ */
+export function packageManager(value: unknown): string | undefined {
+  return firstTool(value, PACKAGE_MANAGERS);
+}
+
+/**
+ * Device context detected by poll.sh, e.g.
+ * {"machine":"aarch64","os_arch":"dpkg:arm64","pkg":"dpkg"}.
+ * The architecture of the OS (os_arch, from the package manager) is preferred
+ * over the kernel one (uname -m), as a 64-bit kernel can run a 32-bit OS (e.g.
+ * Raspberry Pi OS 32-bit)
  */
 export function detectedContext(line: string): Record<string, string> {
   let detected: any;
@@ -364,11 +474,33 @@ export function detectedContext(line: string): Record<string, string> {
     return {};
   }
   const arch =
-    knownArch(detected?.dpkg) ??
+    knownOsArch(detected?.os_arch) ??
     knownArch(detected?.machine) ??
-    normalizeArch(detected?.dpkg) ??
+    normalizeArch(parseOsArch(detected?.os_arch).archs[0]) ??
     normalizeArch(detected?.machine);
-  return arch ? { arch } : {};
+  const values: Record<DetectedKey, string | undefined> = {
+    arch,
+    package_manager: packageManager(detected?.pkg),
+    os: valueOrUndefined(detected?.os)?.toLowerCase(),
+    firmware_updater: firmwareUpdater(detected?.fw),
+  };
+  return Object.fromEntries(
+    Object.entries(values).filter(([, value]) => value !== undefined),
+  ) as Record<string, string>;
+}
+
+/**
+ * The detected values enabled by the settings
+ */
+function enabledDetection(
+  settings: Settings,
+  detected: Record<string, string> = {},
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(detected).filter(([key]) =>
+      settings.detect.includes(key as DetectedKey),
+    ),
+  );
 }
 
 /**
@@ -1460,7 +1592,7 @@ function newRequest(
       context.config?.context,
       cache.contextFile,
       context.config?.priority,
-      settings.detectArch ? cache.detected : undefined,
+      enabledDetection(settings, cache.detected),
     ),
   };
 }
@@ -1514,7 +1646,7 @@ function reconcile(
   }
   const waiting =
     (settings.waitForContext && !cache.contextSeen) ||
-    (settings.detectArch && cache.detected === undefined);
+    (settings.detect.length > 0 && cache.detected === undefined);
   if (waiting && elapsed < CONTEXT_WAIT_MS) {
     return [];
   }
