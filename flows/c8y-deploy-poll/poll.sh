@@ -10,7 +10,11 @@
 #       Print the contents of the JSON file on a single line (nothing if missing)
 #   poll.sh detect
 #       Print information about the device used to build the device context, e.g.
-#       {"machine":"aarch64","dpkg":"arm64"}. The values are normalized by the flow
+#       {"machine":"aarch64","os_arch":"dpkg:arm64","pkg":"dpkg rpm","os":"debian","fw":"rugix-ctrl"},
+#       where os_arch is "<tool>:<architecture of the OS>" reported by the package
+#       manager (opkg: all its architectures, highest priority first), pkg and fw list
+#       the package and firmware update tools found and os is the ID from
+#       /etc/os-release. The values are normalized by the flow
 #
 # The script always exits with 0, as the flow drops the output of failed commands.
 
@@ -85,13 +89,47 @@ cmd_context() {
     echo
 }
 
+# Print the architecture of the OS reported by a package manager, e.g. "arm64".
+# Prints nothing if the tool is missing or does not support the query, e.g. the
+# dpkg and rpm applets of BusyBox
+os_arch_of() {
+    command -v "$1" >/dev/null 2>&1 || return 0
+    case "$1" in
+        dpkg) dpkg --print-architecture 2>/dev/null ;;
+        apk) apk --print-arch 2>/dev/null ;;
+        # Lines of "arch <name> <priority>": all names, highest priority first
+        opkg) opkg print-architecture 2>/dev/null |
+            awk '$1 == "arch" { print $3, $2 }' | sort -rn | awk '{ print $2 }' | tr '\n' ' ' ;;
+        rpm) rpm --eval '%{_arch}' 2>/dev/null ;;
+    esac
+}
+
 cmd_detect() {
     machine=$(uname -m 2>/dev/null)
-    dpkg_arch=""
-    if command -v dpkg >/dev/null 2>&1; then
-        dpkg_arch=$(dpkg --print-architecture 2>/dev/null)
+    # Package managers in order of preference. The first one provides os_arch
+    os_arch=""
+    pkg=""
+    for tool in dpkg apk opkg rpm; do
+        arch=$(os_arch_of "$tool" | tr -d '\r\n')
+        case "$arch" in
+            ''|*%*) continue ;;
+        esac
+        pkg="${pkg:+$pkg }$tool"
+        [ -n "$os_arch" ] || os_arch="$tool:$arch"
+    done
+    fw=""
+    for tool in rugix-ctrl mender-update mender rauc swupdate; do
+        if command -v "$tool" >/dev/null 2>&1; then
+            fw="${fw:+$fw }$tool"
+        fi
+    done
+    os=""
+    if [ -f /etc/os-release ]; then
+        os=$(sed -n 's/^ID=//p' /etc/os-release | tr -d "\"'")
     fi
-    printf '{"machine":"%s","dpkg":"%s"}\n' "$(json_escape "$machine")" "$(json_escape "$dpkg_arch")"
+    printf '{"machine":"%s","os_arch":"%s","pkg":"%s","os":"%s","fw":"%s"}\n' \
+        "$(json_escape "$machine")" "$(json_escape "$os_arch")" "$(json_escape "$pkg")" \
+        "$(json_escape "$os")" "$(json_escape "$fw")"
 }
 
 case "$1" in

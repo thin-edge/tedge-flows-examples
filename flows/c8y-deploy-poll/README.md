@@ -79,14 +79,23 @@ A deployment or operation which never finishes blocks new deployments. Set `in_p
 
 The request body is built from (later sources override earlier ones):
 
-1. the detected architecture as `arch`, if `detect_arch` is enabled
+1. the detected values, each if its option is enabled: `arch` (`detect_arch`), `package_manager` (`detect_package_manager`), `os` (`detect_os`) and `firmware_updater` (`detect_firmware_updater`)
 2. the `context` param, e.g. `context = { type = "deluxe" }`
 3. the JSON file set by `context_file`, e.g. `{"type": "deluxe"}`
 4. the `priority` param, if set. Otherwise the server assigns the priority
 
-The architecture is detected by `poll.sh detect` (once an hour) from `dpkg --print-architecture` if available, otherwise from `uname -m`. dpkg is preferred, as it reports the architecture of the OS rather than the kernel: e.g. the 32-bit Raspberry Pi OS runs a 64-bit kernel (`aarch64`), but needs `armv7` software. The value is normalized:
+The architecture is detected by `poll.sh detect` (once an hour) from the package manager if available, otherwise from `uname -m`. The package manager is preferred, as it reports the architecture of the OS rather than the kernel: e.g. the 32-bit Raspberry Pi OS (or a 32-bit container) runs on a 64-bit kernel (`aarch64`), but needs `armv7` software. The first package manager in this table which answers is used:
 
-| dpkg / uname -m                                             | `arch`                      |
+| Package manager | Command                     | Example                                                            |
+| --------------- | --------------------------- | ------------------------------------------------------------------ |
+| dpkg            | `dpkg --print-architecture` | `armhf`                                                            |
+| apk             | `apk --print-arch`          | `armv7`                                                            |
+| opkg            | `opkg print-architecture`   | `raspberrypi3 cortexa7t2hf-neon-vfpv4 armv7vet2hf-neon ... noarch` |
+| rpm             | `rpm --eval '%{_arch}'`     | `armv7hl`                                                          |
+
+opkg lists all the architectures it installs, so the known one with the highest priority is used (e.g. `armv7vet2hf-neon`). The value is normalized:
+
+| Package manager / uname -m                                  | `arch`                      |
 | ----------------------------------------------------------- | --------------------------- |
 | `amd64`, `x86_64`                                           | `amd64`                     |
 | `arm64`, `aarch64`, `arm64e`, `armv8*` (except `armv8l`)    | `arm64`                     |
@@ -96,12 +105,43 @@ The architecture is detected by `poll.sh detect` (once an hour) from `dpkg --pri
 | `riscv64`                                                   | `riscv64`                   |
 | anything else                                               | as is (a warning is logged) |
 
-A dpkg architecture with an OS prefix (e.g. `musl-linux-arm64`) is reduced to the CPU part. The selection criteria of a deployment are matched exactly, so the deployment has to use the same names. Set `arch` in `context` to override the detected value.
+On Alpine, `armhf` is ARMv6 (`armv6`); its ARMv7 is `armv7`, and `x86` is `386`. A dpkg architecture with an OS prefix (e.g. `musl-linux-arm64`) is reduced to the CPU part. The selection criteria of a deployment are matched exactly, so the deployment has to use the same names. Set `arch` in `context` to override the detected value.
 
-Only string values are sent. For example, with the default params on an arm64 device:
+The package manager is detected from the package tools which answer the architecture query above (so e.g. the `dpkg` and `rpm` applets of BusyBox are not counted), so that a deployment can deliver its packages only to devices that can install them (e.g. `apt` packages not to Alpine Linux). It is named after the software type of the thin-edge.io plugin which installs its packages. If more than one tool is installed, the first one in this table is used:
+
+| Tool found | `package_manager` |
+| ---------- | ----------------- |
+| `dpkg`     | `apt`             |
+| `apk`      | `apk`             |
+| `opkg`     | `opkg`            |
+| `rpm`      | `rpm`             |
+
+The package manager is detected rather than the OS, as one OS can use several package formats (e.g. a Yocto image can use deb, rpm or ipk packages). dpkg comes first, as e.g. `rpm` can be installed on Debian without being the package manager of the system. Set `package_manager` in `context` to override the detected value, or to leave it out, set `detect_package_manager = false`.
+
+The OS is the `ID` from `/etc/os-release`, e.g. `debian`, `raspbian` or `alpine`, in lower case.
+
+The firmware updater is detected from the firmware update tools installed. If more than one is installed, the first one in this table is used:
+
+| Tool found                | `firmware_updater` |
+| ------------------------- | ------------------ |
+| `rugix-ctrl`              | `rugix`            |
+| `mender-update`, `mender` | `mender`           |
+| `rauc`                    | `rauc`             |
+| `swupdate`                | `swupdate`         |
+
+A device without any of them, e.g. thin-edge.io running in a container, does not send `firmware_updater`. Give each firmware module of a deployment a criterion on it (e.g. `firmware_updater` equals `rugix`), so that an image is only delivered to devices which can install it. The OS is not enough for this, as e.g. a Debian container and a Debian device without Rugix report the same `os`.
+
+Only string values are sent. For example, with the default params on an arm64 Raspberry Pi OS device with Rugix:
 
 ```json
-{ "arch": "arm64", "type": "deluxe", "priority": 100 }
+{
+  "arch": "arm64",
+  "package_manager": "apt",
+  "os": "debian",
+  "firmware_updater": "rugix",
+  "type": "deluxe",
+  "priority": 100
+}
 ```
 
 ### Published messages
@@ -175,28 +215,31 @@ See [params.toml.template](./params.toml.template).
 > [!NOTE]
 > The defaults are set up for the `demo` deployment, so that the flow works out of the box with a short poll interval and events enabled. For a production installation, use a longer `interval` (e.g. `24h`), `startup_delay` and `retry_min` (e.g. `5m`), and set the device context of your devices.
 
-| Parameter             | Default                                                                     | Description                                                                                                 |
-| --------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `deployment_key`      | `demo`                                                                      | Deployment to evaluate (required). Letters, digits, `_` and `-` only                                        |
-| `target_state`        | `active`                                                                    | Target state to evaluate: `active`, `latest` or a version                                                   |
-| `detect_arch`         | `true`                                                                      | Add the normalized architecture of the device to the device context as `arch`                               |
-| `context`             | `{ type = "deluxe" }`                                                       | Device context (string values)                                                                              |
-| `context_file`        |                                                                             | JSON file with additional device context                                                                    |
-| `priority`            | `100`                                                                       | Priority requested by the device. Only used if the deployment allows it                                     |
-| `interval`            | `5m`                                                                        | Poll interval                                                                                               |
-| `startup_delay`       | `10s`                                                                       | Maximum delay of the first poll after the flow is installed                                                 |
-| `retry_min`           | `1m`                                                                        | First retry delay after a failed request                                                                    |
-| `max_attempts`        | `3`                                                                         | Maximum number of operation requests for the same version                                                   |
-| `assigned_timeout`    | `15m`                                                                       | Time after which an `ASSIGNED` deployment without progress counts as a failed attempt                       |
-| `busy_operations`     | `["device_profile", "firmware_update", "software_update", "config_update"]` | Operations which block a new deployment while they are in progress                                          |
-| `in_progress_timeout` |                                                                             | Report a deployment or operation without a status change for this long (e.g. `24h`). Warning only           |
-| `operation_request`   | `client`                                                                    | `client`: dry run first. `server`: always request the operation and let the server decide                   |
-| `server_query`        |                                                                             | Additional query parameters in `server` mode                                                                |
-| `allow_preview`       | `false`                                                                     | Allow requesting operations for target states other than `active`                                           |
-| `events`              | `changes`                                                                   | Publish `c8y_DeploymentPoll` events: `off`, `changes` (only when the outcome changes) or `all` (every poll) |
-| `state_dir`           | `/tmp/c8y-deploy-poll`                                                      | Directory where poll.sh remembers the last executed request                                                 |
-| `topic_root`          | `te`                                                                        | thin-edge.io MQTT topic root                                                                                |
-| `debug`               | `false`                                                                     | Log each evaluation and scheduled request                                                                   |
+| Parameter                 | Default                                                                     | Description                                                                                                                  |
+| ------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `deployment_key`          | `demo`                                                                      | Deployment to evaluate (required). Letters, digits, `_` and `-` only                                                         |
+| `target_state`            | `active`                                                                    | Target state to evaluate: `active`, `latest` or a version                                                                    |
+| `detect_arch`             | `true`                                                                      | Add the normalized architecture of the device to the device context as `arch`                                                |
+| `detect_package_manager`  | `true`                                                                      | Add the package manager of the device to the device context as `package_manager` (`apt`, `apk`, `opkg` or `rpm`)             |
+| `detect_os`               | `true`                                                                      | Add the `ID` from `/etc/os-release` to the device context as `os`, e.g. `debian` or `alpine`                                 |
+| `detect_firmware_updater` | `true`                                                                      | Add the firmware updater of the device to the device context as `firmware_updater` (`rugix`, `mender`, `rauc` or `swupdate`) |
+| `context`                 | `{ type = "deluxe" }`                                                       | Device context (string values)                                                                                               |
+| `context_file`            |                                                                             | JSON file with additional device context                                                                                     |
+| `priority`                | `100`                                                                       | Priority requested by the device. Only used if the deployment allows it                                                      |
+| `interval`                | `5m`                                                                        | Poll interval                                                                                                                |
+| `startup_delay`           | `10s`                                                                       | Maximum delay of the first poll after the flow is installed                                                                  |
+| `retry_min`               | `1m`                                                                        | First retry delay after a failed request                                                                                     |
+| `max_attempts`            | `3`                                                                         | Maximum number of operation requests for the same version                                                                    |
+| `assigned_timeout`        | `15m`                                                                       | Time after which an `ASSIGNED` deployment without progress counts as a failed attempt                                        |
+| `busy_operations`         | `["device_profile", "firmware_update", "software_update", "config_update"]` | Operations which block a new deployment while they are in progress                                                           |
+| `in_progress_timeout`     |                                                                             | Report a deployment or operation without a status change for this long (e.g. `24h`). Warning only                            |
+| `operation_request`       | `client`                                                                    | `client`: dry run first. `server`: always request the operation and let the server decide                                    |
+| `server_query`            |                                                                             | Additional query parameters in `server` mode                                                                                 |
+| `allow_preview`           | `false`                                                                     | Allow requesting operations for target states other than `active`                                                            |
+| `events`                  | `changes`                                                                   | Publish `c8y_DeploymentPoll` events: `off`, `changes` (only when the outcome changes) or `all` (every poll)                  |
+| `state_dir`               | `/tmp/c8y-deploy-poll`                                                      | Directory where poll.sh remembers the last executed request                                                                  |
+| `topic_root`              | `te`                                                                        | thin-edge.io MQTT topic root                                                                                                 |
+| `debug`                   | `false`                                                                     | Log each evaluation and scheduled request                                                                                    |
 
 ### Device Parameter Schema
 
@@ -233,6 +276,27 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
         "description": "Add the architecture of the device to the device context as arch, e.g. arm64, armv7 or amd64. A value set in the Device Context or the context file takes precedence",
         "order": 3
       },
+      "detect_package_manager": {
+        "type": "boolean",
+        "default": true,
+        "title": "Detect Package Manager",
+        "description": "Add the package manager of the device to the device context as package_manager: apt, apk, opkg or rpm. A value set in the Device Context or the context file takes precedence",
+        "order": 4
+      },
+      "detect_os": {
+        "type": "boolean",
+        "default": true,
+        "title": "Detect OS",
+        "description": "Add the ID from /etc/os-release to the device context as os, e.g. debian, raspbian or alpine. A value set in the Device Context or the context file takes precedence",
+        "order": 5
+      },
+      "detect_firmware_updater": {
+        "type": "boolean",
+        "default": true,
+        "title": "Detect Firmware Updater",
+        "description": "Add the firmware updater of the device to the device context as firmware_updater: rugix, mender, rauc or swupdate. Not set on devices without one, e.g. thin-edge.io in a container. A value set in the Device Context or the context file takes precedence",
+        "order": 6
+      },
       "context": {
         "type": "object",
         "default": {
@@ -243,14 +307,14 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
         "additionalProperties": {
           "type": "string"
         },
-        "order": 4
+        "order": 7
       },
       "context_file": {
         "type": "string",
         "default": "",
         "title": "Device Context File",
         "description": "Path to a JSON file on the device with additional device context. Its values override the Device Context",
-        "order": 5
+        "order": 8
       },
       "priority": {
         "type": "integer",
@@ -258,7 +322,7 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
         "minimum": 0,
         "title": "Priority",
         "description": "Priority requested by the device. Leave empty to use the priority assigned by the server. Only used if the deployment allows it",
-        "order": 6
+        "order": 9
       },
       "interval": {
         "type": "string",
@@ -266,7 +330,7 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
         "title": "Poll Interval",
         "description": "How often to check for a new version, e.g. 30m, 12h, 1d. Each device polls at a fixed offset within the interval",
         "pattern": "^[0-9]+(\\.[0-9]+)?(ms|s|m|h|d)?$",
-        "order": 7
+        "order": 10
       },
       "startup_delay": {
         "type": "string",
@@ -274,7 +338,7 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
         "title": "Startup Delay",
         "description": "Maximum delay of the first poll after the flow is installed",
         "pattern": "^[0-9]+(\\.[0-9]+)?(ms|s|m|h|d)?$",
-        "order": 8
+        "order": 11
       },
       "retry_min": {
         "type": "string",
@@ -282,7 +346,7 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
         "title": "Retry Delay",
         "description": "First retry delay after a failed request. Doubled on each failure, up to the poll interval",
         "pattern": "^[0-9]+(\\.[0-9]+)?(ms|s|m|h|d)?$",
-        "order": 9
+        "order": 12
       },
       "max_attempts": {
         "type": "integer",
@@ -290,7 +354,7 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
         "default": 3,
         "title": "Max Attempts",
         "description": "Maximum number of operation requests for the same version",
-        "order": 10
+        "order": 13
       },
       "assigned_timeout": {
         "type": "string",
@@ -298,7 +362,7 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
         "title": "Assigned Timeout",
         "description": "Time after which an ASSIGNED deployment without any progress is requested again",
         "pattern": "^[0-9]+(\\.[0-9]+)?(ms|s|m|h|d)?$",
-        "order": 11
+        "order": 14
       },
       "busy_operations": {
         "type": "array",
@@ -314,7 +378,7 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
           "type": "string"
         },
         "uniqueItems": true,
-        "order": 12
+        "order": 15
       },
       "in_progress_timeout": {
         "type": "string",
@@ -322,7 +386,7 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
         "title": "In Progress Timeout",
         "description": "Report a deployment or operation which has not changed its status for this long, e.g. 24h. Warning only. Leave empty to disable",
         "pattern": "^([0-9]+(\\.[0-9]+)?(ms|s|m|h|d)?)?$",
-        "order": 13
+        "order": 16
       },
       "operation_request": {
         "type": "string",
@@ -333,21 +397,21 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
         "default": "client",
         "title": "Operation Request Mode",
         "description": "client: check for a new version first, then request the operation. server: always request the operation and let the server decide (requires server support)",
-        "order": 14
+        "order": 17
       },
       "server_query": {
         "type": "string",
         "default": "",
         "title": "Server Query Parameters",
         "description": "Additional query parameters used in server mode",
-        "order": 15
+        "order": 18
       },
       "allow_preview": {
         "type": "boolean",
         "default": false,
         "title": "Allow Preview",
         "description": "Allow requesting operations for target states other than active",
-        "order": 16
+        "order": 19
       },
       "events": {
         "type": "string",
@@ -359,28 +423,28 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
         "default": "changes",
         "title": "Events",
         "description": "Publish c8y_DeploymentPoll events describing what the flow does. changes: only when the outcome changes. all: on every poll",
-        "order": 17
+        "order": 20
       },
       "state_dir": {
         "type": "string",
         "default": "/tmp/c8y-deploy-poll",
         "title": "State Directory",
         "description": "Directory where poll.sh remembers the last executed request",
-        "order": 18
+        "order": 21
       },
       "topic_root": {
         "type": "string",
         "default": "te",
         "title": "Topic Root",
         "description": "thin-edge.io MQTT topic root",
-        "order": 19
+        "order": 22
       },
       "debug": {
         "type": "boolean",
         "default": false,
         "title": "Debug",
         "description": "Log each evaluation and scheduled request",
-        "order": 20
+        "order": 23
       }
     },
     "required": [
@@ -403,7 +467,7 @@ c8y api --raw POST /service/dtm/definitions/properties --template '{
 - **Retained request instead of HTTP in the step**: flow steps cannot do any I/O, and a process input cannot be triggered by a step. The step publishes the next request (retained) and poll.sh sends it once it is due. All decisions stay in the step, where they are unit tested, and the retained request is also the schedule, so polls missed while the device was off are caught up after a restart.
 - **At most once**: poll.sh remembers the last executed request. Operation requests expire after 10 minutes, a pending request is only changed before it is due, and a request without a result is followed by a new dry run (never by a new operation request).
 - **State in retained messages**: the flow context is not persisted, so the attempts, the last request, the last event and the last reported result are kept in `tedge-flows/c8y-deploy-poll/<key>/state`.
-- **dpkg before uname**: `uname -m` reports the kernel architecture, which differs from the OS architecture on e.g. 32-bit Raspberry Pi OS with a 64-bit kernel.
+- **Package manager before uname**: `uname -m` reports the kernel architecture, which differs from the OS architecture on e.g. 32-bit Raspberry Pi OS, or a 32-bit container, with a 64-bit kernel.
 - **server mode**: prepared for a deployment service which only creates an operation when the device needs it. The flow then sends a single request, and only a plain check while the device is busy.
 
 ### Notes

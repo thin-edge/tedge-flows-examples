@@ -2344,14 +2344,57 @@ describe("architecture detection", () => {
 
   test.each([
     // 32-bit Raspberry Pi OS on a 64-bit kernel: the userland wins
-    [{ machine: "aarch64", dpkg: "armhf" }, { arch: "armv7" }],
-    [{ machine: "aarch64", dpkg: "arm64" }, { arch: "arm64" }],
-    [{ machine: "x86_64", dpkg: "" }, { arch: "amd64" }],
-    [{ machine: "arm64", dpkg: "darwin-arm64" }, { arch: "arm64" }],
+    [{ machine: "aarch64", os_arch: "dpkg:armhf" }, { arch: "armv7" }],
+    [{ machine: "aarch64", os_arch: "dpkg:arm64" }, { arch: "arm64" }],
+    [{ machine: "x86_64", os_arch: "" }, { arch: "amd64" }],
+    [{ machine: "arm64", os_arch: "dpkg:darwin-arm64" }, { arch: "arm64" }],
     // unknown dpkg architecture: the kernel architecture is used
-    [{ machine: "aarch64", dpkg: "weird" }, { arch: "arm64" }],
-    [{ machine: "mips64", dpkg: "" }, { arch: "mips64" }],
-    [{ machine: "", dpkg: "" }, {}],
+    [{ machine: "aarch64", os_arch: "dpkg:weird" }, { arch: "arm64" }],
+    [{ machine: "mips64", os_arch: "" }, { arch: "mips64" }],
+    [{ machine: "", os_arch: "" }, {}],
+  ])("detect %j => %j", (detected, expected) => {
+    expect(flow.detectedContext(JSON.stringify(detected))).toEqual(expected);
+  });
+
+  test.each([
+    // Alpine: armhf is ARMv6, armv7 is ARMv7
+    ["apk:armhf", "armv6"],
+    ["apk:armv7", "armv7"],
+    ["apk:aarch64", "arm64"],
+    ["apk:x86_64", "amd64"],
+    ["apk:x86", "386"],
+    ["rpm:armv7hl", "armv7"],
+    ["rpm:aarch64", "arm64"],
+    ["rpm:i686", "386"],
+    // opkg: the known architecture with the highest priority
+    [
+      "opkg:raspberrypi3 cortexa7t2hf-neon-vfpv4 armv7vet2hf-neon armv7at2hf-neon armv6thf armv5te arm noarch any all",
+      "armv7",
+    ],
+    [
+      "opkg:raspberrypi4_64 cortexa72 armv8a-crc armv8a aarch64 noarch any all",
+      "arm64",
+    ],
+    ["opkg:qemux86_64 core2-64 x86_64 noarch any all", "amd64"],
+    ["dpkg:armhf", "armv7"],
+  ])("detect os_arch %s => %s", (osArch, arch) => {
+    // a 64-bit kernel, so the OS architecture has to win
+    expect(
+      flow.detectedContext(
+        JSON.stringify({ machine: "aarch64", os_arch: osArch }),
+      ),
+    ).toEqual({ arch });
+  });
+
+  test.each([
+    // no known architecture: the kernel one is used
+    [
+      { machine: "aarch64", os_arch: "opkg:raspberrypi4_64 noarch all" },
+      { arch: "arm64" },
+    ],
+    [{ machine: "aarch64", os_arch: "apk:" }, { arch: "arm64" }],
+    // nothing known at all: the OS architecture as is
+    [{ machine: "weird", os_arch: "apk:loongarch64" }, { arch: "loongarch64" }],
   ])("detect %j => %j", (detected, expected) => {
     expect(flow.detectedContext(JSON.stringify(detected))).toEqual(expected);
   });
@@ -2394,7 +2437,11 @@ describe("architecture detection", () => {
       const context = started();
       expect(flow.onInterval(at(10 * SEC), context)).toEqual([]);
       const out = flow.onMessage(
-        msg(detectTopic, '{"machine":"aarch64","dpkg":"arm64"}', at(12 * SEC)),
+        msg(
+          detectTopic,
+          '{"machine":"aarch64","os_arch":"dpkg:arm64"}',
+          at(12 * SEC),
+        ),
         context,
       );
       expect(JSON.parse(requestOf(out).body)).toEqual({
@@ -2415,7 +2462,11 @@ describe("architecture detection", () => {
     test("detection disabled", () => {
       const context = started({ detect_arch: "false" });
       flow.onMessage(
-        msg(detectTopic, '{"machine":"aarch64","dpkg":"arm64"}', at(1 * SEC)),
+        msg(
+          detectTopic,
+          '{"machine":"aarch64","os_arch":"dpkg:arm64"}',
+          at(1 * SEC),
+        ),
         context,
       );
       expect(
@@ -2431,7 +2482,7 @@ describe("architecture detection", () => {
         flow.onMessage(
           msg(
             detectTopic,
-            '{"machine":"aarch64","dpkg":"arm64"}',
+            '{"machine":"aarch64","os_arch":"dpkg:arm64"}',
             at(12 * SEC),
           ),
           context,
@@ -2441,12 +2492,227 @@ describe("architecture detection", () => {
         flow.onMessage(
           msg(
             detectTopic,
-            '{"machine":"aarch64","dpkg":"arm64"}',
+            '{"machine":"aarch64","os_arch":"dpkg:arm64"}',
             at(1 * HOUR),
           ),
           context,
         ),
       ).toEqual([]);
+    });
+  });
+});
+
+describe("package manager detection", () => {
+  test.each([
+    ["dpkg", "apt"],
+    ["apk", "apk"],
+    ["opkg", "opkg"],
+    ["rpm", "rpm"],
+    // rpm installed as a tool on Debian
+    ["dpkg rpm", "apt"],
+    ["opkg rpm", "opkg"],
+    ["DPKG", "apt"],
+    ["pacman", undefined],
+    ["", undefined],
+    [undefined, undefined],
+  ])("package tools %s => %s", (pkg, expected) => {
+    expect(flow.packageManager(pkg)).toBe(expected);
+  });
+
+  test.each([
+    [
+      { machine: "aarch64", os_arch: "dpkg:arm64", pkg: "dpkg" },
+      { arch: "arm64", package_manager: "apt" },
+    ],
+    [
+      { machine: "x86_64", os_arch: "", pkg: "apk" },
+      { arch: "amd64", package_manager: "apk" },
+    ],
+    [{ machine: "", os_arch: "", pkg: "opkg" }, { package_manager: "opkg" }],
+    // older poll.sh without package detection
+    [{ machine: "aarch64", os_arch: "dpkg:arm64" }, { arch: "arm64" }],
+  ])("detect %j => %j", (detected, expected) => {
+    expect(flow.detectedContext(JSON.stringify(detected))).toEqual(expected);
+  });
+
+  describe("flow", () => {
+    const detectTopic = "tedge-flows/c8y-deploy-poll/demo/detect";
+    const alpine = '{"machine":"aarch64","os_arch":"","pkg":"apk"}';
+
+    function started(config: flow.Config = {}): flow.FlowContext {
+      const context = tedge.createContext({
+        ...baseConfig,
+        context: { type: "deluxe" },
+        detect_arch: "true",
+        detect_package_manager: "true",
+        ...config,
+      }) as flow.FlowContext;
+      flow.onStartup(t0, context);
+      return context;
+    }
+
+    test("adds the package manager to the context", () => {
+      const context = started();
+      const out = flow.onMessage(
+        msg(detectTopic, alpine, at(12 * SEC)),
+        context,
+      );
+      expect(JSON.parse(requestOf(out).body)).toEqual({
+        arch: "arm64",
+        package_manager: "apk",
+        type: "deluxe",
+      });
+    });
+
+    test("context param overrides the detected package manager", () => {
+      const context = started({
+        context: { type: "deluxe", package_manager: "apt" },
+      });
+      const out = flow.onMessage(
+        msg(detectTopic, alpine, at(12 * SEC)),
+        context,
+      );
+      expect(JSON.parse(requestOf(out).body)).toEqual({
+        arch: "arm64",
+        package_manager: "apt",
+        type: "deluxe",
+      });
+    });
+
+    test("package manager detection disabled", () => {
+      const context = started({ detect_package_manager: "false" });
+      const out = flow.onMessage(
+        msg(detectTopic, alpine, at(12 * SEC)),
+        context,
+      );
+      expect(JSON.parse(requestOf(out).body)).toEqual({
+        arch: "arm64",
+        type: "deluxe",
+      });
+    });
+
+    test("waits for the detection with only the package manager enabled", () => {
+      const context = started({ detect_arch: "false" });
+      expect(flow.onInterval(at(10 * SEC), context)).toEqual([]);
+      const out = flow.onMessage(
+        msg(detectTopic, alpine, at(12 * SEC)),
+        context,
+      );
+      expect(JSON.parse(requestOf(out).body)).toEqual({
+        package_manager: "apk",
+        type: "deluxe",
+      });
+    });
+  });
+});
+
+describe("os and firmware updater detection", () => {
+  test.each([
+    ["rugix-ctrl", "rugix"],
+    ["mender-update", "mender"],
+    ["mender", "mender"],
+    ["rauc", "rauc"],
+    ["swupdate", "swupdate"],
+    ["mender swupdate", "mender"],
+    ["rauc swupdate", "rauc"],
+    ["rugix-ctrl swupdate", "rugix"],
+    ["", undefined],
+    [undefined, undefined],
+  ])("firmware tools %s => %s", (fw, expected) => {
+    expect(flow.firmwareUpdater(fw)).toBe(expected);
+  });
+
+  test.each([
+    [
+      {
+        machine: "aarch64",
+        os_arch: "dpkg:arm64",
+        pkg: "dpkg",
+        os: "debian",
+        fw: "rugix-ctrl",
+      },
+      {
+        arch: "arm64",
+        package_manager: "apt",
+        os: "debian",
+        firmware_updater: "rugix",
+      },
+    ],
+    // tedge-container-bundle: no firmware updater
+    [
+      { machine: "aarch64", os_arch: "", pkg: "apk", os: "alpine", fw: "" },
+      { arch: "arm64", package_manager: "apk", os: "alpine" },
+    ],
+    [{ machine: "", os_arch: "", os: "Raspbian" }, { os: "raspbian" }],
+  ])("detect %j => %j", (detected, expected) => {
+    expect(flow.detectedContext(JSON.stringify(detected))).toEqual(expected);
+  });
+
+  describe("flow", () => {
+    const detectTopic = "tedge-flows/c8y-deploy-poll/demo/detect";
+    const rugix =
+      '{"machine":"aarch64","os_arch":"dpkg:arm64","pkg":"dpkg","os":"debian","fw":"rugix-ctrl"}';
+
+    function started(config: flow.Config = {}): flow.FlowContext {
+      const context = tedge.createContext({
+        ...baseConfig,
+        context: { type: "deluxe" },
+        detect_arch: "true",
+        detect_package_manager: "true",
+        detect_os: "true",
+        detect_firmware_updater: "true",
+        ...config,
+      }) as flow.FlowContext;
+      flow.onStartup(t0, context);
+      return context;
+    }
+
+    test("adds the os and firmware updater to the context", () => {
+      const context = started();
+      const out = flow.onMessage(
+        msg(detectTopic, rugix, at(12 * SEC)),
+        context,
+      );
+      expect(JSON.parse(requestOf(out).body)).toEqual({
+        arch: "arm64",
+        package_manager: "apt",
+        os: "debian",
+        firmware_updater: "rugix",
+        type: "deluxe",
+      });
+    });
+
+    test("only the enabled detections are sent", () => {
+      const context = started({
+        detect_arch: "false",
+        detect_package_manager: "false",
+        detect_os: "false",
+      });
+      const out = flow.onMessage(
+        msg(detectTopic, rugix, at(12 * SEC)),
+        context,
+      );
+      expect(JSON.parse(requestOf(out).body)).toEqual({
+        firmware_updater: "rugix",
+        type: "deluxe",
+      });
+    });
+
+    test("context param overrides the detected firmware updater", () => {
+      const context = started({
+        detect_arch: "false",
+        detect_package_manager: "false",
+        detect_os: "false",
+        context: { type: "deluxe", firmware_updater: "mender" },
+      });
+      const out = flow.onMessage(
+        msg(detectTopic, rugix, at(12 * SEC)),
+        context,
+      );
+      expect(JSON.parse(requestOf(out).body)).toEqual({
+        firmware_updater: "mender",
+        type: "deluxe",
+      });
     });
   });
 });

@@ -14,6 +14,21 @@ target_state = "active"
 # A value set in context or context_file takes precedence
 detect_arch = true
 
+# Add the package manager of the device to the device context as "package_manager",
+# named after the software type which installs its packages: "apt", "apk", "opkg"
+# or "rpm". A value set in context or context_file takes precedence
+detect_package_manager = true
+
+# Add the ID of the OS from /etc/os-release to the device context as "os", e.g.
+# "debian", "raspbian" or "alpine". A value set in context or context_file takes precedence
+detect_os = true
+
+# Add the firmware updater of the device to the device context as "firmware_updater":
+# "rugix", "mender", "rauc" or "swupdate". Not set on devices without one (e.g. thin-edge.io
+# in a container), so that a firmware module with a firmware_updater criterion is
+# never delivered to them. A value set in context or context_file takes precedence
+detect_firmware_updater = true
+
 # Device context sent to the server (string values only)
 context = { type = "deluxe" }
 
