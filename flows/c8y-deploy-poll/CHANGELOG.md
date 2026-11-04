@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/thin-edge/tedge-flows-examples/compare/c8y-deploy-poll-v0.5.2...c8y-deploy-poll-v0.6.0) (2026-11-04)
+
+
+### Features
+
+* **c8y-deploy-poll:** detect the package manager, OS and firmware updater of the device ([#142](https://github.com/thin-edge/tedge-flows-examples/issues/142)) ([5bd4f23](https://github.com/thin-edge/tedge-flows-examples/commit/5bd4f23d8efc65c044de4c420a8e5b2a3d5c590b))
+
 ## [0.5.2](https://github.com/thin-edge/tedge-flows-examples/compare/c8y-deploy-poll-v0.5.1...c8y-deploy-poll-v0.5.2) (2026-10-09)
 
 
