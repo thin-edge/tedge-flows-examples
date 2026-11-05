@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/thin-edge/tedge-flows-examples/compare/c8y-deploy-poll-v0.6.0...c8y-deploy-poll-v0.6.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* **c8y-deploy-poll:** do not wait for the software update which installed the flow ([#144](https://github.com/thin-edge/tedge-flows-examples/issues/144)) ([8226036](https://github.com/thin-edge/tedge-flows-examples/commit/82260368a32efc5f17f9d0e87dd8b559d0a2ca9d))
+
 ## [0.6.0](https://github.com/thin-edge/tedge-flows-examples/compare/c8y-deploy-poll-v0.5.2...c8y-deploy-poll-v0.6.0) (2026-11-04)
 
 
