@@ -1704,6 +1704,99 @@ describe("busy device", () => {
       expect(twins.commandEndedAt).toBeUndefined();
     });
 
+    describe("software update which installs this flow", () => {
+      const topic = cmdTopic(
+        "software_update",
+        "sub:device_profile:c8y-mapper-17553",
+      );
+      const update = (status: string, name = "c8y/c8y-deploy-poll") =>
+        JSON.stringify({
+          status,
+          updateList: [
+            {
+              type: "flow",
+              modules: [
+                { name: "c8y/c8y-deploy-operation", action: "install" },
+                { name, action: "install" },
+              ],
+            },
+            {
+              type: "apt",
+              modules: [{ name: "tedge-parameter-plugin", action: "install" }],
+            },
+          ],
+        });
+      const startedTwins = (): flow.Twins => ({
+        trackedSince: t0.toISOString(),
+      });
+
+      test("is ignored when the flow starts", () => {
+        const twins = startedTwins();
+        expect(
+          flow.trackCommand(
+            twins,
+            topic,
+            update("wait-for-update"),
+            s,
+            at(1 * SEC),
+          ),
+        ).toBe(false);
+        expect(flow.activeCommands(twins)).toEqual([]);
+      });
+
+      test("is ignored when the flow starts without a mapper prefix", () => {
+        const twins = startedTwins();
+        expect(
+          flow.trackCommand(
+            twins,
+            topic,
+            update("executing", "c8y-deploy-poll"),
+            s,
+            t0,
+          ),
+        ).toBe(false);
+      });
+
+      test("is tracked once the flow is running (an update of the flow)", () => {
+        const twins = startedTwins();
+        expect(
+          flow.trackCommand(twins, topic, update("executing"), s, at(1 * MIN)),
+        ).toBe(true);
+        expect(flow.activeCommands(twins)).toHaveLength(1);
+      });
+
+      test("of another flow is tracked when the flow starts", () => {
+        const twins = startedTwins();
+        expect(
+          flow.trackCommand(
+            twins,
+            topic,
+            update("executing", "c8y/c8y-deploy-poll-extra"),
+            s,
+            t0,
+          ),
+        ).toBe(true);
+      });
+
+      test("an already tracked command is still tracked", () => {
+        const twins: flow.Twins = {
+          trackedSince: t0.toISOString(),
+          commands: {
+            [topic]: {
+              operation: "software_update",
+              cmdId: "sub:device_profile:c8y-mapper-17553",
+              status: "executing",
+              changedAt: at(-1 * MIN).toISOString(),
+            },
+          },
+        };
+        flow.trackCommand(twins, topic, update("wait-for-update"), s, t0);
+        expect(flow.activeCommands(twins)).toMatchObject([
+          { status: "wait-for-update" },
+        ]);
+      });
+    });
+
     test("busy operations can be configured", () => {
       const custom = flow.getSettings({
         ...baseConfig,
@@ -1932,6 +2025,37 @@ describe("busy device", () => {
         { available: true, version: "13.6" },
         at(2 * HOUR),
       );
+      expect(requestOf(out).path).toBe(`${PATH}?createOperation=true`);
+    });
+
+    test("the update which installed the flow does not block the deployment", () => {
+      // The flow is loaded while the software update which installs it is still
+      // running, and its final status can arrive before the flow receives it
+      const context = started();
+      flow.onMessage(
+        msg(
+          cmdTopic("software_update", "sub:device_profile:c8y-mapper-17553"),
+          {
+            status: "wait-for-update",
+            updateList: [
+              {
+                type: "flow",
+                modules: [{ name: "c8y/c8y-deploy-poll", action: "install" }],
+              },
+            ],
+          },
+          at(1 * SEC),
+        ),
+        context,
+      );
+      const dry = requestOf(flow.onInterval(at(10 * SEC), context));
+      const out = answer(
+        context,
+        dry.id,
+        { available: true, version: "13.6" },
+        at(1 * MIN),
+      );
+      expect(eventOf(out)?.outcome).not.toBe("device_busy");
       expect(requestOf(out).path).toBe(`${PATH}?createOperation=true`);
     });
 

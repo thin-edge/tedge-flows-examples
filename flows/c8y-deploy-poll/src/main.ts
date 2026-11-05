@@ -56,6 +56,7 @@ export interface FlowContext extends Context {
 export const BASE_PATH = "/c8y/service/deployment-device-proxy/deployments";
 export const TOPIC_PREFIX = "tedge-flows/c8y-deploy-poll";
 export const EVENT_TYPE = "c8y_DeploymentPoll";
+export const FLOW_NAME = "c8y-deploy-poll";
 
 const KEY_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const IN_FLIGHT_STATES = ["ASSIGNED", "PENDING", "CONFIRMED", "IN_PROGRESS"];
@@ -809,6 +810,9 @@ export function trackCommand(
   if (!settings.busyOperations.includes(operation) && !own && !previous) {
     return false;
   }
+  if (!previous && isOwnInstallation(operation, command, twins, time)) {
+    return false;
+  }
   if (
     status === "failed" &&
     command?.deployment?.key === settings.key &&
@@ -847,6 +851,38 @@ export function trackCommand(
       deployment?.version !== undefined ? `${deployment.version}` : undefined,
   };
   return !previous || previous.status !== status;
+}
+
+/**
+ * Return true if the command is the software update which installs (or updates)
+ * this flow, and it is seen when the flow starts. The flow is loaded while that
+ * command is still running, so its final status can arrive before the flow
+ * receives messages, and it would then block the deployment forever. A running
+ * flow keeps treating an update of itself as busy
+ */
+export function isOwnInstallation(
+  operation: string,
+  command: any,
+  twins: Twins,
+  time: Date,
+): boolean {
+  if (operation !== "software_update" || !Array.isArray(command?.updateList)) {
+    return false;
+  }
+  const since = Date.parse(twins.trackedSince ?? "");
+  if (!isNaN(since) && time.getTime() - since > STARTUP_GRACE_MS) {
+    return false;
+  }
+  return command.updateList.some(
+    (update: any) =>
+      update?.type === "flow" &&
+      Array.isArray(update.modules) &&
+      update.modules.some(
+        (module: any) =>
+          typeof module?.name === "string" &&
+          (module.name === FLOW_NAME || module.name.endsWith(`/${FLOW_NAME}`)),
+      ),
+  );
 }
 
 /**
