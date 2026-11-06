@@ -1,0 +1,27 @@
+# Subscribe to the Sparkplug B group that sparkplug-publisher outputs to.
+#
+# Round-trip test pipeline (publish thin-edge.io first):
+#
+#   te/device/...///m/raw   ──► sparkplug-publisher ──► spBv1.0/tedge/DDATA/...
+#                                                                    │
+#   te/device/...///m/      ◄── sparkplug-telemetry ◄───────────────┘
+#
+# The loop is broken on both sides:
+#   - This flow outputs to te/device/...///m/ (no type suffix), which the
+#     publisher does not subscribe to (it only listens on m/raw).
+#   - This flow subscribes to the "tedge" group; the publisher outputs there.
+#
+# For standalone production use (no publisher flow), replace "tedge" with "+"
+# to receive messages from all Sparkplug B groups.
+
+[input]
+mqtt.topics = [
+    "spBv1.0/tedge/DDATA/+/+",
+    "spBv1.0/tedge/NDATA/+",
+    "spBv1.0/tedge/DBIRTH/+/+",
+    "spBv1.0/tedge/NBIRTH/+",
+]
+
+[[steps]]
+script = "lib/main.js"
+config.debug = false
